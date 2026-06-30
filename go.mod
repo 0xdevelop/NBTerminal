@@ -3,12 +3,14 @@ module github.com/0xdevelop/NBTerminal
 go 1.25.0
 
 require (
+	github.com/0xYeah/fltk2go v0.0.19
 	github.com/george012/fltk_go v0.0.96
 	github.com/george012/gtbox v0.1.113
 	github.com/gorilla/mux v1.8.1
 	github.com/kbinani/screenshot v0.0.0-20250624051815-089614a94018
 	github.com/nicksnyder/go-i18n/v2 v2.4.0
-	golang.org/x/text v0.37.0
+	golang.org/x/crypto v0.53.0
+	golang.org/x/text v0.38.0
 )
 
 require (
@@ -26,3 +28,5 @@ require (
 	github.com/tidwall/pretty v1.2.1 // indirect
 	golang.org/x/sys v0.46.0 // indirect
 )
+
+replace github.com/0xYeah/fltk2go => github.com/yerikokay/fltk2go v0.0.19

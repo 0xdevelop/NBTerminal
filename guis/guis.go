@@ -1,125 +1,598 @@
 package guis
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	fltk2go "github.com/0xYeah/fltk2go"
+	"github.com/0xYeah/fltk2go/fltk_bridge"
+	"github.com/0xYeah/fltk2go/foundation"
+	"github.com/0xYeah/fltk2go/uikit"
+	"github.com/0xYeah/fltk2go/uikit/tableview"
 	"github.com/0xdevelop/NBTerminal/config"
-	"github.com/0xdevelop/NBTerminal/guis/guis_auth"
-	"github.com/0xdevelop/NBTerminal/guis/guis_cfg"
-	"github.com/0xdevelop/NBTerminal/guis/guis_ctl_area"
-	"github.com/0xdevelop/NBTerminal/guis/guis_main"
-	"bytes"
-	"github.com/george012/fltk_go"
+	"github.com/george012/gtbox/gtbox_encryption"
 	"github.com/george012/gtbox/gtbox_log"
-	"image"
-	"image/draw"
-	"image/png"
-	"log"
+	"golang.org/x/crypto/ssh"
 )
 
-var (
-	MainWindow *fltk_go.Window
-	CtlView    *guis_ctl_area.CtlView
-	AuthView   *guis_auth.AuthView
-	MainView   *guis_main.MainView
+const (
+	connectionStoreFile = "connections.json"
+	secretKey           = "nbterminal-connections-v1"
 )
 
-func decodePngToRgbImage(data []byte) (*fltk_go.RgbImage, error) {
-	img, err := png.Decode(bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
+type connectionType string
 
-	bounds := img.Bounds()
-	rgba := image.NewRGBA(bounds)
-	draw.Draw(rgba, bounds, img, bounds.Min, draw.Src)
+const (
+	connectionTypeSSH   connectionType = "ssh"
+	connectionTypeLocal connectionType = "local"
+)
 
-	return fltk_go.NewRgbImage(rgba.Pix, bounds.Dx(), bounds.Dy(), 4)
+type connectionProfile struct {
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	Group       string         `json:"group"`
+	Type        connectionType `json:"type"`
+	Host        string         `json:"host"`
+	Port        int            `json:"port"`
+	Username    string         `json:"username"`
+	PasswordEnc string         `json:"password_enc,omitempty"`
+	PrivateKey  string         `json:"private_key,omitempty"`
+	LastUsed    string         `json:"last_used,omitempty"`
+	Description string         `json:"description,omitempty"`
 }
 
-func LoadGUIWithFLTKGO(iConBuffer []byte) {
-	// 锁定 FLTK 库
-	fltk_go.Lock()
-	icon, err := decodePngToRgbImage(iConBuffer)
+func (p connectionProfile) Password() string {
+	if p.PasswordEnc == "" {
+		return ""
+	}
+	return gtbox_encryption.GTDec(p.PasswordEnc, secretKey)
+}
+
+func (p *connectionProfile) SetPassword(password string) {
+	if password == "" {
+		return
+	}
+	p.PasswordEnc = gtbox_encryption.GTEnc(password, secretKey)
+}
+
+func (p connectionProfile) endpoint() string {
+	if p.Type == connectionTypeLocal {
+		return "local shell"
+	}
+	port := p.Port
+	if port == 0 {
+		port = 22
+	}
+	return fmt.Sprintf("%s@%s:%d", p.Username, p.Host, port)
+}
+
+type connectionStore struct {
+	path string
+	mu   sync.Mutex
+	list []connectionProfile
+}
+
+func newConnectionStore(dataDir string) *connectionStore {
+	return &connectionStore{path: filepath.Join(dataDir, connectionStoreFile)}
+}
+
+func (s *connectionStore) Load() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if err := os.MkdirAll(filepath.Dir(s.path), 0755); err != nil {
+		return err
+	}
+	buf, err := os.ReadFile(s.path)
 	if err != nil {
-		log.Fatalf("failed to decode icon: %v", err)
+		if errors.Is(err, os.ErrNotExist) {
+			s.list = defaultConnections()
+			return s.saveLocked()
+		}
+		return err
+	}
+	if len(strings.TrimSpace(string(buf))) == 0 {
+		s.list = defaultConnections()
+		return s.saveLocked()
+	}
+	if err := json.Unmarshal(buf, &s.list); err != nil {
+		return err
+	}
+	s.normalizeLocked()
+	return nil
+}
+
+func (s *connectionStore) saveLocked() error {
+	s.normalizeLocked()
+	buf, err := json.MarshalIndent(s.list, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(s.path, buf, 0600)
+}
+
+func (s *connectionStore) Save(list []connectionProfile) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.list = append([]connectionProfile(nil), list...)
+	return s.saveLocked()
+}
+
+func (s *connectionStore) List() []connectionProfile {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := append([]connectionProfile(nil), s.list...)
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Group == out[j].Group {
+			return out[i].Name < out[j].Name
+		}
+		return out[i].Group < out[j].Group
+	})
+	return out
+}
+
+func (s *connectionStore) normalizeLocked() {
+	now := time.Now().UTC().Format(time.RFC3339)
+	for i := range s.list {
+		if s.list[i].ID == "" {
+			s.list[i].ID = fmt.Sprintf("conn-%d-%d", time.Now().UnixNano(), i)
+		}
+		if s.list[i].Name == "" {
+			s.list[i].Name = "New Connection"
+		}
+		if s.list[i].Group == "" {
+			s.list[i].Group = "Default"
+		}
+		if s.list[i].Type == "" {
+			s.list[i].Type = connectionTypeSSH
+		}
+		if s.list[i].Type == connectionTypeSSH && s.list[i].Port == 0 {
+			s.list[i].Port = 22
+		}
+		if s.list[i].LastUsed == "" {
+			s.list[i].LastUsed = now
+		}
+	}
+}
+
+func defaultConnections() []connectionProfile {
+	return []connectionProfile{
+		{ID: "local-shell", Name: "Local Shell", Group: "Local", Type: connectionTypeLocal, LastUsed: time.Now().UTC().Format(time.RFC3339), Description: "Run commands on this workstation"},
+		{ID: "example-ssh", Name: "Example SSH", Group: "Examples", Type: connectionTypeSSH, Host: "127.0.0.1", Port: 22, Username: os.Getenv("USER"), Description: "Edit and save with your own host/user/password or private key"},
+	}
+}
+
+type tableModel struct {
+	rows []connectionProfile
+}
+
+func (m *tableModel) NumberOfRows(_ *tableview.TableView) int { return len(m.rows) }
+func (m *tableModel) CellForColumn(_ *tableview.TableView, row, col int) *tableview.TableViewCell {
+	cell := tableview.NewCell("connection-cell")
+	if row < 0 || row >= len(m.rows) {
+		return cell
+	}
+	p := m.rows[row]
+	switch col {
+	case 0:
+		cell.SetText(p.Group)
+	case 1:
+		cell.SetText(p.Name)
+	case 2:
+		cell.SetText(string(p.Type))
+	case 3:
+		cell.SetText(p.endpoint())
+	case 4:
+		cell.SetText(p.LastUsed)
+	}
+	return cell
+}
+
+type finalShellApp struct {
+	store *connectionStore
+	rows  []connectionProfile
+	idx   int
+
+	window *uikit.UIWindow
+	table  *uikit.UITableView
+	model  *tableModel
+
+	nameInput  *uikit.Input
+	groupInput *uikit.Input
+	typeInput  *uikit.Input
+	hostInput  *uikit.Input
+	portInput  *uikit.Input
+	userInput  *uikit.Input
+	passInput  *uikit.Input
+	keyInput   *uikit.Input
+	cmdInput   *uikit.Input
+	output     *uikit.UITextView
+	status     *uikit.UILabel
+}
+
+func LoadGUIWithFLTKGO(_ []byte) {
+	if runtime.GOOS == "darwin" || runtime.GOOS == "linux" || runtime.GOOS == "windows" {
+		fltk2go.Lock()
 	}
 
-	// 初始化 FLTK 样式
-	fltk_go.InitStyles()
+	app := &finalShellApp{store: newConnectionStore(config.CurrentApp.DataDir), idx: -1}
+	if err := app.store.Load(); err != nil {
+		gtbox_log.LogErrorf("load connection store failed: %s", err.Error())
+	}
+	app.rows = app.store.List()
+	app.build()
+	fltk2go.Run()
+}
 
-	// 创建主窗口
-	MainWindow = fltk_go.NewWindow(guis_cfg.DefaultWindowSize.Width, guis_cfg.DefaultWindowSize.Height)
-	MainWindow.SetLabel(config.CurrentApp.AppName)
-	MainWindow.SetColor(guis_cfg.GUIHexColorWithLightGray)
-	MainWindow.SetIcons([]*fltk_go.RgbImage{icon})
-	// 获取主屏幕的尺寸
-	sSize := guis_cfg.GetScreenSize()
+func (a *finalShellApp) build() {
+	a.window = uikit.NewUIWindow(1180, 760, config.CurrentApp.AppName+" - FinalShell Mode")
+	root := a.window.RootView()
 
-	// 设置窗口的最小尺寸，不允许小于这个尺寸
-	MainWindow.SetSizeRange(800, 600, sSize.Width, sSize.Height, 0, 0, false)
-	MainWindow.SetPosition(sSize.Width/2-guis_cfg.DefaultWindowSize.Width/2, sSize.Height/2-guis_cfg.DefaultWindowSize.Height/2)
+	root.AddSubview(label(16, 10, 320, 28, "NBTerminal - FinalShell style manager"))
+	a.status = label(810, 12, 350, 24, "Ready")
+	a.status.View().SetAutomationID("app.status")
+	root.AddSubview(a.status)
 
-	CtlView = guis_ctl_area.NewControlAreaView(MainWindow, &guis_cfg.Frame{
-		X:      0,
-		Y:      0,
-		Width:  MainWindow.W(),
-		Height: 80,
-	}, func(ctlActionType guis_ctl_area.ControlActionType) {
-		gtbox_log.LogDebugf("handle %s", ctlActionType.String())
+	left := uikit.NewUIGroup(rect(12, 44, 500, 650))
+	left.SetBackgroundColor(0xF6F8FA00)
+	left.SetAutomationID("connections.panel")
+	root.AddSubview(left)
 
-		if ctlActionType == guis_ctl_area.ControlActionTypeLoadData {
-			if AuthView != nil {
-				fltk_go.MessageBox("!!!---warning---!!!", "must login !!!")
+	tv, err := uikit.NewUITableView(22, 58, 480, 380)
+	if err == nil {
+		a.table = tv
+		a.table.View().SetAutomationID("connections.table").SetAutomationName("Connection table")
+		a.table.AddColumn(tableview.TableColumn{Identifier: "group", Title: "Group", Width: 80})
+		a.table.AddColumn(tableview.TableColumn{Identifier: "name", Title: "Name", Width: 105})
+		a.table.AddColumn(tableview.TableColumn{Identifier: "type", Title: "Type", Width: 50})
+		a.table.AddColumn(tableview.TableColumn{Identifier: "endpoint", Title: "Endpoint", Width: 140})
+		a.table.AddColumn(tableview.TableColumn{Identifier: "last", Title: "Last Used", Width: 100})
+		a.model = &tableModel{rows: a.rows}
+		a.table.SetDataSource(a.model)
+		a.table.SetDelegate(tableDelegate{onSelect: a.selectRow})
+		a.table.ReloadData()
+		root.AddSubview(a.table)
+	}
+
+	a.nameInput = input(95, 452, 150, 28, "Name", "form.name")
+	root.AddSubview(a.nameInput)
+	a.groupInput = input(330, 452, 168, 28, "Group", "form.group")
+	root.AddSubview(a.groupInput)
+
+	a.typeInput = input(95, 490, 90, 28, "Type", "form.type")
+	root.AddSubview(a.typeInput)
+	a.hostInput = input(255, 490, 145, 28, "Host", "form.host")
+	root.AddSubview(a.hostInput)
+	a.portInput = input(455, 490, 43, 28, "Port", "form.port")
+	root.AddSubview(a.portInput)
+
+	a.userInput = input(95, 528, 150, 28, "User", "form.username")
+	root.AddSubview(a.userInput)
+	a.passInput = uikit.NewInputWithType(330, 528, 168, 28, "Pass", uikit.SecretInput)
+	a.passInput.View().SetAutomationID("form.password")
+	root.AddSubview(a.passInput)
+
+	a.keyInput = input(95, 566, 403, 28, "Key", "form.key")
+	root.AddSubview(a.keyInput)
+
+	addBtn := button(22, 610, 90, 32, "New", "action.new", a.newProfile)
+	root.AddSubview(addBtn)
+	saveBtn := button(122, 610, 90, 32, "Save", "action.save", a.saveProfile)
+	root.AddSubview(saveBtn)
+	deleteBtn := button(222, 610, 90, 32, "Delete", "action.delete", a.deleteProfile)
+	root.AddSubview(deleteBtn)
+	testBtn := button(322, 610, 90, 32, "Test", "action.test", a.testConnection)
+	root.AddSubview(testBtn)
+	connectBtn := button(422, 610, 80, 32, "Connect", "action.connect", a.connectSelected)
+	root.AddSubview(connectBtn)
+
+	root.AddSubview(label(532, 44, 620, 24, "Terminal / Command Console"))
+	a.output = uikit.NewUITextView(rect(532, 76, 628, 560))
+	a.output.SetAutomationID("terminal.output").SetAutomationName("Terminal output")
+	a.output.SetFontSize(13)
+	a.output.SetTextColor(0xD7FFE500)
+	a.output.SetBackgroundColor(0x11182700)
+	a.output.SetText("Welcome to NBTerminal FinalShell Mode\n- Select or create a connection.\n- Use local shell for this machine or SSH for remote commands.\n- Passwords are saved encrypted in the app data store.\n\n")
+	root.AddSubview(a.output)
+
+	a.cmdInput = input(620, 650, 412, 34, "Command", "terminal.command")
+	root.AddSubview(a.cmdInput)
+	runBtn := button(1042, 650, 118, 34, "Run Command", "terminal.run", a.runCommand)
+	root.AddSubview(runBtn)
+
+	if len(a.rows) > 0 {
+		a.selectRow(0)
+	}
+	a.window.Show()
+}
+
+type tableDelegate struct{ onSelect func(int) }
+
+func (d tableDelegate) DidSelectRow(_ *tableview.TableView, row int) {
+	if d.onSelect != nil {
+		d.onSelect(row)
+	}
+}
+func (d tableDelegate) RowHeight(_ *tableview.TableView, _ int) int { return 0 }
+
+func rect(x, y, w, h int) *foundation.Rect { return &foundation.Rect{X: x, Y: y, Width: w, Height: h} }
+
+func label(x, y, w, h int, text string) *uikit.UILabel {
+	l := uikit.NewUILabel(rect(x, y, w, h), text)
+	return l
+}
+
+func input(x, y, w, h int, placeholder, id string) *uikit.Input {
+	in := uikit.NewInput(x, y, w, h, placeholder)
+	in.View().SetAutomationID(id).SetAutomationName(placeholder)
+	return in
+}
+
+func button(x, y, w, h int, title, id string, cb func()) *uikit.UIButton {
+	b := uikit.NewUIButton(rect(x, y, w, h), title)
+	b.View().SetAutomationID(id).SetAutomationName(title)
+	b.OnTouchUpInside(cb)
+	return b
+}
+
+func (a *finalShellApp) selectRow(row int) {
+	if row < 0 || row >= len(a.rows) {
+		return
+	}
+	a.idx = row
+	p := a.rows[row]
+	a.nameInput.SetText(p.Name)
+	a.groupInput.SetText(p.Group)
+	a.typeInput.SetText(string(p.Type))
+	a.hostInput.SetText(p.Host)
+	if p.Port > 0 {
+		a.portInput.SetText(fmt.Sprintf("%d", p.Port))
+	} else {
+		a.portInput.SetText("")
+	}
+	a.userInput.SetText(p.Username)
+	a.passInput.SetText("")
+	a.keyInput.SetText(p.PrivateKey)
+	a.setStatus("Selected " + p.Name)
+}
+
+func (a *finalShellApp) newProfile() {
+	p := connectionProfile{ID: fmt.Sprintf("conn-%d", time.Now().UnixNano()), Name: "New SSH", Group: "Default", Type: connectionTypeSSH, Host: "", Port: 22, Username: os.Getenv("USER")}
+	a.rows = append(a.rows, p)
+	a.refreshTable()
+	a.selectRow(len(a.rows) - 1)
+}
+
+func (a *finalShellApp) profileFromForm() connectionProfile {
+	p := connectionProfile{}
+	if a.idx >= 0 && a.idx < len(a.rows) {
+		p = a.rows[a.idx]
+	}
+	p.Name = strings.TrimSpace(a.nameInput.Text())
+	p.Group = strings.TrimSpace(a.groupInput.Text())
+	p.Type = connectionType(strings.ToLower(strings.TrimSpace(a.typeInput.Text())))
+	p.Host = strings.TrimSpace(a.hostInput.Text())
+	fmt.Sscanf(strings.TrimSpace(a.portInput.Text()), "%d", &p.Port)
+	p.Username = strings.TrimSpace(a.userInput.Text())
+	p.PrivateKey = strings.TrimSpace(a.keyInput.Text())
+	if pw := a.passInput.Text(); pw != "" {
+		p.SetPassword(pw)
+	}
+	p.LastUsed = time.Now().UTC().Format(time.RFC3339)
+	if p.ID == "" {
+		p.ID = fmt.Sprintf("conn-%d", time.Now().UnixNano())
+	}
+	if p.Name == "" {
+		p.Name = "Unnamed"
+	}
+	if p.Group == "" {
+		p.Group = "Default"
+	}
+	if p.Type != connectionTypeLocal && p.Type != connectionTypeSSH {
+		p.Type = connectionTypeSSH
+	}
+	if p.Type == connectionTypeSSH && p.Port == 0 {
+		p.Port = 22
+	}
+	return p
+}
+
+func (a *finalShellApp) saveProfile() {
+	p := a.profileFromForm()
+	if a.idx >= 0 && a.idx < len(a.rows) {
+		a.rows[a.idx] = p
+	} else {
+		a.rows = append(a.rows, p)
+		a.idx = len(a.rows) - 1
+	}
+	if err := a.store.Save(a.rows); err != nil {
+		a.appendOutput("save failed: " + err.Error() + "\n")
+		a.setStatus("Save failed")
+		return
+	}
+	a.refreshTable()
+	a.setStatus("Saved " + p.Name)
+}
+
+func (a *finalShellApp) deleteProfile() {
+	if a.idx < 0 || a.idx >= len(a.rows) {
+		return
+	}
+	name := a.rows[a.idx].Name
+	a.rows = append(a.rows[:a.idx], a.rows[a.idx+1:]...)
+	if a.idx >= len(a.rows) {
+		a.idx = len(a.rows) - 1
+	}
+	_ = a.store.Save(a.rows)
+	a.refreshTable()
+	if a.idx >= 0 {
+		a.selectRow(a.idx)
+	}
+	a.setStatus("Deleted " + name)
+}
+
+func (a *finalShellApp) refreshTable() {
+	if a.model != nil {
+		a.model.rows = a.rows
+	}
+	if a.table != nil {
+		a.table.ReloadData()
+	}
+}
+
+func (a *finalShellApp) selectedProfile() (connectionProfile, bool) {
+	if a.idx < 0 || a.idx >= len(a.rows) {
+		return connectionProfile{}, false
+	}
+	return a.profileFromForm(), true
+}
+
+func (a *finalShellApp) connectSelected() {
+	p, ok := a.selectedProfile()
+	if !ok {
+		return
+	}
+	a.saveProfile()
+	a.appendOutput(fmt.Sprintf("[%s] ready: %s\n", p.Name, p.endpoint()))
+	a.setStatus("Connected profile ready")
+}
+
+func (a *finalShellApp) testConnection() {
+	p, ok := a.selectedProfile()
+	if !ok {
+		return
+	}
+	if p.Type == connectionTypeLocal {
+		a.runAsync(p, "pwd && whoami && uname -a")
+		return
+	}
+	a.runAsync(p, "echo connected && uname -a")
+}
+
+func (a *finalShellApp) runCommand() {
+	p, ok := a.selectedProfile()
+	if !ok {
+		return
+	}
+	cmd := strings.TrimSpace(a.cmdInput.Text())
+	if cmd == "" {
+		cmd = "pwd"
+	}
+	a.runAsync(p, cmd)
+}
+
+func (a *finalShellApp) runAsync(p connectionProfile, command string) {
+	a.appendOutput(fmt.Sprintf("\n$ [%s] %s\n", p.Name, command))
+	a.setStatus("Running...")
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		out, err := executeCommand(ctx, p, command)
+		msg := out
+		if err != nil {
+			msg += "\nERROR: " + err.Error() + "\n"
+		}
+		fltk_bridge.Awake(func() {
+			a.appendOutput(msg)
+			if !strings.HasSuffix(msg, "\n") {
+				a.appendOutput("\n")
+			}
+			if err != nil {
+				a.setStatus("Command failed")
 			} else {
-
+				a.setStatus("Command completed")
 			}
+		})
+	}()
+}
+
+func executeCommand(ctx context.Context, p connectionProfile, command string) (string, error) {
+	if p.Type == connectionTypeLocal {
+		cmd := exec.CommandContext(ctx, "/bin/sh", "-lc", command)
+		buf, err := cmd.CombinedOutput()
+		return string(buf), err
+	}
+	if p.Host == "" {
+		return "", errors.New("SSH host is empty")
+	}
+	methods := []ssh.AuthMethod{}
+	if p.PrivateKey != "" {
+		key, err := os.ReadFile(p.PrivateKey)
+		if err != nil {
+			return "", err
 		}
-		config.SaveConfig(config.CurrentApp.AppConfigFilePath)
-		if AuthView != nil {
-			// 重新绘制窗口
-			AuthView.RefreshUI()
+		signer, err := ssh.ParsePrivateKey(key)
+		if err != nil {
+			return "", err
 		}
+		methods = append(methods, ssh.PublicKeys(signer))
+	}
+	if pw := p.Password(); pw != "" {
+		methods = append(methods, ssh.Password(pw))
+	}
+	if len(methods) == 0 {
+		return "", errors.New("no SSH auth method: set password or private key")
+	}
+	port := p.Port
+	if port == 0 {
+		port = 22
+	}
+	cfg := &ssh.ClientConfig{User: p.Username, Auth: methods, HostKeyCallback: ssh.InsecureIgnoreHostKey(), Timeout: 15 * time.Second}
+	dialer := net.Dialer{Timeout: 15 * time.Second}
+	conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", p.Host, port))
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+	c, chans, reqs, err := ssh.NewClientConn(conn, fmt.Sprintf("%s:%d", p.Host, port), cfg)
+	if err != nil {
+		return "", err
+	}
+	client := ssh.NewClient(c, chans, reqs)
+	defer client.Close()
+	session, err := client.NewSession()
+	if err != nil {
+		return "", err
+	}
+	defer session.Close()
+	done := make(chan struct {
+		out []byte
+		err error
+	}, 1)
+	go func() {
+		out, err := session.CombinedOutput(command)
+		done <- struct {
+			out []byte
+			err error
+		}{out, err}
+	}()
+	select {
+	case <-ctx.Done():
+		_ = session.Signal(ssh.SIGKILL)
+		return "", ctx.Err()
+	case res := <-done:
+		return string(res.out), res.err
+	}
+}
 
-		if MainView != nil {
-			MainView.ReFreshData()
-			MainView.RefreshUI()
-		}
-	})
-
-	AuthView = guis_auth.NewAuthView(MainWindow, &guis_cfg.Frame{
-		X:      0,
-		Y:      CtlView.Frame.Y + CtlView.Frame.Height,
-		Width:  MainWindow.W(),
-		Height: MainWindow.H() - CtlView.Frame.Height,
-	}, func(authActionType guis_auth.AuthActionType, isPassed bool) {
-		gtbox_log.LogDebugf("auth action with[%s]", authActionType)
-		switch authActionType {
-		case guis_auth.AuthActionLogin:
-			if isPassed {
-
-				MainView = guis_main.NewMainView(MainWindow, &guis_cfg.Frame{
-					X:      AuthView.Frame.X,
-					Y:      CtlView.Frame.Y + CtlView.Frame.Height,
-					Width:  AuthView.Frame.Width,
-					Height: AuthView.Frame.Height,
-				}, func() {
-
-				})
-
-				MainWindow.Remove(AuthView.Group) // 移除当前视图
-				AuthView = nil
-				// 重新绘制窗口
-				MainWindow.Redraw()
-			}
-		case guis_auth.AuthActionRegister:
-		case guis_auth.AuthActionForgetPassword:
-		default:
-		}
-	})
-
-	// 启用窗口的可调整大小功能
-	MainWindow.Resizable(MainWindow)
-
-	MainWindow.End()
-	MainWindow.Show()
-	fltk_go.Run()
+func (a *finalShellApp) appendOutput(s string) {
+	if a.output != nil {
+		a.output.AppendText(s)
+	}
+}
+func (a *finalShellApp) setStatus(s string) {
+	if a.status != nil {
+		a.status.SetText(s)
+	}
 }

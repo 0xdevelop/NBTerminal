@@ -11,3 +11,4 @@ mesa/
 dts/
 main.rc
 main.syso
+tmp/
