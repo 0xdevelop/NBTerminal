@@ -29,4 +29,4 @@ require (
 	golang.org/x/sys v0.46.0 // indirect
 )
 
-replace github.com/0xYeah/fltk2go => github.com/yerikokay/fltk2go v0.0.20
+replace github.com/0xYeah/fltk2go => github.com/yerikokay/fltk2go v0.0.21
