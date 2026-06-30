@@ -1,9 +1,10 @@
 package guis_main
 
 import (
-	"NBTerminal/guis/guis_cfg"
-	"github.com/george012/fltk_go"
 	"sync"
+
+	"github.com/0xdevelop/NBTerminal/guis/guis_cfg"
+	"github.com/george012/fltk_go"
 )
 
 var (

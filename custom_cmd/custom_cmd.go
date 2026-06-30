@@ -1,11 +1,12 @@
 package custom_cmd
 
 import (
-	"NBTerminal/common"
-	"NBTerminal/config"
 	"fmt"
-	"github.com/george012/gtbox"
 	"strings"
+
+	"github.com/0xdevelop/NBTerminal/common"
+	"github.com/0xdevelop/NBTerminal/config"
+	"github.com/george012/gtbox"
 )
 
 var (

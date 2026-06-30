@@ -1,23 +1,24 @@
 package config
 
 import (
-	"NBTerminal/api/api_config"
-	"NBTerminal/locales"
 	"bufio"
 	"encoding/json"
 	"errors"
-	"github.com/george012/gtbox/gtbox_encryption"
-	"github.com/george012/gtbox/gtbox_log"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
+
+	"github.com/0xdevelop/NBTerminal/api/api_config"
+	"github.com/0xdevelop/NBTerminal/locales"
+	"github.com/george012/gtbox/gtbox_encryption"
+	"github.com/george012/gtbox/gtbox_log"
 )
 
 const (
 	ProjectName        = "NBTerminal"
 	ProjectVersion     = "v0.0.3"
-	ProjectBundleID    = "com.NBTerminal.NBTerminal"
+	ProjectBundleID    = "com.0xdevelop.NBTerminal"
 	ProjectDescription = "NB Terminal"
 	APIPortDefault     = 8765
 )

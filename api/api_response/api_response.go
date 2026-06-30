@@ -1,7 +1,7 @@
 package api_response
 
 import (
-	"NBTerminal/api/api_rpc"
+	"github.com/0xdevelop/NBTerminal/api/api_rpc"
 	"encoding/json"
 	"net/http"
 )

@@ -1,8 +1,8 @@
 package api
 
 import (
-	"NBTerminal/api/api_config"
-	"NBTerminal/api/api_handler"
+	"github.com/0xdevelop/NBTerminal/api/api_config"
+	"github.com/0xdevelop/NBTerminal/api/api_handler"
 	"fmt"
 	"github.com/george012/gtbox/gtbox_log"
 	"github.com/gorilla/mux"

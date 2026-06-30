@@ -1,7 +1,7 @@
 package api_request
 
 import (
-	"NBTerminal/api/api_rpc"
+	"github.com/0xdevelop/NBTerminal/api/api_rpc"
 	"encoding/json"
 	"errors"
 	"fmt"

@@ -9,6 +9,9 @@ build_path=./build
 RUN_MODE=release
 UPLOAD_TMP_DIR=upload_tmp_dir
 
+extend_name_agent=""
+
+
 OS_TYPE="Unknown"
 GetOSType() {
     uNames=$(uname -s)
@@ -56,37 +59,95 @@ function toBuild() {
     ld_flag_master="-X main.mGitCommitHash=${commit_hash} -X main.mGitCommitTime=${formatted_time} -X main.mGoVersion=${go_version} -X main.mPackageOS=${OS_TYPE} -X main.mPackageTime=${build_time} -X main.mRunMode=${RUN_MODE} -s -w"
 
     if [[ "$OS_TYPE" == "Darwin" ]]; then
-        # Build for macOS x64
+
         mkdir -p ${build_path}/${RUN_MODE}/darwin/amd64
+        mkdir -p ${build_path}/${RUN_MODE}/darwin/arm64
+        mkdir -p ${build_path}/${RUN_MODE}/darwin/universal
+
+        # 处理图标文件
+        create_mac_resource
+
+        # Build for macOS x64
         CGO_LDFLAGS="-lpthread -framework OpenGL"
         CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 CGO_LDFLAGS=$CGO_LDFLAGS go build -o "${build_path}/${RUN_MODE}/darwin/amd64/${product_name}" -trimpath -ldflags "${ld_flag_master}" main.go
         chmod a+x "${build_path}/${RUN_MODE}/darwin/amd64/${product_name}"
-        package_macos_app "${build_path}/${RUN_MODE}/darwin/amd64" "amd64"
+#        package_macos_app "${build_path}/${RUN_MODE}/darwin/amd64" "amd64"
 
         # Build for macOS arm64
-        mkdir -p ${build_path}/${RUN_MODE}/darwin/arm64
         CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 CGO_LDFLAGS=$CGO_LDFLAGS go build -o "${build_path}/${RUN_MODE}/darwin/arm64/${product_name}" -trimpath -ldflags "${ld_flag_master}" main.go
         chmod a+x "${build_path}/${RUN_MODE}/darwin/arm64/${product_name}"
-        package_macos_app "${build_path}/${RUN_MODE}/darwin/arm64" "arm64"
+#        package_macos_app "${build_path}/${RUN_MODE}/darwin/arm64" "arm64"
+
+        # 合并二进制文件
+        echo "merge ${product_name} darwin amd64 and arm64 to universal"
+        lipo -create -output ${build_path}/${RUN_MODE}/darwin/universal/${product_name} ${build_path}/${RUN_MODE}/darwin/amd64/${product_name} ${build_path}/${RUN_MODE}/darwin/arm64/${product_name}
+        chmod a+x ${build_path}/${RUN_MODE}/darwin/universal/${product_name}
+
+        package_macos_app "${build_path}/${RUN_MODE}/darwin/universal" "universal"
+
+        rm -rf ${build_path}/${RUN_MODE}/darwin/arm64
+        rm -rf ${build_path}/${RUN_MODE}/darwin/amd64
+        rm -rf ${build_path}/${RUN_MODE}/darwin/AppIcon.icns
+
+        if [[ -n "$extend_name_agent" ]]; then
+            echo "build ${product_name}_${extend_name_agent}"
+            CC=x86_64-linux-musl-gcc GOARCH=amd64 GOOS=linux CGO_ENABLED=1 CGO_LDFLAGS="-static" go build -o ${build_path}/${RUN_MODE}/${product_name}_${extend_name_agent}/${product_name}_${extend_name_agent} -trimpath -ldflags "${ld_flag_master}" ./${product_name}_${extend_name_agent}/${product_name}_${extend_name_agent}.go \
+            && chmod a+x ${build_path}/${RUN_MODE}/${product_name}_${extend_name_agent}/${product_name}_${extend_name_agent} \
+            && cp ./example_files/${product_name}_${extend_name_agent}.service ${build_path}/${RUN_MODE}/${product_name}_${extend_name_agent} \
+            && cp ./example_files/install_${product_name}_${extend_name_agent}.sh ${build_path}/${RUN_MODE}/${product_name}_${extend_name_agent} \
+            && mkdir -p ${build_path}/${RUN_MODE}/${product_name}_${extend_name_agent}/conf \
+            && cp ./example_files/config_${extend_name_agent}.example.json ${build_path}/${RUN_MODE}/${product_name}_${extend_name_agent}/conf/config_${extend_name_agent}.json
+
+            package_linux_binary_files
+        fi
     elif [[ "$OS_TYPE" == "Windows" ]]; then
 
-      generate_windows_package_file
-      windres -i main.rc -o main.syso -O coff
-
+      mingw_bin="$(dirname "$(command -v windres)")"
+      msys_root="$(cd "${mingw_bin}/../.." && pwd)"
+      export PATH="${mingw_bin}:${msys_root}/usr/bin:${PATH}"
 
       # Build for Windows x64
       mkdir -p ${build_path}/${RUN_MODE}/windows/amd64
+
+      generate_windows_icon_file
+      generate_windows_package_file
+
+      # x86_64-w64-mingw32-windres -i main.rc -o main.syso -O coff
+      windres -i main.rc -o main.syso -O coff
       CGO_LDFLAGS="-static -static-libgcc -static-libstdc++ -lglu32 -lopengl32 -lgdiplus -lole32 -luuid -lcomctl32 -lws2_32 -lmsvcrt"
-      CC=x86_64-w64-mingw32-gcc
-      CXX=x86_64-w64-mingw32-g++
-      CGO_ENABLED=1 GOOS=windows GOARCH=amd64 CC=$CC CXX=$CXX CGO_LDFLAGS=$CGO_LDFLAGS go build -trimpath -ldflags "${ld_flag_master} -H windowsgui -w -s"
-      chmod a+x ./${product_name}.exe
-      mv -f ./${product_name}.exe ${build_path}/${RUN_MODE}/windows/amd64/${product_name}.exe
+
+      CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CGO_LDFLAGS=$CGO_LDFLAGS go build -a -trimpath -ldflags "${ld_flag_master} -H windowsgui -w -s" -o ${build_path}/${RUN_MODE}/windows/amd64/${product_name}.exe
+      chmod a+x ${build_path}/${RUN_MODE}/windows/amd64/${product_name}.exe
 
       rm -rf ./main.rc
       rm -rf ./main.syso
+      rm -rf ./favicon.ico
+
       package_windows_files "amd64"
     fi
+}
+
+function package_linux_binary_files(){
+
+    local BUILD_OS_TYPE=$(echo "$OS_TYPE" | tr '[:upper:]' '[:lower:]')
+
+    cd ${build_path}/${RUN_MODE} \
+    && echo "package ${product_name}_${extend_name_agent}" \
+    && zip -r ./${product_name}_${extend_name_agent}_${RUN_MODE}_${CURRENT_VERSION}_linux_amd64.zip ./${product_name}_${extend_name_agent} \
+    && mkdir -p ../${UPLOAD_TMP_DIR} \
+    && mv *.zip ../${UPLOAD_TMP_DIR} \
+    && cd ../../ \
+    && echo current dir with $PWD
+}
+
+
+function generate_windows_icon_file() {
+    if ! command -v magick >/dev/null 2>&1; then
+        echo "ImageMagick magick command not found; cannot generate Windows icon"
+        exit 1
+    fi
+
+    magick ./resources/imgs/Icon.png -define icon:auto-resize=256,128,64,48,32,16 ./favicon.ico
 }
 
 function generate_windows_package_file() {
@@ -132,6 +193,7 @@ EOL
 }
 
 function package_windows_files() {
+
     if [[ "$OS_TYPE" == "Windows" ]]; then
         cd ${build_path}/${RUN_MODE}/windows/amd64
         mkdir -p ${product_name}
@@ -139,15 +201,11 @@ function package_windows_files() {
 #        zip -r ./${product_name}_${RUN_MODE}_${CURRENT_VERSION}_linux_amd64.zip ./${product_name}
         7z a ./${product_name}_${RUN_MODE}_${CURRENT_VERSION}_windows_amd64.zip ./${product_name} >/dev/null 2>&1
         mv ./${product_name}_${RUN_MODE}_${CURRENT_VERSION}_windows_amd64.zip ../../../${UPLOAD_TMP_DIR}
-
-    elif [[ "$OS_TYPE" == "Linux" ]]; then
-        zip -r ./${product_name}_${RUN_MODE}_${CURRENT_VERSION}_linux_amd64.zip ./${product_name}
-        zip -r ./${product_name}_${RUN_MODE}_${CURRENT_VERSION}_linux_arm64.zip ./${product_name}
-        mv *.zip ../../../${UPLOAD_TMP_DIR}
+        cd ../../../../
     else
         return
     fi
-    cd ../../../../
+
 }
 
 function package_macos_app() {
@@ -196,8 +254,7 @@ EOL
         mv "${build_path}/${RUN_MODE}/conf" ${resources_dir}/
     fi
 
-    # 处理图标文件
-    create_mac_resource
+
     # 创建最终的.app包
     cd ${build_dir}
     echo "---------current path $(pwd)-----------"
@@ -228,16 +285,16 @@ function create_mac_resource() {
 
     local app_icons=${build_path}/${RUN_MODE}/AppIcon.iconset
     mkdir -p ${app_icons}
-    sips -z 16 16     ./resources/imgs/icon.png --out ${app_icons}/icon_16x16.png
-    sips -z 32 32     ./resources/imgs/icon.png --out ${app_icons}/icon_16x16@2x.png
-    sips -z 32 32     ./resources/imgs/icon.png --out ${app_icons}/icon_32x32.png
-    sips -z 64 64     ./resources/imgs/icon.png --out ${app_icons}/icon_32x32@2x.png
-    sips -z 128 128   ./resources/imgs/icon.png --out ${app_icons}/icon_128x128.png
-    sips -z 256 256   ./resources/imgs/icon.png --out ${app_icons}/icon_128x128@2x.png
-    sips -z 256 256   ./resources/imgs/icon.png --out ${app_icons}/icon_256x256.png
-    sips -z 512 512   ./resources/imgs/icon.png --out ${app_icons}/icon_256x256@2x.png
-    sips -z 512 512   ./resources/imgs/icon.png --out ${app_icons}/icon_512x512.png
-    sips -z 1024 1024 ./resources/imgs/icon.png --out ${app_icons}/icon_512x512@2x.png
+    sips -z 16 16     ./resources/imgs/Icon.png --out ${app_icons}/icon_16x16.png
+    sips -z 32 32     ./resources/imgs/Icon.png --out ${app_icons}/icon_16x16@2x.png
+    sips -z 32 32     ./resources/imgs/Icon.png --out ${app_icons}/icon_32x32.png
+    sips -z 64 64     ./resources/imgs/Icon.png --out ${app_icons}/icon_32x32@2x.png
+    sips -z 128 128   ./resources/imgs/Icon.png --out ${app_icons}/icon_128x128.png
+    sips -z 256 256   ./resources/imgs/Icon.png --out ${app_icons}/icon_128x128@2x.png
+    sips -z 256 256   ./resources/imgs/Icon.png --out ${app_icons}/icon_256x256.png
+    sips -z 512 512   ./resources/imgs/Icon.png --out ${app_icons}/icon_256x256@2x.png
+    sips -z 512 512   ./resources/imgs/Icon.png --out ${app_icons}/icon_512x512.png
+    sips -z 1024 1024 ./resources/imgs/Icon.png --out ${app_icons}/icon_512x512@2x.png
 
     iconutil -c icns ${app_icons} -o ${build_path}/${RUN_MODE}/darwin/AppIcon.icns
 

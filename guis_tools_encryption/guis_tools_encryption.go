@@ -1,12 +1,13 @@
 package guis_tools_encryption
 
 import (
-	"NBTerminal/config"
-	"NBTerminal/guis/guis_cfg"
-	"NBTerminal/locales"
+	"sync"
+
+	"github.com/0xdevelop/NBTerminal/config"
+	"github.com/0xdevelop/NBTerminal/guis/guis_cfg"
+	"github.com/0xdevelop/NBTerminal/locales"
 	"github.com/george012/fltk_go"
 	"github.com/george012/gtbox/gtbox_encryption"
-	"sync"
 )
 
 type EncryptionGUI struct {

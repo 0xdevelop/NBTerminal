@@ -1,9 +1,9 @@
 package guis_switch_language
 
 import (
-	"NBTerminal/config"
-	"NBTerminal/guis/guis_cfg"
-	"NBTerminal/locales"
+	"github.com/0xdevelop/NBTerminal/config"
+	"github.com/0xdevelop/NBTerminal/guis/guis_cfg"
+	"github.com/0xdevelop/NBTerminal/locales"
 	"github.com/george012/fltk_go"
 )
 

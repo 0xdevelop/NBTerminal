@@ -4,7 +4,6 @@ set -e
 
 ProductName=$(grep ProjectName ./config/config.go | awk -F '"' '{print $2}' | sed 's/\"//g')
 Product_version_key="ProjectVersion"
-REPO_PFEX=george012/$ProductName
 VersionFile=./config/config.go
 
 CURRENT_VERSION=$(grep ${Product_version_key} $VersionFile | awk -F '"' '{print $2}' | sed 's/\"//g')
@@ -52,10 +51,10 @@ function to_run() {
         return 0
     elif [ "$1" == "custom" ]; then
         echo "============================ ${ProductName} ============================"
-        echo "  1、发布 [-${ProductName}-]"
-        echo "  当前版本[-${CURRENT_VERSION}-]"
+        echo "  1、release [-${ProductName}-]"
+        echo "  current version [-${CURRENT_VERSION}-]"
         echo "======================================================================"
-        read -p "$(echo -e "请输入版本号[例如；v0.0.1]")" inputString
+        read -p "$(echo -e "please input version string [example；v0.0.1]")" inputString
         if [[ "$inputString" =~ ^v.* ]]; then
             NEXT_VERSION=${inputString}
         else
@@ -107,14 +106,98 @@ function git_handle_ready() {
     fi
 }
 
+function find_prev_release_commit() {
+    git log --fixed-strings --grep='Release:--:' --format='%H' -n 1 HEAD || true
+}
+
+function gen_changelog_if_possible() {
+    local del_version_no="$1"
+    local out_dir out_file prev_release_sha range_end range
+    out_dir="changelog"
+    mkdir -p "${out_dir}"
+
+    out_file="${out_dir}/${NEXT_VERSION}.md"
+
+    prev_release_sha="$(find_prev_release_commit)"
+    range_end="HEAD"
+
+    if [ -z "${prev_release_sha}" ]; then
+        prev_release_sha="$(git rev-list --max-parents=0 HEAD | tail -n 1)"
+        range="${prev_release_sha}..${range_end}"
+        echo "[changelog] no previous Release marker found, use range ${range}"
+        local prev_label="root(${prev_release_sha:0:7})"
+    else
+        range="${prev_release_sha}..${range_end}"
+        echo "[changelog] previous Release marker: ${prev_release_sha}"
+        local prev_label="${prev_release_sha:0:7}"
+    fi
+
+    local commit_count
+    commit_count="$(git rev-list --count "${range}" 2>/dev/null || echo 0)"
+
+    {
+        echo "## ${NEXT_VERSION} ChangeLog"
+        echo
+        echo "- Release:--: ${NEXT_VERSION}_$(date -u +"%Y-%m-%d_%H:%M:%S")_UTC"
+        echo "- Range: ${range}"
+        echo "- Commits: ${commit_count}"
+        echo
+
+        echo "###  commit infos"
+        echo
+        if [[ "${commit_count}" == "0" ]]; then
+            echo "- (no commits between releases)"
+            echo "- (no file changes)"
+        else
+            local shortstat
+            shortstat="$(git diff --shortstat "${range}" 2>/dev/null || true)"
+            if [ -n "${shortstat}" ]; then
+                echo "- ${shortstat}"
+            else
+                echo "- (no file changes)"
+            fi
+            echo
+            echo '```'
+            git diff --stat "${range}" 2>/dev/null || true
+            echo '```'
+        fi
+        echo
+
+        echo "### commit messages"
+        echo
+        if [[ "${commit_count}" == "0" ]]; then
+            echo "- (no commits between releases)"
+        else
+            git log --reverse --date=short --pretty=format:"- %ad %h %s" "${range}" || true
+        fi
+        echo
+    } > "${out_file}"
+
+    echo "[changelog] wrote ${out_file}"
+
+    if [ -n "${del_version_no}" ]; then
+        local pre_file="${out_dir}/v${del_version_no}.md"
+        if [ -f "${pre_file}" ]; then
+            if git ls-files --error-unmatch "${pre_file}" >/dev/null 2>&1; then
+                git rm -f "${pre_file}"
+            else
+                rm -f "${pre_file}" 2>/dev/null || true
+            fi
+            echo "[changelog] removed ${pre_file}"
+        fi
+    fi
+}
+
+
 function git_handle_push() {
     local current_version_no=${CURRENT_VERSION//v/}
     local next_version_no=${NEXT_VERSION//v/}
     local pre_del_version_no=$(get_pre_del_version_no "$current_version_no")
     echo "Pre Del Version With v"${pre_del_version_no}
 
-    git add . \
-    && git commit -m "Release v${next_version_no}_$(date -u +"%Y-%m-%d_%H:%M:%S")"_"UTC" \
+    gen_changelog_if_possible "${pre_del_version_no}" \
+    && git add . \
+    && git commit -m "Release:--: v${next_version_no}_$(date -u +"%Y-%m-%d_%H:%M:%S")"_"UTC" \
     && git tag v${next_version_no} \
     && git tag -f latest v${next_version_no}
 
@@ -123,8 +206,8 @@ function git_handle_push() {
         echo "Pushing to ${remote}..."
         git push --delete ${remote} latest \
         && git push ${remote} \
-        && git push ${remote} v${next_version_no} \
-        && git push ${remote} latest
+        && git push ${remote} latest \
+        && git push ${remote} v${next_version_no}
     done
     git tag -d v${pre_del_version_no}
 }

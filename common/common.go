@@ -1,7 +1,7 @@
 package common
 
 import (
-	"NBTerminal/config"
+	"github.com/0xdevelop/NBTerminal/config"
 	"github.com/george012/gtbox"
 	"github.com/george012/gtbox/gtbox_coding"
 	"github.com/george012/gtbox/gtbox_encryption"

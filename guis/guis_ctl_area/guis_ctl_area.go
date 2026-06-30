@@ -1,11 +1,11 @@
 package guis_ctl_area
 
 import (
-	"NBTerminal/config"
-	"NBTerminal/guis/guis_cfg"
-	"NBTerminal/guis/guis_settings"
-	"NBTerminal/guis_tools_encryption"
-	"NBTerminal/locales"
+	"github.com/0xdevelop/NBTerminal/config"
+	"github.com/0xdevelop/NBTerminal/guis/guis_cfg"
+	"github.com/0xdevelop/NBTerminal/guis/guis_settings"
+	"github.com/0xdevelop/NBTerminal/guis_tools_encryption"
+	"github.com/0xdevelop/NBTerminal/locales"
 	"github.com/george012/fltk_go"
 )
 

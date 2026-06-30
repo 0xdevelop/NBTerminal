@@ -1,11 +1,11 @@
 package api_handler
 
 import (
-	"NBTerminal/api/api_config"
-	"NBTerminal/api/api_request"
-	"NBTerminal/api/api_response"
-	"NBTerminal/api/api_rpc"
-	"NBTerminal/config"
+	"github.com/0xdevelop/NBTerminal/api/api_config"
+	"github.com/0xdevelop/NBTerminal/api/api_request"
+	"github.com/0xdevelop/NBTerminal/api/api_response"
+	"github.com/0xdevelop/NBTerminal/api/api_rpc"
+	"github.com/0xdevelop/NBTerminal/config"
 	"errors"
 	"fmt"
 	"github.com/george012/gtbox"

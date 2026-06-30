@@ -1,10 +1,10 @@
 package guis_settings
 
 import (
-	"NBTerminal/config"
-	"NBTerminal/guis/guis_cfg"
-	"NBTerminal/guis/guis_switch_language"
-	"NBTerminal/locales"
+	"github.com/0xdevelop/NBTerminal/config"
+	"github.com/0xdevelop/NBTerminal/guis/guis_cfg"
+	"github.com/0xdevelop/NBTerminal/guis/guis_switch_language"
+	"github.com/0xdevelop/NBTerminal/locales"
 	"github.com/george012/fltk_go"
 	"github.com/george012/gtbox/gtbox_log"
 )

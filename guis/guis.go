@@ -1,11 +1,11 @@
 package guis
 
 import (
-	"NBTerminal/config"
-	"NBTerminal/guis/guis_auth"
-	"NBTerminal/guis/guis_cfg"
-	"NBTerminal/guis/guis_ctl_area"
-	"NBTerminal/guis/guis_main"
+	"github.com/0xdevelop/NBTerminal/config"
+	"github.com/0xdevelop/NBTerminal/guis/guis_auth"
+	"github.com/0xdevelop/NBTerminal/guis/guis_cfg"
+	"github.com/0xdevelop/NBTerminal/guis/guis_ctl_area"
+	"github.com/0xdevelop/NBTerminal/guis/guis_main"
 	"bytes"
 	"github.com/george012/fltk_go"
 	"github.com/george012/gtbox/gtbox_log"

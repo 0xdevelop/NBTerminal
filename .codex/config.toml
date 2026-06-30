@@ -1,0 +1,14 @@
+# Project-scoped Codex config. Loaded only when this repo is trusted.
+approval_policy = "on-request"
+default_permissions = "yeahbox"
+
+[permissions.yeahbox.filesystem]
+":minimal" = "read"
+":tmpdir" = "write"
+":slash_tmp" = "write"
+
+[permissions.yeahbox.filesystem.":workspace_roots"]
+"." = "write"
+
+[permissions.yeahbox.network]
+enabled = false

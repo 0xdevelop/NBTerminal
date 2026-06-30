@@ -1,21 +1,22 @@
 package main
 
 import (
-	"NBTerminal/api"
-	"NBTerminal/config"
-	"NBTerminal/custom_cmd"
-	"NBTerminal/guis"
-	"NBTerminal/locales"
 	_ "embed"
 	"fmt"
+	"os"
+	"runtime"
+	"time"
+
+	"github.com/0xdevelop/NBTerminal/api"
+	"github.com/0xdevelop/NBTerminal/config"
+	"github.com/0xdevelop/NBTerminal/custom_cmd"
+	"github.com/0xdevelop/NBTerminal/guis"
+	"github.com/0xdevelop/NBTerminal/locales"
 	"github.com/george012/gtbox"
 	"github.com/george012/gtbox/gtbox_cmd"
 	"github.com/george012/gtbox/gtbox_encryption"
 	"github.com/george012/gtbox/gtbox_log"
 	"github.com/george012/gtbox/gtbox_sys"
-	"os"
-	"runtime"
-	"time"
 )
 
 //go:embed resources/imgs/Icon.png
@@ -88,7 +89,7 @@ func SetupApp() {
 		config.CurrentApp.AppLogPath,
 		30,
 		gtbox_log.GTLogSaveHours,
-		int(config.CurrentApp.HTTPRequestTimeOut.Seconds()),
+		config.CurrentApp.HTTPRequestTimeOut,
 	)
 
 	en_str := gtbox_encryption.GTEnc("app starting...", "hello")
