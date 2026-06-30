@@ -216,7 +216,7 @@ handle_input(){
     if [[ $1 == "-get_pre_del_tag_name" ]]; then
         pre_tag=$(get_pre_del_version_no "${CURRENT_VERSION}")
         echo "Pre Del Tag With " "$pre_tag"
-    elif [ -z "$1" ] || [ "$1" == "auto" ] || [ "$1" == "custom" ]; then
+    elif [ -z "$1" ] || [ "$1" == "auto" ]; then
 
         if to_run "$1"; then
             git_handle_ready

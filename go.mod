@@ -3,7 +3,7 @@ module github.com/0xdevelop/NBTerminal
 go 1.25.0
 
 require (
-	github.com/0xYeah/fltk2go v0.0.20
+	github.com/0xYeah/fltk2go v0.0.21
 	github.com/george012/fltk_go v0.0.96
 	github.com/george012/gtbox v0.1.113
 	github.com/gorilla/mux v1.8.1
