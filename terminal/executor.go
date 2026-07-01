@@ -201,8 +201,15 @@ func (e SSHExecutor) Run(ctx context.Context, conn Connection, command string) (
 }
 
 func (e SSHExecutor) RunWithEvents(ctx context.Context, conn Connection, command string, onEvent EventHandler) (CommandResult, error) {
+	conn.Normalize()
 	started := time.Now()
 	result := CommandResult{Connection: conn, Command: command, StartedAt: started, ExitCode: -1}
+	if err := conn.Validate(); err != nil {
+		return result, err
+	}
+	if strings.TrimSpace(command) == "" {
+		return result, errors.New("command is required")
+	}
 	cfg, err := sshClientConfig(conn)
 	if err != nil {
 		return result, err
@@ -224,7 +231,8 @@ func (e SSHExecutor) RunWithEvents(ctx context.Context, conn Connection, command
 	defer session.Close()
 	var stdout, stderr bytes.Buffer
 	session.SetOutput(&stdout, &stderr)
-	err = session.Run(command)
+	execCommand := commandForRemoteShell(conn, command)
+	err = session.Run(execCommand)
 	result.FinishedAt = time.Now()
 	result.Stdout = stdout.String()
 	result.Stderr = stderr.String()
@@ -251,6 +259,20 @@ func (e SSHExecutor) RunWithEvents(ctx context.Context, conn Connection, command
 		onEvent(status)
 	}
 	return result, err
+}
+
+func commandForRemoteShell(conn Connection, command string) string {
+	if strings.TrimSpace(conn.WorkingDir) == "" {
+		return command
+	}
+	return "cd " + shellQuote(conn.WorkingDir) + " && " + command
+}
+
+func shellQuote(s string) string {
+	if s == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
 func sshClientConfig(conn Connection) (*ssh.ClientConfig, error) {

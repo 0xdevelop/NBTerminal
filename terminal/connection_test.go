@@ -157,6 +157,31 @@ func TestSSHExecutorUsesInjectableDialer(t *testing.T) {
 	}
 }
 
+func TestSSHExecutorUsesWorkingDir(t *testing.T) {
+	session := &fakeSSHSession{}
+	client := &fakeSSHClient{session: session}
+	dialer := &fakeSSHDialer{client: client}
+	conn := Connection{ID: "dev", Name: "Dev", Type: ConnectionTypeSSH, Host: "example.com", Port: 22, Username: "root", Password: "secret", WorkingDir: "/srv/my app's/current"}
+	_, err := (SSHExecutor{Dialer: dialer}).Run(context.Background(), conn, "pwd && printf ok")
+	if err != nil {
+		t.Fatalf("ssh run failed: %v", err)
+	}
+	want := "cd '/srv/my app'\\''s/current' && pwd && printf ok"
+	if session.cmd != want {
+		t.Fatalf("expected working-dir command %q, got %q", want, session.cmd)
+	}
+}
+
+func TestSSHExecutorValidatesDirectCalls(t *testing.T) {
+	result, err := (SSHExecutor{Dialer: &fakeSSHDialer{}}).Run(context.Background(), Connection{Type: ConnectionTypeSSH, Host: "example.com", Username: "root"}, "true")
+	if err == nil || !strings.Contains(err.Error(), "ssh password or private key is required") {
+		t.Fatalf("expected auth validation error, got result=%#v err=%v", result, err)
+	}
+	if result.ExitCode != -1 || result.Connection.Port != 22 {
+		t.Fatalf("expected normalized pending result, got %#v", result)
+	}
+}
+
 func TestSSHExecutorReportsDialError(t *testing.T) {
 	want := errors.New("dial blocked")
 	conn := Connection{ID: "dev", Name: "Dev", Type: ConnectionTypeSSH, Host: "example.com", Port: 22, Username: "root", Password: "secret"}
