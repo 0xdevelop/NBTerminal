@@ -243,7 +243,10 @@ func (a *finalShellApp) build() {
 	root := a.window.RootView()
 
 	root.AddSubview(label(16, 10, 320, 28, "NBTerminal - FinalShell style manager"))
-	a.status = label(810, 12, 350, 24, "Ready")
+	a.status = label(760, 12, 400, 24, "Ready")
+	a.status.SetFrame(fltk_bridge.FLAT_BOX)
+	a.status.SetBackgroundColor(uint(fltk_bridge.ColorFromRgb(192, 192, 192)))
+	a.status.SetAlignment(fltk_bridge.ALIGN_RIGHT | fltk_bridge.ALIGN_CLIP)
 	a.status.View().SetAutomationID("app.status")
 	root.AddSubview(a.status)
 
