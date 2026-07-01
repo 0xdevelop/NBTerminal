@@ -95,7 +95,7 @@ func SaveConfig(file string) error {
 		return err
 	}
 
-	err = os.WriteFile(file, config, 644)
+	err = os.WriteFile(file, config, 0o644)
 	if err != nil {
 		return err
 	}

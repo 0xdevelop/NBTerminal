@@ -198,9 +198,10 @@ func (m *tableModel) CellForColumn(_ *tableview.TableView, row, col int) *tablev
 }
 
 type finalShellApp struct {
-	store *connectionStore
-	rows  []connectionProfile
-	idx   int
+	store   *connectionStore
+	history *terminal.HistoryStore
+	rows    []connectionProfile
+	idx     int
 
 	window *uikit.UIWindow
 	table  *uikit.UITableView
@@ -224,7 +225,11 @@ func LoadGUIWithFLTKGO(_ []byte) {
 		fltk2go.Lock()
 	}
 
-	app := &finalShellApp{store: newConnectionStore(config.CurrentApp.DataDir), idx: -1}
+	app := &finalShellApp{
+		store:   newConnectionStore(config.CurrentApp.DataDir),
+		history: terminal.NewHistoryStore(filepath.Join(config.CurrentApp.DataDir, "terminal-history.jsonl")),
+		idx:     -1,
+	}
 	if err := app.store.Load(); err != nil {
 		gtbox_log.LogErrorf("load connection store failed: %s", err.Error())
 	}
@@ -302,6 +307,7 @@ func (a *finalShellApp) build() {
 	a.output.SetTextColor(0xD7FFE500)
 	a.output.SetBackgroundColor(0x11182700)
 	a.output.SetText("Welcome to NBTerminal FinalShell Mode\n- Select or create a connection.\n- Use local shell for this machine or SSH for remote commands.\n- Passwords are saved encrypted in the app data store.\n\n")
+	a.appendRecentHistory()
 	root.AddSubview(a.output)
 
 	a.cmdInput = input(620, 650, 412, 34, "Command", "terminal.command")
@@ -496,7 +502,12 @@ func (a *finalShellApp) runAsync(p connectionProfile, command string) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
-		out, err := executeCommand(ctx, p, command)
+		out, result, err := executeCommandResult(ctx, p, command)
+		if a.history != nil {
+			if logErr := a.history.Append(terminal.HistoryFromResult(result)); logErr != nil {
+				gtbox_log.LogErrorf("append command history failed: %s", logErr.Error())
+			}
+		}
 		msg := out
 		if err != nil {
 			msg += "\nERROR: " + err.Error() + "\n"
@@ -515,13 +526,37 @@ func (a *finalShellApp) runAsync(p connectionProfile, command string) {
 	}()
 }
 
+func (a *finalShellApp) appendRecentHistory() {
+	if a.history == nil {
+		return
+	}
+	entries, err := a.history.Load(5)
+	if err != nil {
+		gtbox_log.LogErrorf("load command history failed: %s", err.Error())
+		return
+	}
+	if len(entries) == 0 {
+		return
+	}
+	a.appendOutput("Recent commands:\n")
+	for _, entry := range entries {
+		a.appendOutput(fmt.Sprintf("- [%s] %s (exit %d)\n", entry.ConnectionName, entry.Command, entry.ExitCode))
+	}
+	a.appendOutput("\n")
+}
+
 func executeCommand(ctx context.Context, p connectionProfile, command string) (string, error) {
+	out, _, err := executeCommandResult(ctx, p, command)
+	return out, err
+}
+
+func executeCommandResult(ctx context.Context, p connectionProfile, command string) (string, terminal.CommandResult, error) {
 	conn, err := profileToConnection(p)
 	if err != nil {
-		return "", err
+		return "", terminal.CommandResult{Connection: conn, Command: command, ExitCode: -1}, err
 	}
 	result, err := terminal.NewExecutor().Run(ctx, conn, command)
-	return formatCommandResult(result), err
+	return formatCommandResult(result), result, err
 }
 
 func profileToConnection(p connectionProfile) (terminal.Connection, error) {
