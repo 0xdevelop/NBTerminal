@@ -46,6 +46,7 @@ type connectionProfile struct {
 	Username    string         `json:"username"`
 	PasswordEnc string         `json:"password_enc,omitempty"`
 	PrivateKey  string         `json:"private_key,omitempty"`
+	WorkingDir  string         `json:"working_dir,omitempty"`
 	LastUsed    string         `json:"last_used,omitempty"`
 	Description string         `json:"description,omitempty"`
 }
@@ -215,6 +216,7 @@ type finalShellApp struct {
 	userInput  *uikit.Input
 	passInput  *uikit.Input
 	keyInput   *uikit.Input
+	workInput  *uikit.Input
 	cmdInput   *uikit.Input
 	output     *uikit.UITextView
 	status     *uikit.UILabel
@@ -289,18 +291,21 @@ func (a *finalShellApp) build() {
 	a.passInput.View().SetAutomationID("form.password")
 	root.AddSubview(a.passInput)
 
-	a.keyInput = input(95, 566, 403, 28, "Key", "form.key")
+	a.workInput = input(95, 566, 403, 28, "WorkDir", "form.working_dir")
+	root.AddSubview(a.workInput)
+
+	a.keyInput = input(95, 604, 403, 28, "Key", "form.key")
 	root.AddSubview(a.keyInput)
 
-	addBtn := button(22, 610, 90, 32, "New", "action.new", a.newProfile)
+	addBtn := button(22, 640, 90, 32, "New", "action.new", a.newProfile)
 	root.AddSubview(addBtn)
-	saveBtn := button(122, 610, 90, 32, "Save", "action.save", a.saveProfile)
+	saveBtn := button(122, 640, 90, 32, "Save", "action.save", a.saveProfile)
 	root.AddSubview(saveBtn)
-	deleteBtn := button(222, 610, 90, 32, "Delete", "action.delete", a.deleteProfile)
+	deleteBtn := button(222, 640, 90, 32, "Delete", "action.delete", a.deleteProfile)
 	root.AddSubview(deleteBtn)
-	testBtn := button(322, 610, 90, 32, "Test", "action.test", a.testConnection)
+	testBtn := button(322, 640, 90, 32, "Test", "action.test", a.testConnection)
 	root.AddSubview(testBtn)
-	connectBtn := button(422, 610, 80, 32, "Connect", "action.connect", a.connectSelected)
+	connectBtn := button(422, 640, 80, 32, "Connect", "action.connect", a.connectSelected)
 	root.AddSubview(connectBtn)
 
 	root.AddSubview(label(532, 44, 620, 24, "Terminal / Command Console"))
@@ -370,6 +375,7 @@ func (a *finalShellApp) selectRow(row int) {
 	}
 	a.userInput.SetText(p.Username)
 	a.passInput.SetText("")
+	a.workInput.SetText(p.WorkingDir)
 	a.keyInput.SetText(p.PrivateKey)
 	a.setStatus("Selected " + p.Name)
 }
@@ -392,6 +398,7 @@ func (a *finalShellApp) profileFromForm() connectionProfile {
 	p.Host = strings.TrimSpace(a.hostInput.Text())
 	fmt.Sscanf(strings.TrimSpace(a.portInput.Text()), "%d", &p.Port)
 	p.Username = strings.TrimSpace(a.userInput.Text())
+	p.WorkingDir = strings.TrimSpace(a.workInput.Text())
 	p.PrivateKey = strings.TrimSpace(a.keyInput.Text())
 	if pw := a.passInput.Text(); pw != "" {
 		p.SetPassword(pw)
@@ -576,6 +583,7 @@ func profileToConnection(p connectionProfile) (terminal.Connection, error) {
 		Username:    p.Username,
 		Password:    p.Password(),
 		PrivateKey:  strings.TrimSpace(p.PrivateKey),
+		WorkingDir:  strings.TrimSpace(p.WorkingDir),
 		Description: p.Description,
 	}
 	if conn.PrivateKey != "" && !strings.Contains(conn.PrivateKey, "-----BEGIN") {
