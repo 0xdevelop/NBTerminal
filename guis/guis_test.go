@@ -7,6 +7,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/0xdevelop/NBTerminal/config"
+	"github.com/0xdevelop/NBTerminal/terminal"
 )
 
 func TestExecuteLocalCommand(t *testing.T) {
@@ -68,5 +71,66 @@ func TestProfileToConnectionLoadsPrivateKeyPath(t *testing.T) {
 	}
 	if conn.Port != 2200 || conn.Username != "me" || conn.WorkingDir != "/srv/app" {
 		t.Fatalf("unexpected mapped connection: %#v", conn)
+	}
+}
+
+func TestConnectionStoreSeedsFromGlobalConfig(t *testing.T) {
+	oldGlobal := config.GlobalConfig
+	t.Cleanup(func() { config.GlobalConfig = oldGlobal })
+	config.GlobalConfig = &config.FileConfig{Connections: []terminal.Connection{
+		{ID: "cfg-local", Name: "Cfg Local", Type: terminal.ConnectionTypeLocal, WorkingDir: "/tmp"},
+		{ID: "cfg-ssh", Name: "Cfg SSH", Type: terminal.ConnectionTypeSSH, Host: "example.com", Username: "me", Password: "secret"},
+	}}
+
+	store := newConnectionStore(t.TempDir())
+	if err := store.Load(); err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	profiles := store.List()
+	if len(profiles) != 2 {
+		t.Fatalf("expected profiles from config, got %#v", profiles)
+	}
+	var localProfile, sshProfile connectionProfile
+	for _, p := range profiles {
+		if p.ID == "cfg-local" {
+			localProfile = p
+		}
+		if p.ID == "cfg-ssh" {
+			sshProfile = p
+		}
+	}
+	if localProfile.Type != connectionTypeLocal || localProfile.WorkingDir != "/tmp" {
+		t.Fatalf("expected local config profile, got %#v", localProfile)
+	}
+	if sshProfile.Password() != "secret" {
+		t.Fatalf("expected encrypted password round-trip from config seed")
+	}
+}
+
+func TestConnectionStoreSaveSyncsGlobalConfigWithoutPassword(t *testing.T) {
+	oldGlobal := config.GlobalConfig
+	oldApp := config.CurrentApp
+	t.Cleanup(func() { config.GlobalConfig, config.CurrentApp = oldGlobal, oldApp })
+	config.CurrentApp = nil
+	config.GlobalConfig = &config.FileConfig{}
+
+	profile := connectionProfile{ID: "dev", Name: "Dev", Group: "Default", Type: connectionTypeSSH, Host: "example.com", Port: 2200, Username: "me"}
+	profile.SetPassword("secret")
+	store := newConnectionStore(t.TempDir())
+	if err := store.Save([]connectionProfile{profile}); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+	if len(config.GlobalConfig.Connections) != 1 {
+		t.Fatalf("expected one synced config connection, got %#v", config.GlobalConfig.Connections)
+	}
+	conn := config.GlobalConfig.Connections[0]
+	if conn.ID != "dev" || conn.Type != terminal.ConnectionTypeSSH || conn.Host != "example.com" || conn.Port != 2200 {
+		t.Fatalf("unexpected synced connection: %#v", conn)
+	}
+	if conn.Password != "" {
+		t.Fatalf("password should remain only in encrypted GUI store, got %q", conn.Password)
+	}
+	if config.GlobalConfig.ActiveConnectionID != "dev" {
+		t.Fatalf("expected active id dev, got %q", config.GlobalConfig.ActiveConnectionID)
 	}
 }

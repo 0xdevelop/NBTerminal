@@ -97,6 +97,9 @@ func (s *connectionStore) Load() error {
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			s.list = defaultConnections()
+			if cfgProfiles := profilesFromConfig(config.GlobalConfig); len(cfgProfiles) > 0 {
+				s.list = cfgProfiles
+			}
 			return s.saveLocked()
 		}
 		return err
@@ -125,7 +128,10 @@ func (s *connectionStore) Save(list []connectionProfile) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.list = append([]connectionProfile(nil), list...)
-	return s.saveLocked()
+	if err := s.saveLocked(); err != nil {
+		return err
+	}
+	return syncConfigConnections(s.list)
 }
 
 func (s *connectionStore) List() []connectionProfile {
@@ -170,6 +176,70 @@ func defaultConnections() []connectionProfile {
 		{ID: "local-shell", Name: "Local Shell", Group: "Local", Type: connectionTypeLocal, LastUsed: time.Now().UTC().Format(time.RFC3339), Description: "Run commands on this workstation"},
 		{ID: "example-ssh", Name: "Example SSH", Group: "Examples", Type: connectionTypeSSH, Host: "127.0.0.1", Port: 22, Username: os.Getenv("USER"), Description: "Edit and save with your own host/user/password or private key"},
 	}
+}
+
+func profilesFromConfig(cfg *config.FileConfig) []connectionProfile {
+	if cfg == nil || len(cfg.Connections) == 0 {
+		return nil
+	}
+	profiles := make([]connectionProfile, 0, len(cfg.Connections))
+	for _, conn := range terminal.NormalizeConnections(cfg.Connections) {
+		profile := connectionProfile{
+			ID:          conn.ID,
+			Name:        conn.Name,
+			Group:       "Config",
+			Type:        connectionTypeSSH,
+			Host:        conn.Host,
+			Port:        conn.Port,
+			Username:    conn.Username,
+			PrivateKey:  conn.PrivateKey,
+			WorkingDir:  conn.WorkingDir,
+			LastUsed:    time.Now().UTC().Format(time.RFC3339),
+			Description: conn.Description,
+		}
+		if conn.Type == terminal.ConnectionTypeLocal {
+			profile.Type = connectionTypeLocal
+			profile.Group = "Local"
+		}
+		profile.SetPassword(conn.Password)
+		profiles = append(profiles, profile)
+	}
+	return profiles
+}
+
+func syncConfigConnections(profiles []connectionProfile) error {
+	if config.GlobalConfig == nil {
+		return nil
+	}
+	connections := make([]terminal.Connection, 0, len(profiles))
+	for _, profile := range profiles {
+		conn, err := profileToConnection(profile)
+		if err != nil {
+			return err
+		}
+		// The GUI's dedicated connection store keeps passwords encrypted; keep the
+		// main app config usable for selectors/defaults without duplicating secrets.
+		conn.Password = ""
+		connections = append(connections, conn)
+	}
+	config.GlobalConfig.Connections = terminal.NormalizeConnections(connections)
+	if len(config.GlobalConfig.Connections) > 0 {
+		active := config.GlobalConfig.ActiveConnectionID
+		found := active == ""
+		for _, conn := range config.GlobalConfig.Connections {
+			if conn.ID == active {
+				found = true
+				break
+			}
+		}
+		if !found || active == "" {
+			config.GlobalConfig.ActiveConnectionID = config.GlobalConfig.Connections[0].ID
+		}
+	}
+	if config.CurrentApp == nil || config.CurrentApp.AppConfigFilePath == "" {
+		return nil
+	}
+	return config.SaveConfig(config.CurrentApp.AppConfigFilePath)
 }
 
 type tableModel struct {
