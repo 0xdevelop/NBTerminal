@@ -585,15 +585,33 @@ func (a *finalShellApp) runAsync(p connectionProfile, command string) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
-		out, _, err := executeCommandResultWithSession(ctx, a.session, p, command)
-		msg := out
+		sess := terminal.NewSession(a.history)
+		sess.OnEvent = func(event terminal.Event) {
+			switch event.Stream {
+			case terminal.StreamStdout:
+				line := event.Line
+				fltk_bridge.Awake(func() { a.appendOutput(line + "\n") })
+			case terminal.StreamStderr:
+				line := event.Line
+				fltk_bridge.Awake(func() { a.appendOutput("[stderr] " + line + "\n") })
+			case terminal.StreamStatus:
+				exitCode := event.ExitCode
+				fltk_bridge.Awake(func() { a.setStatus(fmt.Sprintf("Command finished: exit %d", exitCode)) })
+			}
+		}
+		_, result, err := executeCommandResultWithSession(ctx, sess, p, command)
+		msg := ""
 		if err != nil {
-			msg += "\nERROR: " + err.Error() + "\n"
+			msg = fmt.Sprintf("ERROR: %s\n", err.Error())
+		} else if len(result.Events) == 0 && result.Stdout == "" && result.Stderr == "" {
+			msg = "[no output]\n"
 		}
 		fltk_bridge.Awake(func() {
-			a.appendOutput(msg)
-			if !strings.HasSuffix(msg, "\n") {
-				a.appendOutput("\n")
+			if msg != "" {
+				a.appendOutput(msg)
+				if !strings.HasSuffix(msg, "\n") {
+					a.appendOutput("\n")
+				}
 			}
 			if err != nil {
 				a.setStatus("Command failed")

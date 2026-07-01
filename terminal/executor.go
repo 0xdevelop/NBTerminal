@@ -30,6 +30,11 @@ type Event struct {
 	ExitCode     int       `json:"exit_code,omitempty"`
 }
 
+// EventHandler receives command output/status events as the executor observes
+// them. GUI code can use it for incremental terminal rendering while still
+// receiving a complete CommandResult at the end of the run.
+type EventHandler func(Event)
+
 type CommandResult struct {
 	Connection Connection `json:"connection"`
 	Command    string     `json:"command"`
@@ -45,6 +50,14 @@ type Executor interface {
 	Run(ctx context.Context, conn Connection, command string) (CommandResult, error)
 }
 
+// StreamingExecutor is implemented by executors that can surface events while a
+// command is still running. Plain Executor implementations remain supported and
+// Session will replay their collected events after completion.
+type StreamingExecutor interface {
+	Executor
+	RunWithEvents(ctx context.Context, conn Connection, command string, onEvent EventHandler) (CommandResult, error)
+}
+
 type MultiExecutor struct {
 	Local Executor
 	SSH   Executor
@@ -55,6 +68,10 @@ func NewExecutor() *MultiExecutor {
 }
 
 func (m *MultiExecutor) Run(ctx context.Context, conn Connection, command string) (CommandResult, error) {
+	return m.RunWithEvents(ctx, conn, command, nil)
+}
+
+func (m *MultiExecutor) RunWithEvents(ctx context.Context, conn Connection, command string, onEvent EventHandler) (CommandResult, error) {
 	conn.Normalize()
 	if err := conn.Validate(); err != nil {
 		return CommandResult{Connection: conn, Command: command, ExitCode: -1}, err
@@ -64,8 +81,14 @@ func (m *MultiExecutor) Run(ctx context.Context, conn Connection, command string
 	}
 	switch conn.Type {
 	case ConnectionTypeLocal:
+		if exec, ok := m.Local.(StreamingExecutor); ok {
+			return exec.RunWithEvents(ctx, conn, command, onEvent)
+		}
 		return m.Local.Run(ctx, conn, command)
 	case ConnectionTypeSSH:
+		if exec, ok := m.SSH.(StreamingExecutor); ok {
+			return exec.RunWithEvents(ctx, conn, command, onEvent)
+		}
 		return m.SSH.Run(ctx, conn, command)
 	default:
 		return CommandResult{Connection: conn, Command: command, ExitCode: -1}, fmt.Errorf("unsupported connection type %q", conn.Type)
@@ -75,10 +98,14 @@ func (m *MultiExecutor) Run(ctx context.Context, conn Connection, command string
 type LocalExecutor struct{}
 
 func (LocalExecutor) Run(ctx context.Context, conn Connection, command string) (CommandResult, error) {
-	return runProcess(ctx, conn, command)
+	return runProcess(ctx, conn, command, nil)
 }
 
-func runProcess(ctx context.Context, conn Connection, command string) (CommandResult, error) {
+func (LocalExecutor) RunWithEvents(ctx context.Context, conn Connection, command string, onEvent EventHandler) (CommandResult, error) {
+	return runProcess(ctx, conn, command, onEvent)
+}
+
+func runProcess(ctx context.Context, conn Connection, command string, onEvent EventHandler) (CommandResult, error) {
 	started := time.Now()
 	result := CommandResult{Connection: conn, Command: command, StartedAt: started, ExitCode: -1}
 	var cmd *exec.Cmd
@@ -127,6 +154,9 @@ func runProcess(ctx context.Context, conn Connection, command string) (CommandRe
 	for item := range ch {
 		event := Event{Time: time.Now(), ConnectionID: conn.ID, Stream: item.stream, Line: item.text}
 		result.Events = append(result.Events, event)
+		if onEvent != nil {
+			onEvent(event)
+		}
 		if item.stream == StreamStdout {
 			outBuf.WriteString(item.text)
 			outBuf.WriteByte('\n')
@@ -141,7 +171,11 @@ func runProcess(ctx context.Context, conn Connection, command string) (CommandRe
 	result.Stdout = outBuf.String()
 	result.Stderr = errBuf.String()
 	result.ExitCode = cmd.ProcessState.ExitCode()
-	result.Events = append(result.Events, Event{Time: result.FinishedAt, ConnectionID: conn.ID, Stream: StreamStatus, Line: fmt.Sprintf("exit code %d", result.ExitCode), ExitCode: result.ExitCode})
+	status := Event{Time: result.FinishedAt, ConnectionID: conn.ID, Stream: StreamStatus, Line: fmt.Sprintf("exit code %d", result.ExitCode), ExitCode: result.ExitCode}
+	result.Events = append(result.Events, status)
+	if onEvent != nil {
+		onEvent(status)
+	}
 	return result, err
 }
 
@@ -163,6 +197,10 @@ type SSHSession interface {
 type SSHExecutor struct{ Dialer SSHDialer }
 
 func (e SSHExecutor) Run(ctx context.Context, conn Connection, command string) (CommandResult, error) {
+	return e.RunWithEvents(ctx, conn, command, nil)
+}
+
+func (e SSHExecutor) RunWithEvents(ctx context.Context, conn Connection, command string, onEvent EventHandler) (CommandResult, error) {
 	started := time.Now()
 	result := CommandResult{Connection: conn, Command: command, StartedAt: started, ExitCode: -1}
 	cfg, err := sshClientConfig(conn)
@@ -198,12 +236,20 @@ func (e SSHExecutor) Run(ctx context.Context, conn Connection, command string) (
 	appendLines := func(stream Stream, text string) {
 		s := newLineScanner(strings.NewReader(text))
 		for s.Scan() {
-			result.Events = append(result.Events, Event{Time: result.FinishedAt, ConnectionID: conn.ID, Stream: stream, Line: s.Text()})
+			event := Event{Time: result.FinishedAt, ConnectionID: conn.ID, Stream: stream, Line: s.Text()}
+			result.Events = append(result.Events, event)
+			if onEvent != nil {
+				onEvent(event)
+			}
 		}
 	}
 	appendLines(StreamStdout, result.Stdout)
 	appendLines(StreamStderr, result.Stderr)
-	result.Events = append(result.Events, Event{Time: result.FinishedAt, ConnectionID: conn.ID, Stream: StreamStatus, Line: fmt.Sprintf("exit code %d", result.ExitCode), ExitCode: result.ExitCode})
+	status := Event{Time: result.FinishedAt, ConnectionID: conn.ID, Stream: StreamStatus, Line: fmt.Sprintf("exit code %d", result.ExitCode), ExitCode: result.ExitCode}
+	result.Events = append(result.Events, status)
+	if onEvent != nil {
+		onEvent(status)
+	}
 	return result, err
 }
 

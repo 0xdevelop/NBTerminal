@@ -12,6 +12,7 @@ import (
 type Session struct {
 	Executor Executor
 	History  *HistoryStore
+	OnEvent  EventHandler
 }
 
 // NewSession creates a command session with the default local/SSH executor.
@@ -31,7 +32,22 @@ func (s *Session) RunCommand(ctx context.Context, conn Connection, command strin
 	if exec == nil {
 		exec = NewExecutor()
 	}
-	result, runErr := exec.Run(ctx, conn, command)
+	var (
+		result         CommandResult
+		runErr         error
+		eventsStreamed bool
+	)
+	if streaming, ok := exec.(StreamingExecutor); ok && s.OnEvent != nil {
+		result, runErr = streaming.RunWithEvents(ctx, conn, command, s.OnEvent)
+		eventsStreamed = true
+	} else {
+		result, runErr = exec.Run(ctx, conn, command)
+	}
+	if s.OnEvent != nil && !eventsStreamed {
+		for _, event := range result.Events {
+			s.OnEvent(event)
+		}
+	}
 	if s.History == nil {
 		return result, runErr
 	}
