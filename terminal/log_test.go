@@ -40,6 +40,22 @@ func TestHistoryStoreAppendAndLoad(t *testing.T) {
 	}
 }
 
+func TestHistoryStoreLoadLongOutputRecord(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history", "commands.jsonl")
+	store := NewHistoryStore(path)
+	long := strings.Repeat("x", 70_000)
+	if err := store.Append(HistoryEntry{Time: time.Now().UTC(), ConnectionID: "local", ConnectionName: "Local", ConnectionType: ConnectionTypeLocal, Command: "long", ExitCode: 0, Stdout: long}); err != nil {
+		t.Fatalf("append long record failed: %v", err)
+	}
+	entries, err := store.Load(10)
+	if err != nil {
+		t.Fatalf("load long record failed: %v", err)
+	}
+	if len(entries) != 1 || len(entries[0].Stdout) != len(long) {
+		t.Fatalf("long history record was not preserved: %#v", entries)
+	}
+}
+
 func TestHistoryFromResultOmitsSecrets(t *testing.T) {
 	started := time.Now().UTC()
 	result := CommandResult{

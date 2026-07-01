@@ -1,7 +1,6 @@
 package terminal
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"os"
@@ -90,7 +89,7 @@ func (s *HistoryStore) Load(limit int) ([]HistoryEntry, error) {
 	}
 	defer f.Close()
 	var entries []HistoryEntry
-	scanner := bufio.NewScanner(f)
+	scanner := newLineScanner(f)
 	for scanner.Scan() {
 		var entry HistoryEntry
 		if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {

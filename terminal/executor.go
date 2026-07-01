@@ -1,7 +1,6 @@
 package terminal
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -111,7 +110,7 @@ func runProcess(ctx context.Context, conn Connection, command string) (CommandRe
 	done := make(chan struct{}, 2)
 	scan := func(stream Stream, r io.Reader) {
 		defer func() { done <- struct{}{} }()
-		s := bufio.NewScanner(r)
+		s := newLineScanner(r)
 		for s.Scan() {
 			ch <- scanOut{stream: stream, text: s.Text()}
 		}
@@ -197,7 +196,7 @@ func (e SSHExecutor) Run(ctx context.Context, conn Connection, command string) (
 		result.ExitCode = 0
 	}
 	appendLines := func(stream Stream, text string) {
-		s := bufio.NewScanner(strings.NewReader(text))
+		s := newLineScanner(strings.NewReader(text))
 		for s.Scan() {
 			result.Events = append(result.Events, Event{Time: result.FinishedAt, ConnectionID: conn.ID, Stream: stream, Line: s.Text()})
 		}

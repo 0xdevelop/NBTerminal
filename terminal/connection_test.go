@@ -75,6 +75,21 @@ func TestLocalExecutorRunReportsExitCode(t *testing.T) {
 	}
 }
 
+func TestLocalExecutorRunCapturesLongLine(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	result, err := NewExecutor().Run(ctx, DefaultLocalConnection(), "printf '%70000s\\n' x")
+	if err != nil {
+		t.Fatalf("local long-line command failed: %v", err)
+	}
+	if len(result.Stdout) < 70000 {
+		t.Fatalf("expected long stdout line to be preserved, got %d bytes", len(result.Stdout))
+	}
+	if len(result.Events) < 2 || len(result.Events[0].Line) < 70000 {
+		t.Fatalf("expected long line event, got %#v", result.Events)
+	}
+}
+
 type fakeSSHDialer struct {
 	client SSHClient
 	err    error
