@@ -52,7 +52,7 @@ type MultiExecutor struct {
 }
 
 func NewExecutor() *MultiExecutor {
-	return &MultiExecutor{Local: LocalExecutor{}, SSH: SSHExecutor{}}
+	return &MultiExecutor{Local: LocalExecutor{}, SSH: SSHExecutor{Dialer: &netDialer{}}}
 }
 
 func (m *MultiExecutor) Run(ctx context.Context, conn Connection, command string) (CommandResult, error) {
@@ -146,17 +146,35 @@ func runProcess(ctx context.Context, conn Connection, command string) (CommandRe
 	return result, err
 }
 
-type SSHExecutor struct{}
+type SSHDialer interface {
+	Dial(ctx context.Context, network, addr string, config *ssh.ClientConfig) (SSHClient, error)
+}
 
-func (SSHExecutor) Run(ctx context.Context, conn Connection, command string) (CommandResult, error) {
+type SSHClient interface {
+	NewSession() (SSHSession, error)
+	Close() error
+}
+
+type SSHSession interface {
+	SetOutput(stdout, stderr io.Writer)
+	Run(command string) error
+	Close() error
+}
+
+type SSHExecutor struct{ Dialer SSHDialer }
+
+func (e SSHExecutor) Run(ctx context.Context, conn Connection, command string) (CommandResult, error) {
 	started := time.Now()
 	result := CommandResult{Connection: conn, Command: command, StartedAt: started, ExitCode: -1}
 	cfg, err := sshClientConfig(conn)
 	if err != nil {
 		return result, err
 	}
+	dialer := e.Dialer
+	if dialer == nil {
+		dialer = &netDialer{}
+	}
 	addr := fmt.Sprintf("%s:%d", conn.Host, conn.Port)
-	dialer := &netDialer{}
 	client, err := dialer.Dial(ctx, "tcp", addr, cfg)
 	if err != nil {
 		return result, err
@@ -168,8 +186,7 @@ func (SSHExecutor) Run(ctx context.Context, conn Connection, command string) (Co
 	}
 	defer session.Close()
 	var stdout, stderr bytes.Buffer
-	session.Stdout = &stdout
-	session.Stderr = &stderr
+	session.SetOutput(&stdout, &stderr)
 	err = session.Run(command)
 	result.FinishedAt = time.Now()
 	result.Stdout = stdout.String()
@@ -208,7 +225,24 @@ func sshClientConfig(conn Connection) (*ssh.ClientConfig, error) {
 
 type netDialer struct{}
 
-func (*netDialer) Dial(ctx context.Context, network, addr string, config *ssh.ClientConfig) (*ssh.Client, error) {
+type realSSHClient struct{ *ssh.Client }
+
+type realSSHSession struct{ *ssh.Session }
+
+func (s realSSHSession) SetOutput(stdout, stderr io.Writer) {
+	s.Stdout = stdout
+	s.Stderr = stderr
+}
+
+func (c realSSHClient) NewSession() (SSHSession, error) {
+	s, err := c.Client.NewSession()
+	if err != nil {
+		return nil, err
+	}
+	return realSSHSession{s}, nil
+}
+
+func (*netDialer) Dial(ctx context.Context, network, addr string, config *ssh.ClientConfig) (SSHClient, error) {
 	type res struct {
 		client *ssh.Client
 		err    error
@@ -222,6 +256,9 @@ func (*netDialer) Dial(ctx context.Context, network, addr string, config *ssh.Cl
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case r := <-ch:
-		return r.client, r.err
+		if r.err != nil {
+			return nil, r.err
+		}
+		return realSSHClient{r.client}, nil
 	}
 }

@@ -2,9 +2,13 @@ package terminal
 
 import (
 	"context"
+	"errors"
+	"io"
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 )
 
 func TestConnectionNormalizeAndValidateLocal(t *testing.T) {
@@ -68,5 +72,84 @@ func TestLocalExecutorRunReportsExitCode(t *testing.T) {
 	}
 	if result.ExitCode != 7 {
 		t.Fatalf("expected exit 7, got %d", result.ExitCode)
+	}
+}
+
+type fakeSSHDialer struct {
+	client SSHClient
+	err    error
+	addr   string
+	user   string
+}
+
+func (d *fakeSSHDialer) Dial(_ context.Context, _, addr string, cfg *ssh.ClientConfig) (SSHClient, error) {
+	d.addr = addr
+	d.user = cfg.User
+	if d.err != nil {
+		return nil, d.err
+	}
+	return d.client, nil
+}
+
+type fakeSSHClient struct {
+	session SSHSession
+	err     error
+	closed  bool
+}
+
+func (c *fakeSSHClient) NewSession() (SSHSession, error) {
+	return c.session, c.err
+}
+func (c *fakeSSHClient) Close() error { c.closed = true; return nil }
+
+type fakeSSHSession struct {
+	stdout io.Writer
+	stderr io.Writer
+	err    error
+	cmd    string
+	closed bool
+}
+
+func (s *fakeSSHSession) SetOutput(stdout, stderr io.Writer) { s.stdout, s.stderr = stdout, stderr }
+func (s *fakeSSHSession) Run(command string) error {
+	s.cmd = command
+	_, _ = io.WriteString(s.stdout, "remote-ok\n")
+	_, _ = io.WriteString(s.stderr, "remote-warn\n")
+	return s.err
+}
+func (s *fakeSSHSession) Close() error { s.closed = true; return nil }
+
+func TestSSHExecutorUsesInjectableDialer(t *testing.T) {
+	session := &fakeSSHSession{}
+	client := &fakeSSHClient{session: session}
+	dialer := &fakeSSHDialer{client: client}
+	conn := Connection{ID: "dev", Name: "Dev", Type: ConnectionTypeSSH, Host: "example.com", Port: 2200, Username: "root", Password: "secret"}
+	result, err := (SSHExecutor{Dialer: dialer}).Run(context.Background(), conn, "uname -a")
+	if err != nil {
+		t.Fatalf("ssh run failed: %v", err)
+	}
+	if dialer.addr != "example.com:2200" || dialer.user != "root" {
+		t.Fatalf("unexpected dial target/user: %s %s", dialer.addr, dialer.user)
+	}
+	if session.cmd != "uname -a" || !session.closed || !client.closed {
+		t.Fatalf("session/client lifecycle mismatch: cmd=%q sessionClosed=%v clientClosed=%v", session.cmd, session.closed, client.closed)
+	}
+	if result.ExitCode != 0 || !strings.Contains(result.Stdout, "remote-ok") || !strings.Contains(result.Stderr, "remote-warn") {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+	if len(result.Events) < 3 {
+		t.Fatalf("expected stdout/stderr/status events, got %#v", result.Events)
+	}
+}
+
+func TestSSHExecutorReportsDialError(t *testing.T) {
+	want := errors.New("dial blocked")
+	conn := Connection{ID: "dev", Name: "Dev", Type: ConnectionTypeSSH, Host: "example.com", Port: 22, Username: "root", Password: "secret"}
+	result, err := (SSHExecutor{Dialer: &fakeSSHDialer{err: want}}).Run(context.Background(), conn, "true")
+	if !errors.Is(err, want) {
+		t.Fatalf("expected dial error, got %v", err)
+	}
+	if result.ExitCode != -1 {
+		t.Fatalf("expected pending exit code on dial error, got %d", result.ExitCode)
 	}
 }
