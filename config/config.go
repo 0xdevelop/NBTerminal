@@ -11,6 +11,7 @@ import (
 
 	"github.com/0xdevelop/NBTerminal/api/api_config"
 	"github.com/0xdevelop/NBTerminal/locales"
+	"github.com/0xdevelop/NBTerminal/terminal"
 	"github.com/george012/gtbox/gtbox_encryption"
 	"github.com/george012/gtbox/gtbox_log"
 )
@@ -34,9 +35,30 @@ type Auth struct {
 }
 
 type FileConfig struct {
-	Api      *api_config.ApiConfig `yaml:"api" json:"api"`
-	Auth     *Auth                 `yaml:"auth" json:"auth"`
-	Language string                `yaml:"language" json:"language"`
+	Api                *api_config.ApiConfig `yaml:"api" json:"api"`
+	Auth               *Auth                 `yaml:"auth" json:"auth"`
+	Language           string                `yaml:"language" json:"language"`
+	Connections        []terminal.Connection `yaml:"connections" json:"connections"`
+	ActiveConnectionID string                `yaml:"active_connection_id" json:"active_connection_id"`
+}
+
+func (fc *FileConfig) Normalize() {
+	if fc.Api == nil {
+		fc.Api = &api_config.ApiConfig{Enabled: true, Port: APIPortDefault}
+	}
+	if fc.Auth == nil {
+		fc.Auth = &Auth{
+			Username: gtbox_encryption.GTEnc("root", "username"),
+			Password: gtbox_encryption.GTEnc("root", "password"),
+		}
+	}
+	if fc.Language == "" {
+		fc.Language = locales.LanguageWithEnglish.LanguageTag()
+	}
+	fc.Connections = terminal.NormalizeConnections(fc.Connections)
+	if fc.ActiveConnectionID == "" && len(fc.Connections) > 0 {
+		fc.ActiveConnectionID = fc.Connections[0].ID
+	}
 }
 
 func LoadConfig(file string) error {
@@ -57,6 +79,10 @@ func LoadConfig(file string) error {
 	if err != nil {
 		return err
 	}
+	if GlobalConfig == nil {
+		GlobalConfig = &FileConfig{}
+	}
+	GlobalConfig.Normalize()
 
 	return nil
 }
@@ -95,6 +121,7 @@ func generateDefaultConfigWithJsonContent() []byte {
 		},
 		Language: locales.LanguageWithEnglish.LanguageTag(),
 	}
+	fCfg.Normalize()
 
 	jd, _ := json.MarshalIndent(fCfg, "", "  ")
 	return jd
