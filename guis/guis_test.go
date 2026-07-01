@@ -156,3 +156,38 @@ func TestConnectionStoreSaveSyncsGlobalConfigWithoutPassword(t *testing.T) {
 		t.Fatalf("expected active id dev, got %q", config.GlobalConfig.ActiveConnectionID)
 	}
 }
+
+func TestPersistRuntimeProfileUpdatesStoreBeforeRun(t *testing.T) {
+	oldGlobal := config.GlobalConfig
+	oldApp := config.CurrentApp
+	t.Cleanup(func() { config.GlobalConfig, config.CurrentApp = oldGlobal, oldApp })
+	config.CurrentApp = nil
+	config.GlobalConfig = &config.FileConfig{}
+
+	dir := t.TempDir()
+	store := newConnectionStore(dir)
+	initial := connectionProfile{ID: "local", Name: "Old Local", Group: "Local", Type: connectionTypeLocal}
+	app := &finalShellApp{store: store, rows: []connectionProfile{initial}, idx: 0}
+
+	updated := initial
+	updated.Name = "Edited Local"
+	updated.WorkingDir = dir
+	if err := app.persistRuntimeProfile(updated); err != nil {
+		t.Fatalf("persistRuntimeProfile failed: %v", err)
+	}
+	if len(app.rows) != 1 || app.rows[0].Name != "Edited Local" || app.rows[0].WorkingDir != dir {
+		t.Fatalf("runtime row was not updated: %#v", app.rows)
+	}
+
+	reloaded := newConnectionStore(dir)
+	if err := reloaded.Load(); err != nil {
+		t.Fatalf("reload failed: %v", err)
+	}
+	profiles := reloaded.List()
+	if len(profiles) != 1 || profiles[0].Name != "Edited Local" || profiles[0].WorkingDir != dir {
+		t.Fatalf("persisted profile mismatch: %#v", profiles)
+	}
+	if len(config.GlobalConfig.Connections) != 1 || config.GlobalConfig.Connections[0].WorkingDir != dir {
+		t.Fatalf("global config was not synced: %#v", config.GlobalConfig.Connections)
+	}
+}

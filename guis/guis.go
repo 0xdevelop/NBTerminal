@@ -580,6 +580,10 @@ func (a *finalShellApp) runCommand() {
 }
 
 func (a *finalShellApp) runAsync(p connectionProfile, command string) {
+	if err := a.persistRuntimeProfile(p); err != nil {
+		a.appendOutput("save current connection failed: " + err.Error() + "\n")
+		a.setStatus("Save failed; running with current form values")
+	}
 	a.appendOutput(fmt.Sprintf("\n$ [%s] %s\n", p.Name, command))
 	a.setStatus("Running...")
 	go func() {
@@ -620,6 +624,43 @@ func (a *finalShellApp) runAsync(p connectionProfile, command string) {
 			}
 		})
 	}()
+}
+
+// persistRuntimeProfile keeps command execution and connection persistence in
+// sync. Users often edit a FinalShell-style connection and immediately press
+// Test/Run without pressing Save first; the GUI should execute those form values
+// and also make them available on next launch. It updates the in-memory row and
+// encrypted connection store without duplicating command execution logic.
+func (a *finalShellApp) persistRuntimeProfile(p connectionProfile) error {
+	if a == nil || a.store == nil {
+		return nil
+	}
+	if p.ID == "" {
+		p.ID = fmt.Sprintf("conn-%d", time.Now().UnixNano())
+	}
+	found := false
+	if a.idx >= 0 && a.idx < len(a.rows) && (a.rows[a.idx].ID == p.ID || a.rows[a.idx].ID == "") {
+		a.rows[a.idx] = p
+		found = true
+	} else {
+		for i := range a.rows {
+			if a.rows[i].ID == p.ID {
+				a.rows[i] = p
+				a.idx = i
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
+		a.rows = append(a.rows, p)
+		a.idx = len(a.rows) - 1
+	}
+	if err := a.store.Save(a.rows); err != nil {
+		return err
+	}
+	a.refreshTable()
+	return nil
 }
 
 func (a *finalShellApp) appendRecentHistory() {
