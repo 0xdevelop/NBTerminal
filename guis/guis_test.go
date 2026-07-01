@@ -2,6 +2,8 @@ package guis
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -28,7 +30,24 @@ func TestSSHCommandRequiresAuth(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error without password or private key")
 	}
-	if !strings.Contains(err.Error(), "no SSH auth method") {
+	if !strings.Contains(err.Error(), "ssh password or private key is required") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestProfileToConnectionLoadsPrivateKeyPath(t *testing.T) {
+	keyPath := filepath.Join(t.TempDir(), "id_test")
+	if err := os.WriteFile(keyPath, []byte("-----BEGIN TEST KEY-----\nabc\n-----END TEST KEY-----\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	conn, err := profileToConnection(connectionProfile{ID: "dev", Name: "Dev", Type: connectionTypeSSH, Host: "example.com", Port: 2200, Username: "me", PrivateKey: keyPath})
+	if err != nil {
+		t.Fatalf("profileToConnection failed: %v", err)
+	}
+	if conn.PrivateKey == keyPath || !strings.Contains(conn.PrivateKey, "BEGIN TEST KEY") {
+		t.Fatalf("expected private key content to be loaded, got %q", conn.PrivateKey)
+	}
+	if conn.Port != 2200 || conn.Username != "me" {
+		t.Fatalf("unexpected mapped connection: %#v", conn)
 	}
 }

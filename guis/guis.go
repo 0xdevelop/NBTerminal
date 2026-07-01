@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -21,9 +19,9 @@ import (
 	"github.com/0xYeah/fltk2go/uikit"
 	"github.com/0xYeah/fltk2go/uikit/tableview"
 	"github.com/0xdevelop/NBTerminal/config"
+	"github.com/0xdevelop/NBTerminal/terminal"
 	"github.com/george012/gtbox/gtbox_encryption"
 	"github.com/george012/gtbox/gtbox_log"
-	"golang.org/x/crypto/ssh"
 )
 
 const (
@@ -518,72 +516,59 @@ func (a *finalShellApp) runAsync(p connectionProfile, command string) {
 }
 
 func executeCommand(ctx context.Context, p connectionProfile, command string) (string, error) {
+	conn, err := profileToConnection(p)
+	if err != nil {
+		return "", err
+	}
+	result, err := terminal.NewExecutor().Run(ctx, conn, command)
+	return formatCommandResult(result), err
+}
+
+func profileToConnection(p connectionProfile) (terminal.Connection, error) {
+	connType := terminal.ConnectionTypeSSH
 	if p.Type == connectionTypeLocal {
-		cmd := exec.CommandContext(ctx, "/bin/sh", "-lc", command)
-		buf, err := cmd.CombinedOutput()
-		return string(buf), err
+		connType = terminal.ConnectionTypeLocal
 	}
-	if p.Host == "" {
-		return "", errors.New("SSH host is empty")
+	conn := terminal.Connection{
+		ID:          p.ID,
+		Name:        p.Name,
+		Type:        connType,
+		Host:        p.Host,
+		Port:        p.Port,
+		Username:    p.Username,
+		Password:    p.Password(),
+		PrivateKey:  strings.TrimSpace(p.PrivateKey),
+		Description: p.Description,
 	}
-	methods := []ssh.AuthMethod{}
-	if p.PrivateKey != "" {
-		key, err := os.ReadFile(p.PrivateKey)
+	if conn.PrivateKey != "" && !strings.Contains(conn.PrivateKey, "-----BEGIN") {
+		keyBytes, err := os.ReadFile(conn.PrivateKey)
 		if err != nil {
-			return "", err
+			return conn, fmt.Errorf("read private key %q: %w", conn.PrivateKey, err)
 		}
-		signer, err := ssh.ParsePrivateKey(key)
-		if err != nil {
-			return "", err
+		conn.PrivateKey = string(keyBytes)
+	}
+	conn.Normalize()
+	return conn, nil
+}
+
+func formatCommandResult(result terminal.CommandResult) string {
+	var b strings.Builder
+	if result.Stdout != "" {
+		b.WriteString(result.Stdout)
+	}
+	if result.Stderr != "" {
+		if b.Len() > 0 && !strings.HasSuffix(b.String(), "\n") {
+			b.WriteByte('\n')
 		}
-		methods = append(methods, ssh.PublicKeys(signer))
+		b.WriteString(result.Stderr)
 	}
-	if pw := p.Password(); pw != "" {
-		methods = append(methods, ssh.Password(pw))
+	if result.ExitCode != 0 {
+		if b.Len() > 0 && !strings.HasSuffix(b.String(), "\n") {
+			b.WriteByte('\n')
+		}
+		b.WriteString(fmt.Sprintf("[exit %d]\n", result.ExitCode))
 	}
-	if len(methods) == 0 {
-		return "", errors.New("no SSH auth method: set password or private key")
-	}
-	port := p.Port
-	if port == 0 {
-		port = 22
-	}
-	cfg := &ssh.ClientConfig{User: p.Username, Auth: methods, HostKeyCallback: ssh.InsecureIgnoreHostKey(), Timeout: 15 * time.Second}
-	dialer := net.Dialer{Timeout: 15 * time.Second}
-	conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", p.Host, port))
-	if err != nil {
-		return "", err
-	}
-	defer conn.Close()
-	c, chans, reqs, err := ssh.NewClientConn(conn, fmt.Sprintf("%s:%d", p.Host, port), cfg)
-	if err != nil {
-		return "", err
-	}
-	client := ssh.NewClient(c, chans, reqs)
-	defer client.Close()
-	session, err := client.NewSession()
-	if err != nil {
-		return "", err
-	}
-	defer session.Close()
-	done := make(chan struct {
-		out []byte
-		err error
-	}, 1)
-	go func() {
-		out, err := session.CombinedOutput(command)
-		done <- struct {
-			out []byte
-			err error
-		}{out, err}
-	}()
-	select {
-	case <-ctx.Done():
-		_ = session.Signal(ssh.SIGKILL)
-		return "", ctx.Err()
-	case res := <-done:
-		return string(res.out), res.err
-	}
+	return b.String()
 }
 
 func (a *finalShellApp) appendOutput(s string) {
