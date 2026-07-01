@@ -57,6 +57,28 @@ func TestExecuteLocalCommandUsesWorkingDir(t *testing.T) {
 	}
 }
 
+func TestExecuteCommandResultWithSessionPersistsHistory(t *testing.T) {
+	history := terminal.NewHistoryStore(filepath.Join(t.TempDir(), "terminal-history.jsonl"))
+	sess := terminal.NewSession(history)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	out, result, err := executeCommandResultWithSession(ctx, sess, connectionProfile{ID: "local", Type: connectionTypeLocal, Name: "local"}, "printf gui-session-ok")
+	if err != nil {
+		t.Fatalf("executeCommandResultWithSession returned error: %v", err)
+	}
+	if strings.TrimSpace(out) != "gui-session-ok" || result.ExitCode != 0 {
+		t.Fatalf("unexpected output/result: out=%q result=%#v", out, result)
+	}
+	entries, err := history.Load(10)
+	if err != nil {
+		t.Fatalf("history load failed: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Command != "printf gui-session-ok" || entries[0].ConnectionName != "local" {
+		t.Fatalf("unexpected GUI command history: %#v", entries)
+	}
+}
+
 func TestProfileToConnectionLoadsPrivateKeyPath(t *testing.T) {
 	keyPath := filepath.Join(t.TempDir(), "id_test")
 	if err := os.WriteFile(keyPath, []byte("-----BEGIN TEST KEY-----\nabc\n-----END TEST KEY-----\n"), 0o600); err != nil {

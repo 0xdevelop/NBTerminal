@@ -271,6 +271,7 @@ func (m *tableModel) CellForColumn(_ *tableview.TableView, row, col int) *tablev
 type finalShellApp struct {
 	store   *connectionStore
 	history *terminal.HistoryStore
+	session *terminal.Session
 	rows    []connectionProfile
 	idx     int
 
@@ -297,9 +298,11 @@ func LoadGUIWithFLTKGO(_ []byte) {
 		fltk2go.Lock()
 	}
 
+	history := terminal.NewHistoryStore(filepath.Join(config.CurrentApp.DataDir, "terminal-history.jsonl"))
 	app := &finalShellApp{
 		store:   newConnectionStore(config.CurrentApp.DataDir),
-		history: terminal.NewHistoryStore(filepath.Join(config.CurrentApp.DataDir, "terminal-history.jsonl")),
+		history: history,
+		session: terminal.NewSession(history),
 		idx:     -1,
 	}
 	if err := app.store.Load(); err != nil {
@@ -582,12 +585,7 @@ func (a *finalShellApp) runAsync(p connectionProfile, command string) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
-		out, result, err := executeCommandResult(ctx, p, command)
-		if a.history != nil {
-			if logErr := a.history.Append(terminal.HistoryFromResult(result)); logErr != nil {
-				gtbox_log.LogErrorf("append command history failed: %s", logErr.Error())
-			}
-		}
+		out, _, err := executeCommandResultWithSession(ctx, a.session, p, command)
 		msg := out
 		if err != nil {
 			msg += "\nERROR: " + err.Error() + "\n"
@@ -631,11 +629,18 @@ func executeCommand(ctx context.Context, p connectionProfile, command string) (s
 }
 
 func executeCommandResult(ctx context.Context, p connectionProfile, command string) (string, terminal.CommandResult, error) {
+	return executeCommandResultWithSession(ctx, nil, p, command)
+}
+
+func executeCommandResultWithSession(ctx context.Context, sess *terminal.Session, p connectionProfile, command string) (string, terminal.CommandResult, error) {
 	conn, err := profileToConnection(p)
 	if err != nil {
 		return "", terminal.CommandResult{Connection: conn, Command: command, ExitCode: -1}, err
 	}
-	result, err := terminal.NewExecutor().Run(ctx, conn, command)
+	if sess == nil {
+		sess = terminal.NewSession(nil)
+	}
+	result, err := sess.RunCommand(ctx, conn, command)
 	return formatCommandResult(result), result, err
 }
 
