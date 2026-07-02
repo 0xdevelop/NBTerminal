@@ -153,3 +153,19 @@ func (s *HistoryStore) LoadForConnection(connectionID string, limit int) ([]Hist
 	}
 	return filtered, nil
 }
+
+// LastCommand returns the most recent non-empty command for a connection. An
+// empty connectionID searches all history, which is useful for global GUI
+// command recall. The boolean return is false when no reusable command exists.
+func (s *HistoryStore) LastCommand(connectionID string) (string, bool, error) {
+	entries, err := s.LoadForConnection(connectionID, 0)
+	if err != nil {
+		return "", false, err
+	}
+	for i := len(entries) - 1; i >= 0; i-- {
+		if entries[i].Command != "" {
+			return entries[i].Command, true, nil
+		}
+	}
+	return "", false, nil
+}

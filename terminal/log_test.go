@@ -72,6 +72,41 @@ func TestHistoryStoreLoadForConnection(t *testing.T) {
 	}
 }
 
+func TestHistoryStoreLastCommand(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history", "commands.jsonl")
+	store := NewHistoryStore(path)
+	entries := []HistoryEntry{
+		{Time: time.Now().UTC(), ConnectionID: "local", ConnectionName: "Local", ConnectionType: ConnectionTypeLocal, Command: "pwd", ExitCode: 0},
+		{Time: time.Now().UTC(), ConnectionID: "ssh", ConnectionName: "SSH", ConnectionType: ConnectionTypeSSH, Command: "uname -a", ExitCode: 0},
+		{Time: time.Now().UTC(), ConnectionID: "local", ConnectionName: "Local", ConnectionType: ConnectionTypeLocal, Command: "whoami", ExitCode: 0},
+		{Time: time.Now().UTC(), ConnectionID: "local", ConnectionName: "Local", ConnectionType: ConnectionTypeLocal, Command: "", ExitCode: 0},
+	}
+	for _, entry := range entries {
+		if err := store.Append(entry); err != nil {
+			t.Fatalf("append failed: %v", err)
+		}
+	}
+
+	cmd, ok, err := store.LastCommand("local")
+	if err != nil {
+		t.Fatalf("LastCommand(local) failed: %v", err)
+	}
+	if !ok || cmd != "whoami" {
+		t.Fatalf("expected latest non-empty local command, got cmd=%q ok=%v", cmd, ok)
+	}
+	cmd, ok, err = store.LastCommand("")
+	if err != nil {
+		t.Fatalf("LastCommand(all) failed: %v", err)
+	}
+	if !ok || cmd != "whoami" {
+		t.Fatalf("expected latest non-empty global command, got cmd=%q ok=%v", cmd, ok)
+	}
+	cmd, ok, err = store.LastCommand("missing")
+	if err != nil || ok || cmd != "" {
+		t.Fatalf("expected missing command to be absent, got cmd=%q ok=%v err=%v", cmd, ok, err)
+	}
+}
+
 func TestHistoryStoreLoadLongOutputRecord(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "history", "commands.jsonl")
 	store := NewHistoryStore(path)

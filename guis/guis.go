@@ -487,8 +487,10 @@ func (a *finalShellApp) build() {
 
 	historyBtn := button(rightX+18, 784, 92, 38, "History", "terminal.history", a.showSelectedHistory)
 	root.AddSubview(historyBtn)
-	root.AddSubview(mutedLabel(rightX+126, 764, 160, 18, "Command"))
-	a.cmdInput = inputNoLabel(rightX+126, 784, rightW-292, 38, "terminal.command", "Command")
+	recallBtn := button(rightX+116, 784, 80, 38, "Last", "terminal.last_command", a.recallLastCommand)
+	root.AddSubview(recallBtn)
+	root.AddSubview(mutedLabel(rightX+210, 764, 160, 18, "Command"))
+	a.cmdInput = inputNoLabel(rightX+210, 784, rightW-376, 38, "terminal.command", "Command")
 	root.AddSubview(a.cmdInput)
 	runBtn := primaryButton(rightX+rightW-144, 784, 126, 38, "Run Command", "terminal.run", a.runCommand)
 	root.AddSubview(runBtn)
@@ -1034,6 +1036,27 @@ func (a *finalShellApp) showSelectedHistory() {
 	}
 	a.appendOutput(formatHistoryEntries(p, entries))
 	a.setStatus(fmt.Sprintf("History: %d entries", len(entries)))
+}
+
+func (a *finalShellApp) recallLastCommand() {
+	p, ok := a.selectedProfile()
+	if !ok || a.history == nil || a.cmdInput == nil {
+		return
+	}
+	cmd, found, err := a.history.LastCommand(p.ID)
+	if err != nil {
+		a.appendOutput("load last command failed: " + err.Error() + "\n")
+		a.setStatus("Last command load failed")
+		a.showTopNotice("Last command load failed", err.Error(), true)
+		return
+	}
+	if !found {
+		a.setStatus("No previous command for " + p.Name)
+		a.showTopNotice("No previous command", "Run a command on this connection first.", false)
+		return
+	}
+	a.cmdInput.SetText(cmd)
+	a.setStatus("Recalled last command")
 }
 
 func (a *finalShellApp) runAsync(p connectionProfile, command string) {
