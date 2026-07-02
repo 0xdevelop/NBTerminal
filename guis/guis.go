@@ -13,13 +13,13 @@ import (
 	"sync"
 	"time"
 
-	fltk2go "github.com/0xYeah/fltk2go"
-	"github.com/0xYeah/fltk2go/fltk_bridge"
-	"github.com/0xYeah/fltk2go/foundation"
-	"github.com/0xYeah/fltk2go/uikit"
-	"github.com/0xYeah/fltk2go/uikit/tableview"
 	"github.com/0xdevelop/NBTerminal/config"
 	"github.com/0xdevelop/NBTerminal/terminal"
+	"github.com/0xdevelop/fltk2go"
+	"github.com/0xdevelop/fltk2go/fltk_bridge"
+	"github.com/0xdevelop/fltk2go/foundation"
+	"github.com/0xdevelop/fltk2go/uikit"
+	"github.com/0xdevelop/fltk2go/uikit/tableview"
 	"github.com/george012/gtbox/gtbox_encryption"
 	"github.com/george012/gtbox/gtbox_log"
 )
