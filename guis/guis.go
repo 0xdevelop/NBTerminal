@@ -76,6 +76,35 @@ func (p connectionProfile) endpoint() string {
 	return fmt.Sprintf("%s@%s:%d", p.Username, p.Host, port)
 }
 
+func (p connectionProfile) tableEndpoint() string {
+	if p.Type == connectionTypeLocal {
+		return "local shell"
+	}
+	host := strings.TrimSpace(p.Host)
+	if host == "" {
+		host = "new host"
+	}
+	port := p.Port
+	if port == 0 {
+		port = 22
+	}
+	return fmt.Sprintf("%s:%d", host, port)
+}
+
+func formatLastUsed(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "never"
+	}
+	if t, err := time.Parse(time.RFC3339, value); err == nil {
+		return t.Local().Format("01-02 15:04")
+	}
+	if len(value) > len("01-02 15:04") {
+		return value[:len("01-02 15:04")]
+	}
+	return value
+}
+
 type connectionStore struct {
 	path string
 	mu   sync.Mutex
@@ -278,9 +307,9 @@ func (m *tableModel) CellForColumn(_ *tableview.TableView, row, col int) *tablev
 	case 2:
 		cell.SetText(string(p.Type))
 	case 3:
-		cell.SetText(p.endpoint())
+		cell.SetText(p.tableEndpoint())
 	case 4:
-		cell.SetText(p.LastUsed)
+		cell.SetText(formatLastUsed(p.LastUsed))
 	}
 	return cell
 }
@@ -331,88 +360,112 @@ func LoadGUIWithFLTKGO(_ []byte) {
 }
 
 func (a *finalShellApp) build() {
-	a.window = uikit.NewUIWindow(1180, 760, config.CurrentApp.AppName+" - FinalShell Mode")
+	const (
+		winW   = 1280
+		winH   = 800
+		margin = 22
+		leftW  = 492
+		gap    = 22
+		rightX = margin + leftW + gap
+		rightW = winW - rightX - margin
+	)
+
+	a.window = uikit.NewUIWindow(winW, winH, config.CurrentApp.AppName+" - FinalShell Mode")
+	if raw := a.window.Raw(); raw != nil {
+		raw.SetColor(themeColor(244, 247, 251))
+		raw.SetSizeRange(1120, 720, 0, 0, 20, 20, false)
+	}
 	root := a.window.RootView()
 
-	root.AddSubview(label(16, 10, 320, 28, "NBTerminal - FinalShell style manager"))
-	a.status = label(760, 12, 400, 24, "Ready")
-	a.status.SetFrame(fltk_bridge.FLAT_BOX)
-	a.status.SetBackgroundColor(uint(fltk_bridge.ColorFromRgb(192, 192, 192)))
-	a.status.SetAlignment(fltk_bridge.ALIGN_RIGHT | fltk_bridge.ALIGN_CLIP)
+	root.AddSubview(titleLabel(margin, 14, 440, 28, "NBTerminal"))
+	root.AddSubview(mutedLabel(margin+2, 38, 520, 22, "FinalShell-style connection manager · local + SSH command console"))
+	a.status = pillLabel(rightX+rightW-410, 18, 410, 30, "Ready")
 	a.status.View().SetAutomationID("app.status")
 	root.AddSubview(a.status)
 
-	left := uikit.NewUIGroup(rect(12, 44, 500, 650))
-	left.SetBackgroundColor(0xF6F8FA00)
+	left := uikit.NewUIGroup(rect(margin, 72, leftW, 666))
+	left.SetBackgroundColor(uint(themeColor(255, 255, 255)))
 	left.SetAutomationID("connections.panel")
 	root.AddSubview(left)
+	root.AddSubview(sectionTitle(margin+18, 86, 260, 24, "Connections"))
+	root.AddSubview(mutedLabel(margin+18, 110, 430, 18, "Select a saved endpoint, edit its details, then test or connect."))
 
-	tv, err := uikit.NewUITableView(22, 58, 480, 380)
+	tv, err := uikit.NewUITableView(margin+14, 140, leftW-28, 318)
 	if err == nil {
 		a.table = tv
 		a.table.View().SetAutomationID("connections.table").SetAutomationName("Connection table")
-		a.table.AddColumn(tableview.TableColumn{Identifier: "group", Title: "Group", Width: 80})
-		a.table.AddColumn(tableview.TableColumn{Identifier: "name", Title: "Name", Width: 105})
+		a.table.AddColumn(tableview.TableColumn{Identifier: "group", Title: "Group", Width: 78})
+		a.table.AddColumn(tableview.TableColumn{Identifier: "name", Title: "Name", Width: 108})
 		a.table.AddColumn(tableview.TableColumn{Identifier: "type", Title: "Type", Width: 50})
-		a.table.AddColumn(tableview.TableColumn{Identifier: "endpoint", Title: "Endpoint", Width: 140})
-		a.table.AddColumn(tableview.TableColumn{Identifier: "last", Title: "Last Used", Width: 100})
+		a.table.AddColumn(tableview.TableColumn{Identifier: "endpoint", Title: "Endpoint", Width: 126})
+		a.table.AddColumn(tableview.TableColumn{Identifier: "last", Title: "Last Used", Width: 96})
 		a.model = &tableModel{rows: a.rows}
 		a.table.SetDataSource(a.model)
 		a.table.SetDelegate(tableDelegate{onSelect: a.selectRow})
+		a.table.SetCustomDraw(a.drawConnectionCell)
 		a.table.ReloadData()
 		root.AddSubview(a.table)
 	}
 
-	a.nameInput = input(95, 452, 150, 28, "Name", "form.name")
+	root.AddSubview(sectionTitle(margin+18, 478, 260, 22, "Connection details"))
+	a.nameInput = input(margin+82, 512, 164, 30, "Name", "form.name")
 	root.AddSubview(a.nameInput)
-	a.groupInput = input(330, 452, 168, 28, "Group", "form.group")
+	a.groupInput = input(margin+318, 512, 168, 30, "Group", "form.group")
 	root.AddSubview(a.groupInput)
 
-	a.typeInput = input(95, 490, 90, 28, "Type", "form.type")
+	a.typeInput = input(margin+82, 552, 92, 30, "Type", "form.type")
 	root.AddSubview(a.typeInput)
-	a.hostInput = input(255, 490, 145, 28, "Host", "form.host")
+	a.hostInput = input(margin+246, 552, 152, 30, "Host", "form.host")
 	root.AddSubview(a.hostInput)
-	a.portInput = input(455, 490, 43, 28, "Port", "form.port")
+	a.portInput = input(margin+446, 552, 40, 30, "Port", "form.port")
 	root.AddSubview(a.portInput)
 
-	a.userInput = input(95, 528, 150, 28, "User", "form.username")
+	a.userInput = input(margin+82, 592, 164, 30, "User", "form.username")
 	root.AddSubview(a.userInput)
-	a.passInput = uikit.NewInputWithType(330, 528, 168, 28, "Pass", uikit.SecretInput)
+	a.passInput = uikit.NewInputWithType(margin+318, 592, 168, 30, "Pass", uikit.SecretInput)
+	styleInput(a.passInput)
 	a.passInput.View().SetAutomationID("form.password")
 	root.AddSubview(a.passInput)
 
-	a.workInput = input(95, 566, 403, 28, "WorkDir", "form.working_dir")
+	a.workInput = input(margin+82, 632, 404, 30, "WorkDir", "form.working_dir")
 	root.AddSubview(a.workInput)
 
-	a.keyInput = input(95, 604, 403, 28, "Key", "form.key")
+	a.keyInput = input(margin+82, 672, 404, 30, "Key", "form.key")
 	root.AddSubview(a.keyInput)
 
-	addBtn := button(22, 640, 90, 32, "New", "action.new", a.newProfile)
+	addBtn := button(margin+14, 716, 82, 34, "New", "action.new", a.newProfile)
 	root.AddSubview(addBtn)
-	saveBtn := button(122, 640, 90, 32, "Save", "action.save", a.saveProfile)
+	saveBtn := button(margin+106, 716, 82, 34, "Save", "action.save", a.saveProfile)
 	root.AddSubview(saveBtn)
-	deleteBtn := button(222, 640, 90, 32, "Delete", "action.delete", a.deleteProfile)
+	deleteBtn := button(margin+198, 716, 82, 34, "Delete", "action.delete", a.deleteProfile)
 	root.AddSubview(deleteBtn)
-	testBtn := button(322, 640, 90, 32, "Test", "action.test", a.testConnection)
+	testBtn := button(margin+290, 716, 82, 34, "Test", "action.test", a.testConnection)
 	root.AddSubview(testBtn)
-	connectBtn := button(422, 640, 80, 32, "Connect", "action.connect", a.connectSelected)
+	connectBtn := primaryButton(margin+382, 716, 118, 34, "Connect", "action.connect", a.connectSelected)
 	root.AddSubview(connectBtn)
 
-	root.AddSubview(label(532, 44, 620, 24, "Terminal / Command Console"))
-	a.output = uikit.NewUITextView(rect(532, 76, 628, 560))
+	rightPanel := uikit.NewUIGroup(rect(rightX, 72, rightW, 666))
+	rightPanel.SetBackgroundColor(uint(themeColor(255, 255, 255)))
+	rightPanel.SetAutomationID("terminal.panel")
+	root.AddSubview(rightPanel)
+	root.AddSubview(sectionTitle(rightX+18, 86, 330, 24, "Terminal / Command Console"))
+	root.AddSubview(mutedLabel(rightX+18, 110, 560, 18, "Run quick diagnostics and review command history without leaving the manager."))
+
+	a.output = uikit.NewUITextView(rect(rightX+18, 140, rightW-36, 512))
 	a.output.SetAutomationID("terminal.output").SetAutomationName("Terminal output")
-	a.output.SetFontSize(13)
-	a.output.SetTextColor(0xD7FFE500)
-	a.output.SetBackgroundColor(0x11182700)
+	a.output.SetFontSize(14)
+	a.output.SetTextColor(uint(themeColor(219, 255, 231)))
+	a.output.SetBackgroundColor(uint(themeColor(15, 23, 42)))
 	a.output.SetText("Welcome to NBTerminal FinalShell Mode\n- Select or create a connection.\n- Use local shell for this machine or SSH for remote commands.\n- Passwords are saved encrypted in the app data store.\n\n")
 	a.appendRecentHistory()
 	root.AddSubview(a.output)
 
-	a.cmdInput = input(620, 650, 412, 34, "Command", "terminal.command")
-	root.AddSubview(a.cmdInput)
-	historyBtn := button(532, 650, 80, 34, "History", "terminal.history", a.showSelectedHistory)
+	historyBtn := button(rightX+18, 674, 92, 36, "History", "terminal.history", a.showSelectedHistory)
 	root.AddSubview(historyBtn)
-	runBtn := button(1042, 650, 118, 34, "Run Command", "terminal.run", a.runCommand)
+	root.AddSubview(mutedLabel(rightX+126, 654, 160, 18, "Command"))
+	a.cmdInput = inputNoLabel(rightX+126, 674, rightW-292, 36, "terminal.command", "Command")
+	root.AddSubview(a.cmdInput)
+	runBtn := primaryButton(rightX+rightW-144, 674, 126, 36, "Run Command", "terminal.run", a.runCommand)
 	root.AddSubview(runBtn)
 
 	if len(a.rows) > 0 {
@@ -430,24 +483,161 @@ func (d tableDelegate) DidSelectRow(_ *tableview.TableView, row int) {
 }
 func (d tableDelegate) RowHeight(_ *tableview.TableView, _ int) int { return 0 }
 
+func (a *finalShellApp) drawConnectionCell(ctx fltk_bridge.TableContext, row, col, x, y, w, h int) {
+	switch ctx {
+	case fltk_bridge.ContextColHeader:
+		titles := []string{"Group", "Name", "Type", "Endpoint", "Last Used"}
+		fltk_bridge.PushClip(x, y, w, h)
+		fltk_bridge.DrawBox(fltk_bridge.FLAT_BOX, x, y, w, h, themeColor(226, 232, 240))
+		fltk_bridge.SetDrawColor(themeColor(30, 41, 59))
+		fltk_bridge.SetDrawFont(fltk_bridge.HELVETICA, 13)
+		if col >= 0 && col < len(titles) {
+			fltk_bridge.Draw(titles[col], x+5, y, w-10, h, fltk_bridge.ALIGN_CENTER|fltk_bridge.ALIGN_CLIP)
+		}
+		fltk_bridge.SetDrawColor(themeColor(203, 213, 225))
+		fltk_bridge.DrawRect(x, y, w, h)
+		fltk_bridge.PopClip()
+	case fltk_bridge.ContextCell:
+		if row < 0 || row >= len(a.rows) {
+			return
+		}
+		bg := themeColor(255, 255, 255)
+		fg := themeColor(15, 23, 42)
+		if row == a.idx {
+			bg = themeColor(219, 234, 254)
+			fg = themeColor(30, 64, 175)
+		} else if row%2 == 1 {
+			bg = themeColor(248, 250, 252)
+		}
+		fltk_bridge.PushClip(x, y, w, h)
+		fltk_bridge.DrawBox(fltk_bridge.FLAT_BOX, x, y, w, h, bg)
+		fltk_bridge.SetDrawColor(fg)
+		fltk_bridge.SetDrawFont(fltk_bridge.HELVETICA, 13)
+		fltk_bridge.Draw(a.connectionCellText(row, col), x+6, y, w-12, h, fltk_bridge.ALIGN_CENTER|fltk_bridge.ALIGN_CLIP)
+		fltk_bridge.SetDrawColor(themeColor(226, 232, 240))
+		fltk_bridge.DrawRect(x, y, w, h)
+		fltk_bridge.PopClip()
+	}
+}
+
+func (a *finalShellApp) connectionCellText(row, col int) string {
+	if row < 0 || row >= len(a.rows) {
+		return ""
+	}
+	p := a.rows[row]
+	switch col {
+	case 0:
+		return p.Group
+	case 1:
+		return p.Name
+	case 2:
+		return string(p.Type)
+	case 3:
+		return p.tableEndpoint()
+	case 4:
+		return formatLastUsed(p.LastUsed)
+	default:
+		return ""
+	}
+}
+
 func rect(x, y, w, h int) *foundation.Rect { return &foundation.Rect{X: x, Y: y, Width: w, Height: h} }
+
+func themeColor(r, g, b uint8) fltk_bridge.Color { return fltk_bridge.ColorFromRgb(r, g, b) }
 
 func label(x, y, w, h int, text string) *uikit.UILabel {
 	l := uikit.NewUILabel(rect(x, y, w, h), text)
+	l.SetFontSize(13)
+	l.SetTextColor(uint(themeColor(15, 23, 42)))
+	l.SetAlignment(fltk_bridge.ALIGN_LEFT | fltk_bridge.ALIGN_INSIDE | fltk_bridge.ALIGN_CLIP)
+	return l
+}
+
+func titleLabel(x, y, w, h int, text string) *uikit.UILabel {
+	l := label(x, y, w, h, text)
+	l.SetFontSize(20)
+	l.SetTextColor(uint(themeColor(17, 24, 39)))
+	return l
+}
+
+func sectionTitle(x, y, w, h int, text string) *uikit.UILabel {
+	l := label(x, y, w, h, text)
+	l.SetFontSize(15)
+	l.SetTextColor(uint(themeColor(30, 41, 59)))
+	return l
+}
+
+func mutedLabel(x, y, w, h int, text string) *uikit.UILabel {
+	l := label(x, y, w, h, text)
+	l.SetFontSize(12)
+	l.SetTextColor(uint(themeColor(100, 116, 139)))
+	return l
+}
+
+func pillLabel(x, y, w, h int, text string) *uikit.UILabel {
+	l := label(x, y, w, h, text)
+	l.SetFrame(fltk_bridge.RFLAT_BOX)
+	l.SetBackgroundColor(uint(themeColor(226, 232, 240)))
+	l.SetTextColor(uint(themeColor(51, 65, 85)))
+	l.SetAlignment(fltk_bridge.ALIGN_RIGHT | fltk_bridge.ALIGN_INSIDE | fltk_bridge.ALIGN_CLIP)
 	return l
 }
 
 func input(x, y, w, h int, placeholder, id string) *uikit.Input {
 	in := uikit.NewInput(x, y, w, h, placeholder)
+	styleInput(in)
 	in.View().SetAutomationID(id).SetAutomationName(placeholder)
 	return in
 }
 
+func inputNoLabel(x, y, w, h int, id, name string) *uikit.Input {
+	in := uikit.NewInput(x, y, w, h, "")
+	styleInput(in)
+	in.View().SetAutomationID(id).SetAutomationName(name)
+	return in
+}
+
+func styleInput(in *uikit.Input) {
+	if in == nil {
+		return
+	}
+	in.SetFontSize(13)
+	in.SetTextColor(uint(themeColor(51, 65, 85)))
+	in.SetBackgroundColor(uint(themeColor(255, 255, 255)))
+}
+
 func button(x, y, w, h int, title, id string, cb func()) *uikit.UIButton {
 	b := uikit.NewUIButton(rect(x, y, w, h), title)
+	styleButton(b, false)
 	b.View().SetAutomationID(id).SetAutomationName(title)
 	b.OnTouchUpInside(cb)
 	return b
+}
+
+func primaryButton(x, y, w, h int, title, id string, cb func()) *uikit.UIButton {
+	b := uikit.NewUIButton(rect(x, y, w, h), title)
+	styleButton(b, true)
+	b.View().SetAutomationID(id).SetAutomationName(title)
+	b.OnTouchUpInside(cb)
+	return b
+}
+
+func styleButton(b *uikit.UIButton, primary bool) {
+	if b == nil {
+		return
+	}
+	if raw := b.Raw(); raw != nil {
+		raw.SetBox(fltk_bridge.RFLAT_BOX)
+		raw.SetDownBox(fltk_bridge.RSHADOW_BOX)
+		raw.SetLabelSize(13)
+	}
+	if primary {
+		b.SetBackgroundColor(uint(themeColor(37, 99, 235)))
+		b.SetTitleColor(uint(themeColor(255, 255, 255)))
+		return
+	}
+	b.SetBackgroundColor(uint(themeColor(226, 232, 240)))
+	b.SetTitleColor(uint(themeColor(30, 41, 59)))
 }
 
 func (a *finalShellApp) selectRow(row int) {
@@ -470,6 +660,9 @@ func (a *finalShellApp) selectRow(row int) {
 	a.workInput.SetText(p.WorkingDir)
 	a.keyInput.SetText(p.PrivateKey)
 	a.setStatus("Selected " + p.Name)
+	if a.table != nil {
+		a.table.ReloadData()
+	}
 }
 
 func (a *finalShellApp) newProfile() {
