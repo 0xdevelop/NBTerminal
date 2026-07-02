@@ -49,3 +49,23 @@ func TestLoadConfigKeepsOldConfigCompatible(t *testing.T) {
 		t.Fatalf("expected default local connection, got %#v", GlobalConfig.Connections)
 	}
 }
+
+func TestFileConfigNormalizeRepairsStaleActiveConnection(t *testing.T) {
+	cfg := &FileConfig{
+		ActiveConnectionID: "missing",
+		Connections: []terminal.Connection{
+			{ID: "local-one", Name: "Local One", Type: terminal.ConnectionTypeLocal},
+			{ID: "local-two", Name: "Local Two", Type: terminal.ConnectionTypeLocal},
+		},
+	}
+	cfg.Normalize()
+	if cfg.ActiveConnectionID != "local-one" {
+		t.Fatalf("expected stale active id to fall back to first connection, got %q", cfg.ActiveConnectionID)
+	}
+
+	cfg.ActiveConnectionID = "local-two"
+	cfg.Normalize()
+	if cfg.ActiveConnectionID != "local-two" {
+		t.Fatalf("expected valid active id to be preserved, got %q", cfg.ActiveConnectionID)
+	}
+}

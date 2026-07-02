@@ -56,7 +56,18 @@ func (fc *FileConfig) Normalize() {
 		fc.Language = locales.LanguageWithEnglish.LanguageTag()
 	}
 	fc.Connections = terminal.NormalizeConnections(fc.Connections)
-	if fc.ActiveConnectionID == "" && len(fc.Connections) > 0 {
+	if len(fc.Connections) == 0 {
+		fc.ActiveConnectionID = ""
+		return
+	}
+	activeFound := false
+	for _, conn := range fc.Connections {
+		if conn.ID == fc.ActiveConnectionID {
+			activeFound = true
+			break
+		}
+	}
+	if fc.ActiveConnectionID == "" || !activeFound {
 		fc.ActiveConnectionID = fc.Connections[0].ID
 	}
 }
