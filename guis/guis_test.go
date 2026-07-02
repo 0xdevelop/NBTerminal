@@ -222,3 +222,18 @@ func TestPersistRuntimeProfileUpdatesStoreBeforeRun(t *testing.T) {
 		t.Fatalf("global config was not synced: %#v", config.GlobalConfig.Connections)
 	}
 }
+
+func TestFormatHistoryEntries(t *testing.T) {
+	when := time.Date(2026, 7, 2, 10, 11, 12, 0, time.Local)
+	text := formatHistoryEntries(connectionProfile{ID: "local", Name: "Local Shell"}, []terminal.HistoryEntry{
+		{Time: when, ConnectionID: "local", Command: "pwd", ExitCode: 0},
+		{Time: when.Add(time.Minute), ConnectionID: "local", Command: "false", ExitCode: 1},
+	})
+	if !strings.Contains(text, "Recent history for Local Shell") || !strings.Contains(text, "exit=0 pwd") || !strings.Contains(text, "exit=1 false") {
+		t.Fatalf("unexpected formatted history: %q", text)
+	}
+	empty := formatHistoryEntries(connectionProfile{Name: "Local Shell"}, nil)
+	if !strings.Contains(empty, "no history yet") {
+		t.Fatalf("expected empty history message, got %q", empty)
+	}
+}

@@ -40,6 +40,37 @@ func TestHistoryStoreAppendAndLoad(t *testing.T) {
 	}
 }
 
+func TestHistoryStoreLoadForConnection(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history", "commands.jsonl")
+	store := NewHistoryStore(path)
+	entries := []HistoryEntry{
+		{Time: time.Now().UTC(), ConnectionID: "local", ConnectionName: "Local", ConnectionType: ConnectionTypeLocal, Command: "pwd", ExitCode: 0},
+		{Time: time.Now().UTC(), ConnectionID: "ssh", ConnectionName: "SSH", ConnectionType: ConnectionTypeSSH, Command: "uname", ExitCode: 0},
+		{Time: time.Now().UTC(), ConnectionID: "local", ConnectionName: "Local", ConnectionType: ConnectionTypeLocal, Command: "whoami", ExitCode: 0},
+		{Time: time.Now().UTC(), ConnectionID: "local", ConnectionName: "Local", ConnectionType: ConnectionTypeLocal, Command: "date", ExitCode: 0},
+	}
+	for _, entry := range entries {
+		if err := store.Append(entry); err != nil {
+			t.Fatalf("append failed: %v", err)
+		}
+	}
+
+	local, err := store.LoadForConnection("local", 2)
+	if err != nil {
+		t.Fatalf("LoadForConnection failed: %v", err)
+	}
+	if len(local) != 2 || local[0].Command != "whoami" || local[1].Command != "date" {
+		t.Fatalf("expected two most recent local entries, got %#v", local)
+	}
+	allRecent, err := store.LoadForConnection("", 2)
+	if err != nil {
+		t.Fatalf("LoadForConnection all failed: %v", err)
+	}
+	if len(allRecent) != 2 || allRecent[0].Command != "whoami" || allRecent[1].Command != "date" {
+		t.Fatalf("expected two most recent entries, got %#v", allRecent)
+	}
+}
+
 func TestHistoryStoreLoadLongOutputRecord(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "history", "commands.jsonl")
 	store := NewHistoryStore(path)

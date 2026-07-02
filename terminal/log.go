@@ -106,3 +106,32 @@ func (s *HistoryStore) Load(limit int) ([]HistoryEntry, error) {
 	}
 	return entries, nil
 }
+
+// LoadForConnection returns the most recent history entries for a single
+// connection in chronological order. It is intentionally implemented on top of
+// Load so GUI code can ask for per-connection history without learning the JSONL
+// storage details.
+func (s *HistoryStore) LoadForConnection(connectionID string, limit int) ([]HistoryEntry, error) {
+	entries, err := s.Load(0)
+	if err != nil {
+		return nil, err
+	}
+	if connectionID == "" {
+		if limit > 0 && len(entries) > limit {
+			return append([]HistoryEntry(nil), entries[len(entries)-limit:]...), nil
+		}
+		return entries, nil
+	}
+	filtered := make([]HistoryEntry, 0, len(entries))
+	for _, entry := range entries {
+		if entry.ConnectionID != connectionID {
+			continue
+		}
+		filtered = append(filtered, entry)
+		if limit > 0 && len(filtered) > limit {
+			copy(filtered, filtered[1:])
+			filtered = filtered[:limit]
+		}
+	}
+	return filtered, nil
+}

@@ -410,6 +410,8 @@ func (a *finalShellApp) build() {
 
 	a.cmdInput = input(620, 650, 412, 34, "Command", "terminal.command")
 	root.AddSubview(a.cmdInput)
+	historyBtn := button(532, 650, 80, 34, "History", "terminal.history", a.showSelectedHistory)
+	root.AddSubview(historyBtn)
 	runBtn := button(1042, 650, 118, 34, "Run Command", "terminal.run", a.runCommand)
 	root.AddSubview(runBtn)
 
@@ -596,6 +598,21 @@ func (a *finalShellApp) runCommand() {
 	a.runAsync(p, cmd)
 }
 
+func (a *finalShellApp) showSelectedHistory() {
+	p, ok := a.selectedProfile()
+	if !ok || a.history == nil {
+		return
+	}
+	entries, err := a.history.LoadForConnection(p.ID, 10)
+	if err != nil {
+		a.appendOutput("load history failed: " + err.Error() + "\n")
+		a.setStatus("History load failed")
+		return
+	}
+	a.appendOutput(formatHistoryEntries(p, entries))
+	a.setStatus(fmt.Sprintf("History: %d entries", len(entries)))
+}
+
 func (a *finalShellApp) runAsync(p connectionProfile, command string) {
 	if err := a.persistRuntimeProfile(p); err != nil {
 		a.appendOutput("save current connection failed: " + err.Error() + "\n")
@@ -764,6 +781,27 @@ func formatCommandResult(result terminal.CommandResult) string {
 			b.WriteByte('\n')
 		}
 		b.WriteString(fmt.Sprintf("[exit %d]\n", result.ExitCode))
+	}
+	return b.String()
+}
+
+func formatHistoryEntries(p connectionProfile, entries []terminal.HistoryEntry) string {
+	var b strings.Builder
+	name := p.Name
+	if name == "" {
+		name = p.ID
+	}
+	if name == "" {
+		name = "selected connection"
+	}
+	b.WriteString(fmt.Sprintf("\nRecent history for %s:\n", name))
+	if len(entries) == 0 {
+		b.WriteString("- no history yet\n")
+		return b.String()
+	}
+	for _, entry := range entries {
+		when := entry.Time.Local().Format("2006-01-02 15:04:05")
+		b.WriteString(fmt.Sprintf("- %s exit=%d %s\n", when, entry.ExitCode, entry.Command))
 	}
 	return b.String()
 }
