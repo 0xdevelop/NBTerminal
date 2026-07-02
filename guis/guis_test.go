@@ -317,3 +317,23 @@ func TestTopFloatRectInBounds(t *testing.T) {
 		t.Fatalf("edge rect should stay on screen, got %#v", edge)
 	}
 }
+
+func TestConnectionMatchesQuery(t *testing.T) {
+	profile := connectionProfile{
+		Name:        "Prod API",
+		Group:       "Production",
+		Type:        connectionTypeSSH,
+		Host:        "10.0.0.8",
+		Port:        2222,
+		Username:    "deploy",
+		Description: "primary backend host",
+	}
+	for _, query := range []string{"prod", "api", "ssh", "10.0.0.8", "deploy", "2222", "backend", ""} {
+		if !connectionMatchesQuery(profile, query) {
+			t.Fatalf("expected query %q to match %#v", query, profile)
+		}
+	}
+	if connectionMatchesQuery(profile, "staging") {
+		t.Fatalf("unexpected query match for staging")
+	}
+}

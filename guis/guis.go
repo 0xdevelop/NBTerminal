@@ -340,19 +340,20 @@ type finalShellApp struct {
 	table  *uikit.UITableView
 	model  *tableModel
 
-	nameInput  *uikit.Input
-	groupInput *uikit.Input
-	typeInput  *uikit.Input
-	hostInput  *uikit.Input
-	portInput  *uikit.Input
-	userInput  *uikit.Input
-	passInput  *uikit.Input
-	keyInput   *uikit.Input
-	workInput  *uikit.Input
-	cmdInput   *uikit.Input
-	output     *uikit.UITextView
-	status     *uikit.UILabel
-	notice     *uikit.UIWindow
+	searchInput *uikit.Input
+	nameInput   *uikit.Input
+	groupInput  *uikit.Input
+	typeInput   *uikit.Input
+	hostInput   *uikit.Input
+	portInput   *uikit.Input
+	userInput   *uikit.Input
+	passInput   *uikit.Input
+	keyInput    *uikit.Input
+	workInput   *uikit.Input
+	cmdInput    *uikit.Input
+	output      *uikit.UITextView
+	status      *uikit.UILabel
+	notice      *uikit.UIWindow
 }
 
 func LoadGUIWithFLTKGO(_ []byte) {
@@ -405,8 +406,14 @@ func (a *finalShellApp) build() {
 	root.AddSubview(left)
 	root.AddSubview(sectionTitle(margin+18, 86, 260, 24, "Connections"))
 	root.AddSubview(mutedLabel(margin+18, 110, 430, 18, "Select a saved endpoint, edit its details, then test or connect."))
+	root.AddSubview(mutedLabel(margin+18, 132, 70, 18, "Search"))
+	a.searchInput = inputNoLabel(margin+82, 126, leftW-194, 30, "connections.search", "Search connections")
+	a.searchInput.OnChange(a.jumpToSearchMatch)
+	root.AddSubview(a.searchInput)
+	findBtn := button(margin+390, 126, 86, 30, "Find", "connections.find", a.jumpToSearchMatch)
+	root.AddSubview(findBtn)
 
-	tv, err := uikit.NewUITableView(margin+14, 140, leftW-28, 388)
+	tv, err := uikit.NewUITableView(margin+14, 166, leftW-28, 362)
 	if err == nil {
 		a.table = tv
 		a.table.View().SetAutomationID("connections.table").SetAutomationName("Connection table")
@@ -747,6 +754,42 @@ func (a *finalShellApp) showTopNotice(title, message string, critical bool) {
 			}
 		})
 	}(win)
+}
+
+func (a *finalShellApp) jumpToSearchMatch() {
+	if a == nil || a.searchInput == nil {
+		return
+	}
+	query := strings.TrimSpace(a.searchInput.Text())
+	if query == "" {
+		return
+	}
+	for i, p := range a.rows {
+		if connectionMatchesQuery(p, query) {
+			a.selectRow(i)
+			a.setStatus("Search matched " + p.Name)
+			return
+		}
+	}
+	a.setStatus("No connection matching " + query)
+}
+
+func connectionMatchesQuery(p connectionProfile, query string) bool {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return true
+	}
+	haystack := strings.ToLower(strings.Join([]string{
+		p.Group,
+		p.Name,
+		string(p.Type),
+		p.Host,
+		p.Username,
+		p.endpoint(),
+		p.tableEndpoint(),
+		p.Description,
+	}, "\n"))
+	return strings.Contains(haystack, query)
 }
 
 func (a *finalShellApp) selectRow(row int) {
