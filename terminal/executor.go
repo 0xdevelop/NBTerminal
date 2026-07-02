@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -281,13 +283,39 @@ func sshClientConfig(conn Connection) (*ssh.ClientConfig, error) {
 		auth = append(auth, ssh.Password(conn.Password))
 	}
 	if conn.PrivateKey != "" {
-		signer, err := ssh.ParsePrivateKey([]byte(conn.PrivateKey))
+		keyMaterial, err := privateKeyMaterial(conn.PrivateKey)
+		if err != nil {
+			return nil, err
+		}
+		signer, err := ssh.ParsePrivateKey(keyMaterial)
 		if err != nil {
 			return nil, fmt.Errorf("parse private key: %w", err)
 		}
 		auth = append(auth, ssh.PublicKeys(signer))
 	}
 	return &ssh.ClientConfig{User: conn.Username, Auth: auth, HostKeyCallback: ssh.InsecureIgnoreHostKey(), Timeout: 15 * time.Second}, nil
+}
+
+// privateKeyMaterial accepts either raw PEM content or a filesystem path. The
+// GUI stores private-key paths for normal editing, while direct config/test code
+// may pass PEM content; supporting both keeps SSH execution aligned with the MVP
+// connection model without forcing secrets into the shared config file.
+func privateKeyMaterial(value string) ([]byte, error) {
+	trimmed := strings.TrimSpace(value)
+	if strings.Contains(trimmed, "-----BEGIN") {
+		return []byte(value), nil
+	}
+	path := trimmed
+	if strings.HasPrefix(path, "~/") {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			path = filepath.Join(home, strings.TrimPrefix(path, "~/"))
+		}
+	}
+	buf, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read private key %q: %w", trimmed, err)
+	}
+	return buf, nil
 }
 
 type netDialer struct{}

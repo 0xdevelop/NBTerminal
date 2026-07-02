@@ -2,8 +2,14 @@ package terminal
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -191,6 +197,63 @@ func TestSSHExecutorUsesWorkingDir(t *testing.T) {
 	if session.cmd != want {
 		t.Fatalf("expected working-dir command %q, got %q", want, session.cmd)
 	}
+}
+
+func TestSSHExecutorAcceptsPrivateKeyPath(t *testing.T) {
+	keyPath := writeTestPrivateKey(t)
+	session := &fakeSSHSession{}
+	client := &fakeSSHClient{session: session}
+	dialer := &fakeSSHDialer{client: client}
+	conn := Connection{ID: "dev", Name: "Dev", Type: ConnectionTypeSSH, Host: "example.com", Port: 22, Username: "root", PrivateKey: keyPath}
+	result, err := (SSHExecutor{Dialer: dialer}).Run(context.Background(), conn, "true")
+	if err != nil {
+		t.Fatalf("ssh run with private key path failed: %v", err)
+	}
+	if result.ExitCode != 0 || dialer.addr != "example.com:22" {
+		t.Fatalf("unexpected key-path SSH result: result=%#v addr=%q", result, dialer.addr)
+	}
+}
+
+func TestPrivateKeyMaterialReadsPathAndPreservesPEM(t *testing.T) {
+	keyPath := writeTestPrivateKey(t)
+	fromPath, err := privateKeyMaterial(keyPath)
+	if err != nil {
+		t.Fatalf("privateKeyMaterial(path) failed: %v", err)
+	}
+	if !strings.Contains(string(fromPath), "BEGIN RSA PRIVATE KEY") {
+		t.Fatalf("expected PEM from path, got %q", string(fromPath))
+	}
+	raw := string(fromPath)
+	fromRaw, err := privateKeyMaterial(raw)
+	if err != nil {
+		t.Fatalf("privateKeyMaterial(raw) failed: %v", err)
+	}
+	if string(fromRaw) != raw {
+		t.Fatalf("expected raw PEM to be preserved")
+	}
+}
+
+func TestSSHExecutorReportsMissingPrivateKeyPath(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing_id_rsa")
+	conn := Connection{ID: "dev", Name: "Dev", Type: ConnectionTypeSSH, Host: "example.com", Port: 22, Username: "root", PrivateKey: missing}
+	result, err := (SSHExecutor{Dialer: &fakeSSHDialer{client: &fakeSSHClient{session: &fakeSSHSession{}}}}).Run(context.Background(), conn, "true")
+	if err == nil || !strings.Contains(err.Error(), "read private key") {
+		t.Fatalf("expected missing private key path error, got result=%#v err=%v", result, err)
+	}
+}
+
+func writeTestPrivateKey(t *testing.T) string {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 1024)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	pemBlock := &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)}
+	path := filepath.Join(t.TempDir(), "id_rsa")
+	if err := os.WriteFile(path, pem.EncodeToMemory(pemBlock), 0o600); err != nil {
+		t.Fatalf("write key: %v", err)
+	}
+	return path
 }
 
 func TestSSHExecutorValidatesDirectCalls(t *testing.T) {
