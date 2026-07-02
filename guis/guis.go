@@ -333,6 +333,7 @@ type finalShellApp struct {
 	store   *connectionStore
 	history *terminal.HistoryStore
 	session *terminal.Session
+	allRows []connectionProfile
 	rows    []connectionProfile
 	idx     int
 
@@ -371,7 +372,8 @@ func LoadGUIWithFLTKGO(_ []byte) {
 	if err := app.store.Load(); err != nil {
 		gtbox_log.LogErrorf("load connection store failed: %s", err.Error())
 	}
-	app.rows = app.store.List()
+	app.allRows = app.store.List()
+	app.rows = append([]connectionProfile(nil), app.allRows...)
 	app.build()
 	fltk2go.Run()
 }
@@ -779,17 +781,37 @@ func (a *finalShellApp) jumpToSearchMatch() {
 		return
 	}
 	query := strings.TrimSpace(a.searchInput.Text())
-	if query == "" {
+	a.rows = filterConnections(a.allRows, query)
+	a.idx = -1
+	a.refreshTable()
+	if len(a.rows) == 0 {
+		if query == "" {
+			a.setStatus("No connections")
+		} else {
+			a.setStatus("No connection matching " + query)
+		}
 		return
 	}
-	for i, p := range a.rows {
-		if connectionMatchesQuery(p, query) {
-			a.selectRow(i)
-			a.setStatus("Search matched " + p.Name)
-			return
+	a.selectRow(0)
+	if query == "" {
+		a.setStatus(fmt.Sprintf("Showing %d connections", len(a.rows)))
+		return
+	}
+	a.setStatus(fmt.Sprintf("Search matched %d: %s", len(a.rows), a.rows[0].Name))
+}
+
+func filterConnections(rows []connectionProfile, query string) []connectionProfile {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return append([]connectionProfile(nil), rows...)
+	}
+	out := make([]connectionProfile, 0, len(rows))
+	for _, row := range rows {
+		if connectionMatchesQuery(row, query) {
+			out = append(out, row)
 		}
 	}
-	a.setStatus("No connection matching " + query)
+	return out
 }
 
 func connectionMatchesQuery(p connectionProfile, query string) bool {
@@ -808,6 +830,30 @@ func connectionMatchesQuery(p connectionProfile, query string) bool {
 		p.Description,
 	}, "\n"))
 	return strings.Contains(haystack, query)
+}
+
+func indexProfileByID(rows []connectionProfile, id string) int {
+	for i, row := range rows {
+		if row.ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func upsertProfile(rows []connectionProfile, p connectionProfile) []connectionProfile {
+	if i := indexProfileByID(rows, p.ID); i >= 0 {
+		rows[i] = p
+		return rows
+	}
+	return append(rows, p)
+}
+
+func removeProfileByID(rows []connectionProfile, id string) []connectionProfile {
+	if i := indexProfileByID(rows, id); i >= 0 {
+		return append(rows[:i], rows[i+1:]...)
+	}
+	return rows
 }
 
 func (a *finalShellApp) selectRow(row int) {
@@ -837,7 +883,11 @@ func (a *finalShellApp) selectRow(row int) {
 
 func (a *finalShellApp) newProfile() {
 	p := connectionProfile{ID: fmt.Sprintf("conn-%d", time.Now().UnixNano()), Name: "New SSH", Group: "Default", Type: connectionTypeSSH, Host: "", Port: 22, Username: os.Getenv("USER")}
-	a.rows = append(a.rows, p)
+	a.allRows = append(a.allRows, p)
+	if a.searchInput != nil {
+		a.searchInput.SetText("")
+	}
+	a.rows = append([]connectionProfile(nil), a.allRows...)
 	a.refreshTable()
 	a.selectRow(len(a.rows) - 1)
 }
@@ -879,19 +929,21 @@ func (a *finalShellApp) profileFromForm() connectionProfile {
 
 func (a *finalShellApp) saveProfile() {
 	p := a.profileFromForm()
-	if a.idx >= 0 && a.idx < len(a.rows) {
-		a.rows[a.idx] = p
-	} else {
-		a.rows = append(a.rows, p)
-		a.idx = len(a.rows) - 1
-	}
-	if err := a.store.SaveActive(a.rows, p.ID); err != nil {
+	a.allRows = upsertProfile(a.allRows, p)
+	if err := a.store.SaveActive(a.allRows, p.ID); err != nil {
 		a.appendOutput("save failed: " + err.Error() + "\n")
 		a.setStatus("Save failed")
 		a.showTopNotice("Save failed", err.Error(), true)
 		return
 	}
+	if a.searchInput != nil {
+		a.searchInput.SetText("")
+	}
+	a.rows = filterConnections(a.allRows, "")
 	a.refreshTable()
+	if i := indexProfileByID(a.rows, p.ID); i >= 0 {
+		a.selectRow(i)
+	}
 	a.setStatus("Saved " + p.Name)
 }
 
@@ -899,8 +951,10 @@ func (a *finalShellApp) deleteProfile() {
 	if a.idx < 0 || a.idx >= len(a.rows) {
 		return
 	}
-	name := a.rows[a.idx].Name
-	a.rows = append(a.rows[:a.idx], a.rows[a.idx+1:]...)
+	removed := a.rows[a.idx]
+	name := removed.Name
+	a.allRows = removeProfileByID(a.allRows, removed.ID)
+	a.rows = removeProfileByID(a.rows, removed.ID)
 	if a.idx >= len(a.rows) {
 		a.idx = len(a.rows) - 1
 	}
@@ -908,7 +962,7 @@ func (a *finalShellApp) deleteProfile() {
 	if a.idx >= 0 && a.idx < len(a.rows) {
 		activeID = a.rows[a.idx].ID
 	}
-	_ = a.store.SaveActive(a.rows, activeID)
+	_ = a.store.SaveActive(a.allRows, activeID)
 	a.refreshTable()
 	if a.idx >= 0 {
 		a.selectRow(a.idx)
@@ -1061,7 +1115,8 @@ func (a *finalShellApp) persistRuntimeProfile(p connectionProfile) error {
 		a.rows = append(a.rows, p)
 		a.idx = len(a.rows) - 1
 	}
-	if err := a.store.SaveActive(a.rows, p.ID); err != nil {
+	a.allRows = upsertProfile(a.allRows, p)
+	if err := a.store.SaveActive(a.allRows, p.ID); err != nil {
 		return err
 	}
 	a.refreshTable()

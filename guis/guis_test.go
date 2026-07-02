@@ -252,7 +252,7 @@ func TestPersistRuntimeProfileUpdatesStoreBeforeRun(t *testing.T) {
 	dir := t.TempDir()
 	store := newConnectionStore(dir)
 	initial := connectionProfile{ID: "local", Name: "Old Local", Group: "Local", Type: connectionTypeLocal}
-	app := &finalShellApp{store: store, rows: []connectionProfile{initial}, idx: 0}
+	app := &finalShellApp{store: store, allRows: []connectionProfile{initial}, rows: []connectionProfile{initial}, idx: 0}
 
 	updated := initial
 	updated.Name = "Edited Local"
@@ -362,5 +362,37 @@ func TestActiveConnectionIndexUsesGlobalConfigSelection(t *testing.T) {
 	}
 	if got := activeConnectionIndex(nil); got != -1 {
 		t.Fatalf("empty rows should return -1, got %d", got)
+	}
+}
+
+func TestFilterConnectionsNarrowsRows(t *testing.T) {
+	rows := []connectionProfile{
+		{ID: "local", Name: "Local Shell", Group: "Local", Type: connectionTypeLocal},
+		{ID: "prod", Name: "Prod API", Group: "Production", Type: connectionTypeSSH, Host: "10.0.0.8", Username: "deploy"},
+		{ID: "stage", Name: "Stage API", Group: "Staging", Type: connectionTypeSSH, Host: "10.0.1.8", Username: "deploy"},
+	}
+	filtered := filterConnections(rows, "prod")
+	if len(filtered) != 1 || filtered[0].ID != "prod" {
+		t.Fatalf("expected only prod match, got %#v", filtered)
+	}
+	all := filterConnections(rows, "")
+	if len(all) != len(rows) || &all[0] == &rows[0] {
+		t.Fatalf("empty filter should return copied full rows, got %#v", all)
+	}
+}
+
+func TestUpsertAndRemoveProfileByID(t *testing.T) {
+	rows := []connectionProfile{{ID: "local", Name: "Local"}, {ID: "prod", Name: "Prod"}}
+	rows = upsertProfile(rows, connectionProfile{ID: "prod", Name: "Prod API"})
+	if len(rows) != 2 || rows[1].Name != "Prod API" {
+		t.Fatalf("expected upsert to replace prod, got %#v", rows)
+	}
+	rows = upsertProfile(rows, connectionProfile{ID: "stage", Name: "Stage"})
+	if len(rows) != 3 || rows[2].ID != "stage" {
+		t.Fatalf("expected upsert to append stage, got %#v", rows)
+	}
+	rows = removeProfileByID(rows, "prod")
+	if len(rows) != 2 || indexProfileByID(rows, "prod") != -1 {
+		t.Fatalf("expected prod removal, got %#v", rows)
 	}
 }
