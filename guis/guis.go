@@ -1045,7 +1045,7 @@ func (a *finalShellApp) runAsync(p connectionProfile, command string) {
 	a.appendOutput(fmt.Sprintf("\n$ [%s] %s\n", p.Name, command))
 	a.setStatus("Running...")
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), commandTimeout())
 		defer cancel()
 		sess := terminal.NewSession(a.history)
 		sess.OnEvent = func(event terminal.Event) {
@@ -1083,6 +1083,14 @@ func (a *finalShellApp) runAsync(p connectionProfile, command string) {
 			}
 		})
 	}()
+}
+
+func commandTimeout() time.Duration {
+	seconds := config.CommandTimeoutDefaultSeconds
+	if config.GlobalConfig != nil && config.GlobalConfig.Terminal != nil && config.GlobalConfig.Terminal.CommandTimeoutSeconds > 0 {
+		seconds = config.GlobalConfig.Terminal.CommandTimeoutSeconds
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 // persistRuntimeProfile keeps command execution and connection persistence in

@@ -15,6 +15,9 @@ func TestFileConfigNormalizeAddsDefaultConnection(t *testing.T) {
 	if cfg.Api == nil || cfg.Auth == nil || cfg.Language == "" {
 		t.Fatalf("expected api/auth/language defaults, got %#v", cfg)
 	}
+	if cfg.Terminal == nil || cfg.Terminal.CommandTimeoutSeconds != CommandTimeoutDefaultSeconds {
+		t.Fatalf("expected terminal timeout default, got %#v", cfg.Terminal)
+	}
 	if len(cfg.Connections) != 1 {
 		t.Fatalf("expected one default connection, got %d", len(cfg.Connections))
 	}
@@ -45,8 +48,25 @@ func TestLoadConfigKeepsOldConfigCompatible(t *testing.T) {
 	if GlobalConfig.Auth == nil {
 		t.Fatal("expected auth defaults for old config")
 	}
+	if GlobalConfig.Terminal == nil || GlobalConfig.Terminal.CommandTimeoutSeconds != CommandTimeoutDefaultSeconds {
+		t.Fatalf("expected terminal defaults for old config, got %#v", GlobalConfig.Terminal)
+	}
 	if len(GlobalConfig.Connections) != 1 || GlobalConfig.Connections[0].Type != terminal.ConnectionTypeLocal {
 		t.Fatalf("expected default local connection, got %#v", GlobalConfig.Connections)
+	}
+}
+
+func TestFileConfigNormalizePreservesPositiveTerminalTimeout(t *testing.T) {
+	cfg := &FileConfig{Terminal: &TerminalSettings{CommandTimeoutSeconds: 7}}
+	cfg.Normalize()
+	if cfg.Terminal.CommandTimeoutSeconds != 7 {
+		t.Fatalf("expected custom terminal timeout to be preserved, got %d", cfg.Terminal.CommandTimeoutSeconds)
+	}
+
+	cfg.Terminal.CommandTimeoutSeconds = -1
+	cfg.Normalize()
+	if cfg.Terminal.CommandTimeoutSeconds != CommandTimeoutDefaultSeconds {
+		t.Fatalf("expected invalid timeout to reset to default, got %d", cfg.Terminal.CommandTimeoutSeconds)
 	}
 }
 

@@ -12,6 +12,26 @@ import (
 	"github.com/0xdevelop/NBTerminal/terminal"
 )
 
+func TestCommandTimeoutUsesConfigDefaultAndOverride(t *testing.T) {
+	oldGlobal := config.GlobalConfig
+	t.Cleanup(func() { config.GlobalConfig = oldGlobal })
+
+	config.GlobalConfig = nil
+	if got := commandTimeout(); got != time.Duration(config.CommandTimeoutDefaultSeconds)*time.Second {
+		t.Fatalf("expected default command timeout, got %s", got)
+	}
+
+	config.GlobalConfig = &config.FileConfig{Terminal: &config.TerminalSettings{CommandTimeoutSeconds: 3}}
+	if got := commandTimeout(); got != 3*time.Second {
+		t.Fatalf("expected configured command timeout, got %s", got)
+	}
+
+	config.GlobalConfig.Terminal.CommandTimeoutSeconds = 0
+	if got := commandTimeout(); got != time.Duration(config.CommandTimeoutDefaultSeconds)*time.Second {
+		t.Fatalf("expected invalid timeout to fall back to default, got %s", got)
+	}
+}
+
 func TestExecuteLocalCommand(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

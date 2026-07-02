@@ -17,11 +17,12 @@ import (
 )
 
 const (
-	ProjectName        = "NBTerminal"
-	ProjectVersion     = "v0.0.7"
-	ProjectBundleID    = "com.0xdevelop.NBTerminal"
-	ProjectDescription = "NB Terminal"
-	APIPortDefault     = 8765
+	ProjectName                  = "NBTerminal"
+	ProjectVersion               = "v0.0.7"
+	ProjectBundleID              = "com.0xdevelop.NBTerminal"
+	ProjectDescription           = "NB Terminal"
+	APIPortDefault               = 8765
+	CommandTimeoutDefaultSeconds = 60
 )
 
 var (
@@ -34,10 +35,15 @@ type Auth struct {
 	Password string `json:"password"`
 }
 
+type TerminalSettings struct {
+	CommandTimeoutSeconds int `yaml:"command_timeout_seconds" json:"command_timeout_seconds"`
+}
+
 type FileConfig struct {
 	Api                *api_config.ApiConfig `yaml:"api" json:"api"`
 	Auth               *Auth                 `yaml:"auth" json:"auth"`
 	Language           string                `yaml:"language" json:"language"`
+	Terminal           *TerminalSettings     `yaml:"terminal" json:"terminal"`
 	Connections        []terminal.Connection `yaml:"connections" json:"connections"`
 	ActiveConnectionID string                `yaml:"active_connection_id" json:"active_connection_id"`
 }
@@ -54,6 +60,12 @@ func (fc *FileConfig) Normalize() {
 	}
 	if fc.Language == "" {
 		fc.Language = locales.LanguageWithEnglish.LanguageTag()
+	}
+	if fc.Terminal == nil {
+		fc.Terminal = &TerminalSettings{}
+	}
+	if fc.Terminal.CommandTimeoutSeconds <= 0 {
+		fc.Terminal.CommandTimeoutSeconds = CommandTimeoutDefaultSeconds
 	}
 	fc.Connections = terminal.NormalizeConnections(fc.Connections)
 	if len(fc.Connections) == 0 {
