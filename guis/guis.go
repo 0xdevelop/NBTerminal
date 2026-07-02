@@ -28,6 +28,12 @@ import (
 const (
 	connectionStoreFile = "connections.json"
 	secretKey           = "nbterminal-connections-v1"
+	defaultWindowWidth  = 1440
+	defaultWindowHeight = 900
+	noticeWidth         = 560
+	noticeHeight        = 118
+	noticeTopOffset     = 72
+	screenEdgePadding   = 8
 )
 
 type connectionType string
@@ -377,8 +383,8 @@ func LoadGUIWithFLTKGO(_ []byte) {
 
 func (a *finalShellApp) build() {
 	const (
-		winW   = 1440
-		winH   = 900
+		winW   = defaultWindowWidth
+		winH   = defaultWindowHeight
 		margin = 22
 		leftW  = 492
 		gap    = 22
@@ -566,10 +572,14 @@ func centeredWindow(w, h int, title string) *uikit.UIWindow {
 func centeredScreenRect(w, h int) *foundation.Rect {
 	s := screen.GetScreenSize()
 	if s == nil || s.Width <= 0 || s.Height <= 0 {
-		s = &screen.ScreenSize{Width: 1440, Height: 900}
+		s = &screen.ScreenSize{Width: defaultWindowWidth, Height: defaultWindowHeight}
 	}
-	x := (s.Width - w) / 2
-	y := (s.Height - h) / 2
+	return centerRectInBounds(s.Width, s.Height, w, h)
+}
+
+func centerRectInBounds(screenW, screenH, w, h int) *foundation.Rect {
+	x := (screenW - w) / 2
+	y := (screenH - h) / 2
 	if x < 0 {
 		x = 0
 	}
@@ -579,29 +589,34 @@ func centeredScreenRect(w, h int) *foundation.Rect {
 	return rect(x, y, w, h)
 }
 
+func topFloatRectInBounds(screenW, screenH, parentX, parentY, parentW, w, h int) *foundation.Rect {
+	x := parentX + (parentW-w)/2
+	y := parentY + noticeTopOffset
+	if maxX := screenW - w - screenEdgePadding; x > maxX {
+		x = maxX
+	}
+	if maxY := screenH - h - screenEdgePadding; y > maxY {
+		y = maxY
+	}
+	if x < screenEdgePadding {
+		x = screenEdgePadding
+	}
+	if y < screenEdgePadding {
+		y = screenEdgePadding
+	}
+	return rect(x, y, w, h)
+}
+
 func (a *finalShellApp) topFloatRect(w, h int) *foundation.Rect {
 	if a == nil || a.window == nil || a.window.Raw() == nil {
 		return centeredScreenRect(w, h)
 	}
 	raw := a.window.Raw()
-	x := raw.XRoot() + (raw.W()-w)/2
-	y := raw.YRoot() + 72
 	s := screen.GetScreenSize()
-	if s != nil {
-		if maxX := s.Width - w - 8; x > maxX {
-			x = maxX
-		}
-		if maxY := s.Height - h - 8; y > maxY {
-			y = maxY
-		}
+	if s == nil || s.Width <= 0 || s.Height <= 0 {
+		s = &screen.ScreenSize{Width: defaultWindowWidth, Height: defaultWindowHeight}
 	}
-	if x < 8 {
-		x = 8
-	}
-	if y < 8 {
-		y = 8
-	}
-	return rect(x, y, w, h)
+	return topFloatRectInBounds(s.Width, s.Height, raw.XRoot(), raw.YRoot(), raw.W(), w, h)
 }
 
 func themeColor(r, g, b uint8) fltk_bridge.Color { return fltk_bridge.ColorFromRgb(r, g, b) }
@@ -708,10 +723,7 @@ func (a *finalShellApp) showTopNotice(title, message string, critical bool) {
 	if a.notice != nil && a.notice.Raw() != nil {
 		a.notice.Raw().Hide()
 	}
-	const (
-		w = 560
-		h = 118
-	)
+	const w, h = noticeWidth, noticeHeight
 	win := uikit.NewWindowWithRect(a.topFloatRect(w, h), title)
 	if raw := win.Raw(); raw != nil {
 		raw.SetNonModal()

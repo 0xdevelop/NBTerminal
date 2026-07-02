@@ -273,3 +273,29 @@ func TestFormatHistoryEntries(t *testing.T) {
 		t.Fatalf("expected empty history message, got %q", empty)
 	}
 }
+
+func TestCenterRectInBounds(t *testing.T) {
+	r := centerRectInBounds(1920, 1080, defaultWindowWidth, defaultWindowHeight)
+	if r.X != 240 || r.Y != 90 || r.Width != defaultWindowWidth || r.Height != defaultWindowHeight {
+		t.Fatalf("unexpected centered rect: %#v", r)
+	}
+
+	small := centerRectInBounds(1024, 768, defaultWindowWidth, defaultWindowHeight)
+	if small.X != 0 || small.Y != 0 || small.Width != defaultWindowWidth || small.Height != defaultWindowHeight {
+		t.Fatalf("small screen should clamp to visible origin, got %#v", small)
+	}
+}
+
+func TestTopFloatRectInBounds(t *testing.T) {
+	r := topFloatRectInBounds(1920, 1080, 240, 90, defaultWindowWidth, noticeWidth, noticeHeight)
+	wantX := 240 + (defaultWindowWidth-noticeWidth)/2
+	wantY := 90 + noticeTopOffset
+	if r.X != wantX || r.Y != wantY || r.Width != noticeWidth || r.Height != noticeHeight {
+		t.Fatalf("unexpected top floating rect: got %#v want x=%d y=%d", r, wantX, wantY)
+	}
+
+	edge := topFloatRectInBounds(700, 500, 640, 460, defaultWindowWidth, noticeWidth, noticeHeight)
+	if edge.X != 700-noticeWidth-screenEdgePadding || edge.Y != 500-noticeHeight-screenEdgePadding {
+		t.Fatalf("edge rect should stay on screen, got %#v", edge)
+	}
+}
