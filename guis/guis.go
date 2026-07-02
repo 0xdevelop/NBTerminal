@@ -19,6 +19,7 @@ import (
 	"github.com/0xdevelop/fltk2go/fltk_bridge"
 	"github.com/0xdevelop/fltk2go/foundation"
 	"github.com/0xdevelop/fltk2go/uikit"
+	"github.com/0xdevelop/fltk2go/uikit/screen"
 	"github.com/0xdevelop/fltk2go/uikit/tableview"
 	"github.com/george012/gtbox/gtbox_encryption"
 	"github.com/george012/gtbox/gtbox_log"
@@ -351,6 +352,7 @@ type finalShellApp struct {
 	cmdInput   *uikit.Input
 	output     *uikit.UITextView
 	status     *uikit.UILabel
+	notice     *uikit.UIWindow
 }
 
 func LoadGUIWithFLTKGO(_ []byte) {
@@ -375,8 +377,8 @@ func LoadGUIWithFLTKGO(_ []byte) {
 
 func (a *finalShellApp) build() {
 	const (
-		winW   = 1280
-		winH   = 800
+		winW   = 1440
+		winH   = 900
 		margin = 22
 		leftW  = 492
 		gap    = 22
@@ -384,7 +386,7 @@ func (a *finalShellApp) build() {
 		rightW = winW - rightX - margin
 	)
 
-	a.window = uikit.NewUIWindow(winW, winH, config.CurrentApp.AppName+" - FinalShell Mode")
+	a.window = centeredWindow(winW, winH, config.CurrentApp.AppName+" - FinalShell Mode")
 	if raw := a.window.Raw(); raw != nil {
 		raw.SetColor(themeColor(244, 247, 251))
 		raw.SetSizeRange(1120, 720, 0, 0, 20, 20, false)
@@ -397,14 +399,14 @@ func (a *finalShellApp) build() {
 	a.status.View().SetAutomationID("app.status")
 	root.AddSubview(a.status)
 
-	left := uikit.NewUIGroup(rect(margin, 72, leftW, 666))
+	left := uikit.NewUIGroup(rect(margin, 72, leftW, 786))
 	left.SetBackgroundColor(uint(themeColor(255, 255, 255)))
 	left.SetAutomationID("connections.panel")
 	root.AddSubview(left)
 	root.AddSubview(sectionTitle(margin+18, 86, 260, 24, "Connections"))
 	root.AddSubview(mutedLabel(margin+18, 110, 430, 18, "Select a saved endpoint, edit its details, then test or connect."))
 
-	tv, err := uikit.NewUITableView(margin+14, 140, leftW-28, 318)
+	tv, err := uikit.NewUITableView(margin+14, 140, leftW-28, 388)
 	if err == nil {
 		a.table = tv
 		a.table.View().SetAutomationID("connections.table").SetAutomationName("Connection table")
@@ -421,51 +423,51 @@ func (a *finalShellApp) build() {
 		root.AddSubview(a.table)
 	}
 
-	root.AddSubview(sectionTitle(margin+18, 478, 260, 22, "Connection details"))
-	a.nameInput = input(margin+82, 512, 164, 30, "Name", "form.name")
+	root.AddSubview(sectionTitle(margin+18, 548, 260, 22, "Connection details"))
+	a.nameInput = input(margin+82, 582, 164, 30, "Name", "form.name")
 	root.AddSubview(a.nameInput)
-	a.groupInput = input(margin+318, 512, 168, 30, "Group", "form.group")
+	a.groupInput = input(margin+318, 582, 168, 30, "Group", "form.group")
 	root.AddSubview(a.groupInput)
 
-	a.typeInput = input(margin+82, 552, 92, 30, "Type", "form.type")
+	a.typeInput = input(margin+82, 622, 92, 30, "Type", "form.type")
 	root.AddSubview(a.typeInput)
-	a.hostInput = input(margin+246, 552, 152, 30, "Host", "form.host")
+	a.hostInput = input(margin+246, 622, 152, 30, "Host", "form.host")
 	root.AddSubview(a.hostInput)
-	a.portInput = input(margin+446, 552, 40, 30, "Port", "form.port")
+	a.portInput = input(margin+446, 622, 40, 30, "Port", "form.port")
 	root.AddSubview(a.portInput)
 
-	a.userInput = input(margin+82, 592, 164, 30, "User", "form.username")
+	a.userInput = input(margin+82, 662, 164, 30, "User", "form.username")
 	root.AddSubview(a.userInput)
-	a.passInput = uikit.NewInputWithType(margin+318, 592, 168, 30, "Pass", uikit.SecretInput)
+	a.passInput = uikit.NewInputWithType(margin+318, 662, 168, 30, "Pass", uikit.SecretInput)
 	styleInput(a.passInput)
 	a.passInput.View().SetAutomationID("form.password")
 	root.AddSubview(a.passInput)
 
-	a.workInput = input(margin+82, 632, 404, 30, "WorkDir", "form.working_dir")
+	a.workInput = input(margin+82, 702, 404, 30, "WorkDir", "form.working_dir")
 	root.AddSubview(a.workInput)
 
-	a.keyInput = input(margin+82, 672, 404, 30, "Key", "form.key")
+	a.keyInput = input(margin+82, 742, 404, 30, "Key", "form.key")
 	root.AddSubview(a.keyInput)
 
-	addBtn := button(margin+14, 716, 82, 34, "New", "action.new", a.newProfile)
+	addBtn := button(margin+14, 816, 82, 34, "New", "action.new", a.newProfile)
 	root.AddSubview(addBtn)
-	saveBtn := button(margin+106, 716, 82, 34, "Save", "action.save", a.saveProfile)
+	saveBtn := button(margin+106, 816, 82, 34, "Save", "action.save", a.saveProfile)
 	root.AddSubview(saveBtn)
-	deleteBtn := button(margin+198, 716, 82, 34, "Delete", "action.delete", a.deleteProfile)
+	deleteBtn := button(margin+198, 816, 82, 34, "Delete", "action.delete", a.deleteProfile)
 	root.AddSubview(deleteBtn)
-	testBtn := button(margin+290, 716, 82, 34, "Test", "action.test", a.testConnection)
+	testBtn := button(margin+290, 816, 82, 34, "Test", "action.test", a.testConnection)
 	root.AddSubview(testBtn)
-	connectBtn := primaryButton(margin+382, 716, 118, 34, "Connect", "action.connect", a.connectSelected)
+	connectBtn := primaryButton(margin+382, 816, 118, 34, "Connect", "action.connect", a.connectSelected)
 	root.AddSubview(connectBtn)
 
-	rightPanel := uikit.NewUIGroup(rect(rightX, 72, rightW, 666))
+	rightPanel := uikit.NewUIGroup(rect(rightX, 72, rightW, 786))
 	rightPanel.SetBackgroundColor(uint(themeColor(255, 255, 255)))
 	rightPanel.SetAutomationID("terminal.panel")
 	root.AddSubview(rightPanel)
 	root.AddSubview(sectionTitle(rightX+18, 86, 330, 24, "Terminal / Command Console"))
 	root.AddSubview(mutedLabel(rightX+18, 110, 560, 18, "Run quick diagnostics and review command history without leaving the manager."))
 
-	a.output = uikit.NewUITextView(rect(rightX+18, 140, rightW-36, 512))
+	a.output = uikit.NewUITextView(rect(rightX+18, 140, rightW-36, 608))
 	a.output.SetAutomationID("terminal.output").SetAutomationName("Terminal output")
 	a.output.SetFontSize(14)
 	a.output.SetTextColor(uint(themeColor(219, 255, 231)))
@@ -474,12 +476,12 @@ func (a *finalShellApp) build() {
 	a.appendRecentHistory()
 	root.AddSubview(a.output)
 
-	historyBtn := button(rightX+18, 674, 92, 36, "History", "terminal.history", a.showSelectedHistory)
+	historyBtn := button(rightX+18, 784, 92, 38, "History", "terminal.history", a.showSelectedHistory)
 	root.AddSubview(historyBtn)
-	root.AddSubview(mutedLabel(rightX+126, 654, 160, 18, "Command"))
-	a.cmdInput = inputNoLabel(rightX+126, 674, rightW-292, 36, "terminal.command", "Command")
+	root.AddSubview(mutedLabel(rightX+126, 764, 160, 18, "Command"))
+	a.cmdInput = inputNoLabel(rightX+126, 784, rightW-292, 38, "terminal.command", "Command")
 	root.AddSubview(a.cmdInput)
-	runBtn := primaryButton(rightX+rightW-144, 674, 126, 36, "Run Command", "terminal.run", a.runCommand)
+	runBtn := primaryButton(rightX+rightW-144, 784, 126, 38, "Run Command", "terminal.run", a.runCommand)
 	root.AddSubview(runBtn)
 
 	if len(a.rows) > 0 {
@@ -556,6 +558,51 @@ func (a *finalShellApp) connectionCellText(row, col int) string {
 }
 
 func rect(x, y, w, h int) *foundation.Rect { return &foundation.Rect{X: x, Y: y, Width: w, Height: h} }
+
+func centeredWindow(w, h int, title string) *uikit.UIWindow {
+	return uikit.NewWindowWithRect(centeredScreenRect(w, h), title)
+}
+
+func centeredScreenRect(w, h int) *foundation.Rect {
+	s := screen.GetScreenSize()
+	if s == nil || s.Width <= 0 || s.Height <= 0 {
+		s = &screen.ScreenSize{Width: 1440, Height: 900}
+	}
+	x := (s.Width - w) / 2
+	y := (s.Height - h) / 2
+	if x < 0 {
+		x = 0
+	}
+	if y < 0 {
+		y = 0
+	}
+	return rect(x, y, w, h)
+}
+
+func (a *finalShellApp) topFloatRect(w, h int) *foundation.Rect {
+	if a == nil || a.window == nil || a.window.Raw() == nil {
+		return centeredScreenRect(w, h)
+	}
+	raw := a.window.Raw()
+	x := raw.XRoot() + (raw.W()-w)/2
+	y := raw.YRoot() + 72
+	s := screen.GetScreenSize()
+	if s != nil {
+		if maxX := s.Width - w - 8; x > maxX {
+			x = maxX
+		}
+		if maxY := s.Height - h - 8; y > maxY {
+			y = maxY
+		}
+	}
+	if x < 8 {
+		x = 8
+	}
+	if y < 8 {
+		y = 8
+	}
+	return rect(x, y, w, h)
+}
 
 func themeColor(r, g, b uint8) fltk_bridge.Color { return fltk_bridge.ColorFromRgb(r, g, b) }
 
@@ -654,6 +701,48 @@ func styleButton(b *uikit.UIButton, primary bool) {
 	b.SetTitleColor(uint(themeColor(30, 41, 59)))
 }
 
+func (a *finalShellApp) showTopNotice(title, message string, critical bool) {
+	if a == nil {
+		return
+	}
+	if a.notice != nil && a.notice.Raw() != nil {
+		a.notice.Raw().Hide()
+	}
+	const (
+		w = 560
+		h = 118
+	)
+	win := uikit.NewWindowWithRect(a.topFloatRect(w, h), title)
+	if raw := win.Raw(); raw != nil {
+		raw.SetNonModal()
+		if critical {
+			raw.SetColor(themeColor(254, 242, 242))
+		} else {
+			raw.SetColor(themeColor(239, 246, 255))
+		}
+	}
+	heading := sectionTitle(18, 16, w-36, 24, title)
+	body := mutedLabel(18, 46, w-36, 54, message)
+	body.SetAlignment(fltk_bridge.ALIGN_LEFT | fltk_bridge.ALIGN_INSIDE | fltk_bridge.ALIGN_WRAP)
+	if critical {
+		heading.SetTextColor(uint(themeColor(153, 27, 27)))
+		body.SetTextColor(uint(themeColor(127, 29, 29)))
+	}
+	win.RootView().AddSubview(heading)
+	win.RootView().AddSubview(body)
+	a.notice = win
+	win.Show()
+	go func(expected *uikit.UIWindow) {
+		time.Sleep(3500 * time.Millisecond)
+		fltk_bridge.Awake(func() {
+			if a.notice == expected && expected != nil && expected.Raw() != nil {
+				expected.Raw().Hide()
+				a.notice = nil
+			}
+		})
+	}(win)
+}
+
 func (a *finalShellApp) selectRow(row int) {
 	if row < 0 || row >= len(a.rows) {
 		return
@@ -732,6 +821,7 @@ func (a *finalShellApp) saveProfile() {
 	if err := a.store.SaveActive(a.rows, p.ID); err != nil {
 		a.appendOutput("save failed: " + err.Error() + "\n")
 		a.setStatus("Save failed")
+		a.showTopNotice("Save failed", err.Error(), true)
 		return
 	}
 	a.refreshTable()
@@ -818,6 +908,7 @@ func (a *finalShellApp) showSelectedHistory() {
 	if err != nil {
 		a.appendOutput("load history failed: " + err.Error() + "\n")
 		a.setStatus("History load failed")
+		a.showTopNotice("History load failed", err.Error(), true)
 		return
 	}
 	a.appendOutput(formatHistoryEntries(p, entries))
@@ -828,6 +919,7 @@ func (a *finalShellApp) runAsync(p connectionProfile, command string) {
 	if err := a.persistRuntimeProfile(p); err != nil {
 		a.appendOutput("save current connection failed: " + err.Error() + "\n")
 		a.setStatus("Save failed; running with current form values")
+		a.showTopNotice("Save failed", err.Error(), true)
 	}
 	a.appendOutput(fmt.Sprintf("\n$ [%s] %s\n", p.Name, command))
 	a.setStatus("Running...")
@@ -864,6 +956,7 @@ func (a *finalShellApp) runAsync(p connectionProfile, command string) {
 			}
 			if err != nil {
 				a.setStatus("Command failed")
+				a.showTopNotice("Command failed", err.Error(), true)
 			} else {
 				a.setStatus("Command completed")
 			}
