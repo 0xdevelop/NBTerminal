@@ -337,3 +337,30 @@ func TestConnectionMatchesQuery(t *testing.T) {
 		t.Fatalf("unexpected query match for staging")
 	}
 }
+
+func TestActiveConnectionIndexUsesGlobalConfigSelection(t *testing.T) {
+	oldGlobal := config.GlobalConfig
+	t.Cleanup(func() { config.GlobalConfig = oldGlobal })
+	rows := []connectionProfile{
+		{ID: "local", Name: "Local", Type: connectionTypeLocal},
+		{ID: "prod", Name: "Prod", Type: connectionTypeSSH},
+	}
+
+	config.GlobalConfig = &config.FileConfig{ActiveConnectionID: "prod"}
+	if got := activeConnectionIndex(rows); got != 1 {
+		t.Fatalf("expected active index 1, got %d", got)
+	}
+
+	config.GlobalConfig.ActiveConnectionID = "missing"
+	if got := activeConnectionIndex(rows); got != 0 {
+		t.Fatalf("missing active id should fall back to first row, got %d", got)
+	}
+
+	config.GlobalConfig = nil
+	if got := activeConnectionIndex(rows); got != 0 {
+		t.Fatalf("nil config should fall back to first row, got %d", got)
+	}
+	if got := activeConnectionIndex(nil); got != -1 {
+		t.Fatalf("empty rows should return -1, got %d", got)
+	}
+}

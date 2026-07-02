@@ -492,9 +492,27 @@ func (a *finalShellApp) build() {
 	root.AddSubview(runBtn)
 
 	if len(a.rows) > 0 {
-		a.selectRow(0)
+		a.selectRow(activeConnectionIndex(a.rows))
 	}
 	a.window.Show()
+}
+
+func activeConnectionIndex(rows []connectionProfile) int {
+	if len(rows) == 0 {
+		return -1
+	}
+	activeID := ""
+	if config.GlobalConfig != nil {
+		activeID = strings.TrimSpace(config.GlobalConfig.ActiveConnectionID)
+	}
+	if activeID != "" {
+		for i, row := range rows {
+			if row.ID == activeID {
+				return i
+			}
+		}
+	}
+	return 0
 }
 
 type tableDelegate struct{ onSelect func(int) }
