@@ -129,14 +129,14 @@ func TestConnectionStoreSeedsFromGlobalConfig(t *testing.T) {
 	}
 }
 
-func TestConnectionStoreSaveSyncsGlobalConfigWithoutPassword(t *testing.T) {
+func TestConnectionStoreSaveSyncsGlobalConfigWithoutSecrets(t *testing.T) {
 	oldGlobal := config.GlobalConfig
 	oldApp := config.CurrentApp
 	t.Cleanup(func() { config.GlobalConfig, config.CurrentApp = oldGlobal, oldApp })
 	config.CurrentApp = nil
 	config.GlobalConfig = &config.FileConfig{}
 
-	profile := connectionProfile{ID: "dev", Name: "Dev", Group: "Default", Type: connectionTypeSSH, Host: "example.com", Port: 2200, Username: "me"}
+	profile := connectionProfile{ID: "dev", Name: "Dev", Group: "Default", Type: connectionTypeSSH, Host: "example.com", Port: 2200, Username: "me", PrivateKey: "-----BEGIN TEST KEY-----\nsecret\n-----END TEST KEY-----"}
 	profile.SetPassword("secret")
 	store := newConnectionStore(t.TempDir())
 	if err := store.Save([]connectionProfile{profile}); err != nil {
@@ -149,11 +149,29 @@ func TestConnectionStoreSaveSyncsGlobalConfigWithoutPassword(t *testing.T) {
 	if conn.ID != "dev" || conn.Type != terminal.ConnectionTypeSSH || conn.Host != "example.com" || conn.Port != 2200 {
 		t.Fatalf("unexpected synced connection: %#v", conn)
 	}
-	if conn.Password != "" {
-		t.Fatalf("password should remain only in encrypted GUI store, got %q", conn.Password)
+	if conn.Password != "" || conn.PrivateKey != "" {
+		t.Fatalf("secrets should remain only in GUI store, got password=%q private_key=%q", conn.Password, conn.PrivateKey)
 	}
 	if config.GlobalConfig.ActiveConnectionID != "dev" {
 		t.Fatalf("expected active id dev, got %q", config.GlobalConfig.ActiveConnectionID)
+	}
+}
+
+func TestConnectionStoreSaveAllowsUnresolvedPrivateKeyPath(t *testing.T) {
+	oldGlobal := config.GlobalConfig
+	oldApp := config.CurrentApp
+	t.Cleanup(func() { config.GlobalConfig, config.CurrentApp = oldGlobal, oldApp })
+	config.CurrentApp = nil
+	config.GlobalConfig = &config.FileConfig{}
+
+	missingKeyPath := filepath.Join(t.TempDir(), "missing_id_rsa")
+	profile := connectionProfile{ID: "dev", Name: "Dev", Group: "Default", Type: connectionTypeSSH, Host: "example.com", Port: 22, Username: "me", PrivateKey: missingKeyPath}
+	store := newConnectionStore(t.TempDir())
+	if err := store.Save([]connectionProfile{profile}); err != nil {
+		t.Fatalf("Save should not require private key file to exist until execution, got: %v", err)
+	}
+	if got := config.GlobalConfig.Connections[0].PrivateKey; got != missingKeyPath {
+		t.Fatalf("expected non-secret key path to sync for defaults, got %q", got)
 	}
 }
 

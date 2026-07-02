@@ -274,13 +274,7 @@ func syncConfigConnections(profiles []connectionProfile, activeID string) error 
 	}
 	connections := make([]terminal.Connection, 0, len(profiles))
 	for _, profile := range profiles {
-		conn, err := profileToConnection(profile)
-		if err != nil {
-			return err
-		}
-		// The GUI's dedicated connection store keeps passwords encrypted; keep the
-		// main app config usable for selectors/defaults without duplicating secrets.
-		conn.Password = ""
+		conn := profileToConfigConnection(profile)
 		connections = append(connections, conn)
 	}
 	if len(connections) == 0 {
@@ -1051,6 +1045,34 @@ func executeCommandResultWithSession(ctx context.Context, sess *terminal.Session
 	}
 	result, err := sess.RunCommand(ctx, conn, command)
 	return formatCommandResult(result), result, err
+}
+
+func profileToConfigConnection(p connectionProfile) terminal.Connection {
+	connType := terminal.ConnectionTypeSSH
+	if p.Type == connectionTypeLocal {
+		connType = terminal.ConnectionTypeLocal
+	}
+	privateKey := strings.TrimSpace(p.PrivateKey)
+	// The GUI's dedicated connection store owns encrypted/secret material. Keep
+	// the shared app config useful for selectors/defaults without duplicating
+	// passwords or pasted private-key contents, and without failing Save when a
+	// user enters a key path that only needs to exist at execution time.
+	if strings.Contains(privateKey, "-----BEGIN") {
+		privateKey = ""
+	}
+	conn := terminal.Connection{
+		ID:          p.ID,
+		Name:        p.Name,
+		Type:        connType,
+		Host:        p.Host,
+		Port:        p.Port,
+		Username:    p.Username,
+		PrivateKey:  privateKey,
+		WorkingDir:  strings.TrimSpace(p.WorkingDir),
+		Description: p.Description,
+	}
+	conn.Normalize()
+	return conn
 }
 
 func profileToConnection(p connectionProfile) (terminal.Connection, error) {
