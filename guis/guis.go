@@ -154,13 +154,21 @@ func (s *connectionStore) saveLocked() error {
 }
 
 func (s *connectionStore) Save(list []connectionProfile) error {
+	return s.SaveActive(list, "")
+}
+
+// SaveActive persists the connection list and records the selected connection in
+// the shared app config. This keeps the FinalShell-style GUI, command runner and
+// config file aligned after a user selects/edits a profile and immediately runs
+// it without pressing any extra "make active" control.
+func (s *connectionStore) SaveActive(list []connectionProfile, activeID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.list = append([]connectionProfile(nil), list...)
 	if err := s.saveLocked(); err != nil {
 		return err
 	}
-	return syncConfigConnections(s.list)
+	return syncConfigConnections(s.list, activeID)
 }
 
 func (s *connectionStore) List() []connectionProfile {
@@ -253,7 +261,7 @@ func profilesFromConfig(cfg *config.FileConfig) []connectionProfile {
 	return profiles
 }
 
-func syncConfigConnections(profiles []connectionProfile) error {
+func syncConfigConnections(profiles []connectionProfile, activeID string) error {
 	if config.GlobalConfig == nil {
 		return nil
 	}
@@ -268,8 +276,14 @@ func syncConfigConnections(profiles []connectionProfile) error {
 		conn.Password = ""
 		connections = append(connections, conn)
 	}
-	config.GlobalConfig.Connections = terminal.NormalizeConnections(connections)
-	if len(config.GlobalConfig.Connections) > 0 {
+	if len(connections) == 0 {
+		config.GlobalConfig.Connections = nil
+		config.GlobalConfig.ActiveConnectionID = ""
+	} else {
+		config.GlobalConfig.Connections = terminal.NormalizeConnections(connections)
+		if activeID != "" {
+			config.GlobalConfig.ActiveConnectionID = activeID
+		}
 		active := config.GlobalConfig.ActiveConnectionID
 		found := active == ""
 		for _, conn := range config.GlobalConfig.Connections {
@@ -715,7 +729,7 @@ func (a *finalShellApp) saveProfile() {
 		a.rows = append(a.rows, p)
 		a.idx = len(a.rows) - 1
 	}
-	if err := a.store.Save(a.rows); err != nil {
+	if err := a.store.SaveActive(a.rows, p.ID); err != nil {
 		a.appendOutput("save failed: " + err.Error() + "\n")
 		a.setStatus("Save failed")
 		return
@@ -733,7 +747,11 @@ func (a *finalShellApp) deleteProfile() {
 	if a.idx >= len(a.rows) {
 		a.idx = len(a.rows) - 1
 	}
-	_ = a.store.Save(a.rows)
+	activeID := ""
+	if a.idx >= 0 && a.idx < len(a.rows) {
+		activeID = a.rows[a.idx].ID
+	}
+	_ = a.store.SaveActive(a.rows, activeID)
 	a.refreshTable()
 	if a.idx >= 0 {
 		a.selectRow(a.idx)
@@ -883,7 +901,7 @@ func (a *finalShellApp) persistRuntimeProfile(p connectionProfile) error {
 		a.rows = append(a.rows, p)
 		a.idx = len(a.rows) - 1
 	}
-	if err := a.store.Save(a.rows); err != nil {
+	if err := a.store.SaveActive(a.rows, p.ID); err != nil {
 		return err
 	}
 	a.refreshTable()

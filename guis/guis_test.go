@@ -188,6 +188,42 @@ func TestConnectionStoreNormalizesDuplicateIDs(t *testing.T) {
 	}
 }
 
+func TestConnectionStoreSaveActiveSyncsSelectedGlobalConfig(t *testing.T) {
+	oldGlobal := config.GlobalConfig
+	oldApp := config.CurrentApp
+	t.Cleanup(func() { config.GlobalConfig, config.CurrentApp = oldGlobal, oldApp })
+	config.CurrentApp = nil
+	config.GlobalConfig = &config.FileConfig{ActiveConnectionID: "first"}
+
+	profiles := []connectionProfile{
+		{ID: "first", Name: "First", Group: "Default", Type: connectionTypeLocal},
+		{ID: "second", Name: "Second", Group: "Default", Type: connectionTypeLocal},
+	}
+	store := newConnectionStore(t.TempDir())
+	if err := store.SaveActive(profiles, "second"); err != nil {
+		t.Fatalf("SaveActive failed: %v", err)
+	}
+	if config.GlobalConfig.ActiveConnectionID != "second" {
+		t.Fatalf("expected selected active connection second, got %q", config.GlobalConfig.ActiveConnectionID)
+	}
+}
+
+func TestConnectionStoreSaveActiveClearsActiveWhenListEmpty(t *testing.T) {
+	oldGlobal := config.GlobalConfig
+	oldApp := config.CurrentApp
+	t.Cleanup(func() { config.GlobalConfig, config.CurrentApp = oldGlobal, oldApp })
+	config.CurrentApp = nil
+	config.GlobalConfig = &config.FileConfig{ActiveConnectionID: "old"}
+
+	store := newConnectionStore(t.TempDir())
+	if err := store.SaveActive(nil, "old"); err != nil {
+		t.Fatalf("SaveActive failed: %v", err)
+	}
+	if config.GlobalConfig.ActiveConnectionID != "" {
+		t.Fatalf("expected active connection to be cleared, got %q", config.GlobalConfig.ActiveConnectionID)
+	}
+}
+
 func TestPersistRuntimeProfileUpdatesStoreBeforeRun(t *testing.T) {
 	oldGlobal := config.GlobalConfig
 	oldApp := config.CurrentApp
