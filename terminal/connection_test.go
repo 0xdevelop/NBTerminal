@@ -41,6 +41,27 @@ func TestConnectionValidateSSH(t *testing.T) {
 	}
 }
 
+func TestNormalizeConnectionsDeduplicatesAndSlugsIDs(t *testing.T) {
+	conns := NormalizeConnections([]Connection{
+		{ID: "prod", Name: "Prod", Type: ConnectionTypeLocal},
+		{ID: "prod", Name: "Prod copy", Type: ConnectionTypeLocal},
+		{ID: "prod", Name: "Prod third", Type: ConnectionTypeLocal},
+		{Name: "QA Box #1", Type: ConnectionTypeLocal},
+	})
+	ids := make(map[string]bool, len(conns))
+	for _, conn := range conns {
+		if ids[conn.ID] {
+			t.Fatalf("duplicate normalized id %q in %#v", conn.ID, conns)
+		}
+		ids[conn.ID] = true
+	}
+	for _, want := range []string{"prod", "prod-2", "prod-3", "qa-box-1"} {
+		if !ids[want] {
+			t.Fatalf("missing normalized id %q in %#v", want, conns)
+		}
+	}
+}
+
 func TestLocalExecutorRunCapturesOutput(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

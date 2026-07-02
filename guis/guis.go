@@ -149,10 +149,12 @@ func (s *connectionStore) List() []connectionProfile {
 
 func (s *connectionStore) normalizeLocked() {
 	now := time.Now().UTC().Format(time.RFC3339)
+	seenIDs := make(map[string]struct{}, len(s.list))
 	for i := range s.list {
 		if s.list[i].ID == "" {
 			s.list[i].ID = fmt.Sprintf("conn-%d-%d", time.Now().UnixNano(), i)
 		}
+		s.list[i].ID = uniqueProfileID(s.list[i].ID, seenIDs)
 		if s.list[i].Name == "" {
 			s.list[i].Name = "New Connection"
 		}
@@ -168,6 +170,21 @@ func (s *connectionStore) normalizeLocked() {
 		if s.list[i].LastUsed == "" {
 			s.list[i].LastUsed = now
 		}
+	}
+}
+
+func uniqueProfileID(id string, seen map[string]struct{}) string {
+	base := strings.TrimSpace(id)
+	if base == "" {
+		base = "conn"
+	}
+	candidate := base
+	for n := 2; ; n++ {
+		if _, ok := seen[candidate]; !ok {
+			seen[candidate] = struct{}{}
+			return candidate
+		}
+		candidate = fmt.Sprintf("%s-%d", base, n)
 	}
 }
 

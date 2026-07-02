@@ -157,6 +157,37 @@ func TestConnectionStoreSaveSyncsGlobalConfigWithoutPassword(t *testing.T) {
 	}
 }
 
+func TestConnectionStoreNormalizesDuplicateIDs(t *testing.T) {
+	oldGlobal := config.GlobalConfig
+	oldApp := config.CurrentApp
+	t.Cleanup(func() { config.GlobalConfig, config.CurrentApp = oldGlobal, oldApp })
+	config.CurrentApp = nil
+	config.GlobalConfig = &config.FileConfig{}
+
+	store := newConnectionStore(t.TempDir())
+	profiles := []connectionProfile{
+		{ID: "dup", Name: "One", Group: "Default", Type: connectionTypeLocal},
+		{ID: "dup", Name: "Two", Group: "Default", Type: connectionTypeLocal},
+		{ID: "dup", Name: "Three", Group: "Default", Type: connectionTypeLocal},
+	}
+	if err := store.Save(profiles); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+	got := store.List()
+	ids := make(map[string]bool, len(got))
+	for _, p := range got {
+		if ids[p.ID] {
+			t.Fatalf("duplicate profile id %q after normalize: %#v", p.ID, got)
+		}
+		ids[p.ID] = true
+	}
+	for _, want := range []string{"dup", "dup-2", "dup-3"} {
+		if !ids[want] {
+			t.Fatalf("missing normalized profile id %q in %#v", want, got)
+		}
+	}
+}
+
 func TestPersistRuntimeProfileUpdatesStoreBeforeRun(t *testing.T) {
 	oldGlobal := config.GlobalConfig
 	oldApp := config.CurrentApp

@@ -3,8 +3,11 @@ package terminal
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 )
+
+var connectionIDUnsafe = regexp.MustCompile(`[^a-z0-9._-]+`)
 
 // ConnectionType identifies how a command should be executed.
 type ConnectionType string
@@ -53,7 +56,7 @@ func (c *Connection) Normalize() {
 		c.Type = ConnectionTypeLocal
 	}
 	if c.ID == "" {
-		base := strings.ToLower(strings.ReplaceAll(c.Name, " ", "-"))
+		base := slugConnectionID(c.Name)
 		base = strings.Trim(base, "-")
 		if base == "" {
 			base = string(c.Type)
@@ -108,18 +111,37 @@ func NormalizeConnections(conns []Connection) []Connection {
 	if len(conns) == 0 {
 		return []Connection{DefaultLocalConnection()}
 	}
-	seen := make(map[string]int, len(conns))
+	seen := make(map[string]struct{}, len(conns))
 	out := make([]Connection, 0, len(conns))
 	for _, conn := range conns {
 		conn.Normalize()
 		if conn.ID == "" {
 			conn.ID = fmt.Sprintf("connection-%d", len(out)+1)
 		}
-		if n := seen[conn.ID]; n > 0 {
-			conn.ID = fmt.Sprintf("%s-%d", conn.ID, n+1)
-		}
-		seen[conn.ID]++
+		conn.ID = uniqueConnectionID(conn.ID, seen)
 		out = append(out, conn)
 	}
 	return out
+}
+
+func slugConnectionID(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	s = connectionIDUnsafe.ReplaceAllString(s, "-")
+	s = strings.Trim(s, "-")
+	return s
+}
+
+func uniqueConnectionID(id string, seen map[string]struct{}) string {
+	base := slugConnectionID(id)
+	if base == "" {
+		base = "connection"
+	}
+	candidate := base
+	for i := 2; ; i++ {
+		if _, ok := seen[candidate]; !ok {
+			seen[candidate] = struct{}{}
+			return candidate
+		}
+		candidate = fmt.Sprintf("%s-%d", base, i)
+	}
 }
