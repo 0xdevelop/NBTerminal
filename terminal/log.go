@@ -3,11 +3,15 @@ package terminal
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
+
+const historyOutputMaxBytes = 64 * 1024
 
 // HistoryEntry is a compact, append-only command log record. It intentionally
 // stores command/output metadata but never stores connection secrets.
@@ -42,9 +46,23 @@ func HistoryFromResult(result CommandResult) HistoryEntry {
 		Command:        result.Command,
 		ExitCode:       result.ExitCode,
 		DurationMS:     duration,
-		Stdout:         result.Stdout,
-		Stderr:         result.Stderr,
+		Stdout:         truncateHistoryOutput(result.Stdout),
+		Stderr:         truncateHistoryOutput(result.Stderr),
 	}
+}
+
+func truncateHistoryOutput(s string) string {
+	if len(s) <= historyOutputMaxBytes {
+		return s
+	}
+	cut := historyOutputMaxBytes
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	if cut == 0 {
+		cut = historyOutputMaxBytes
+	}
+	return s[:cut] + fmt.Sprintf("\n[NBTerminal history output truncated: original %d bytes, kept %d bytes]", len(s), cut)
 }
 
 // HistoryStore appends and reads JSONL command history. The append-only format

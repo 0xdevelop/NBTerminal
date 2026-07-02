@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestHistoryStoreAppendAndLoad(t *testing.T) {
@@ -84,6 +85,27 @@ func TestHistoryStoreLoadLongOutputRecord(t *testing.T) {
 	}
 	if len(entries) != 1 || len(entries[0].Stdout) != len(long) {
 		t.Fatalf("long history record was not preserved: %#v", entries)
+	}
+}
+
+func TestHistoryFromResultTruncatesLargeOutput(t *testing.T) {
+	large := strings.Repeat("世", historyOutputMaxBytes) // multi-byte: validates UTF-8-safe cut
+	entry := HistoryFromResult(CommandResult{
+		Connection: DefaultLocalConnection(),
+		Command:    "large-output",
+		StartedAt:  time.Now().UTC(),
+		FinishedAt: time.Now().UTC(),
+		ExitCode:   0,
+		Stdout:     large,
+	})
+	if len(entry.Stdout) >= len(large) {
+		t.Fatalf("expected stdout to be truncated, original=%d got=%d", len(large), len(entry.Stdout))
+	}
+	if !strings.Contains(entry.Stdout, "NBTerminal history output truncated") {
+		t.Fatalf("expected truncation marker, got suffix %q", entry.Stdout[len(entry.Stdout)-80:])
+	}
+	if !utf8.ValidString(entry.Stdout) {
+		t.Fatalf("truncated history output must remain valid UTF-8")
 	}
 }
 
