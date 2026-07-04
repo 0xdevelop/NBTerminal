@@ -481,18 +481,21 @@ func (a *finalShellApp) build() {
 	a.output.SetFontSize(14)
 	a.output.SetTextColor(uint(themeColor(219, 255, 231)))
 	a.output.SetBackgroundColor(uint(themeColor(15, 23, 42)))
-	a.output.SetText("Welcome to NBTerminal FinalShell Mode\n- Select or create a connection.\n- Use local shell for this machine or SSH for remote commands.\n- Passwords are saved encrypted in the app data store.\n\n")
+	a.output.SetText(terminalWelcomeText())
 	a.appendRecentHistory()
 	root.AddSubview(a.output)
 
-	historyBtn := button(rightX+18, 784, 92, 38, "History", "terminal.history", a.showSelectedHistory)
+	bar := commandBarLayout(rightX, rightW)
+	historyBtn := button(bar.history.X, bar.history.Y, bar.history.Width, bar.history.Height, "History", "terminal.history", a.showSelectedHistory)
 	root.AddSubview(historyBtn)
-	recallBtn := button(rightX+116, 784, 80, 38, "Last", "terminal.last_command", a.recallLastCommand)
+	recallBtn := button(bar.last.X, bar.last.Y, bar.last.Width, bar.last.Height, "Last", "terminal.last_command", a.recallLastCommand)
 	root.AddSubview(recallBtn)
-	root.AddSubview(mutedLabel(rightX+210, 764, 160, 18, "Command"))
-	a.cmdInput = inputNoLabel(rightX+210, 784, rightW-376, 38, "terminal.command", "Command")
+	clearBtn := button(bar.clear.X, bar.clear.Y, bar.clear.Width, bar.clear.Height, "Clear", "terminal.clear", a.clearTerminalOutput)
+	root.AddSubview(clearBtn)
+	root.AddSubview(mutedLabel(bar.command.X, bar.commandLabelY, 160, 18, "Command"))
+	a.cmdInput = inputNoLabel(bar.command.X, bar.command.Y, bar.command.Width, bar.command.Height, "terminal.command", "Command")
 	root.AddSubview(a.cmdInput)
-	runBtn := primaryButton(rightX+rightW-144, 784, 126, 38, "Run Command", "terminal.run", a.runCommand)
+	runBtn := primaryButton(bar.run.X, bar.run.Y, bar.run.Width, bar.run.Height, "Run Command", "terminal.run", a.runCommand)
 	root.AddSubview(runBtn)
 
 	if len(a.rows) > 0 {
@@ -587,6 +590,44 @@ func (a *finalShellApp) connectionCellText(row, col int) string {
 }
 
 func rect(x, y, w, h int) *foundation.Rect { return &foundation.Rect{X: x, Y: y, Width: w, Height: h} }
+
+type commandBarSpec struct {
+	history       *foundation.Rect
+	last          *foundation.Rect
+	clear         *foundation.Rect
+	command       *foundation.Rect
+	run           *foundation.Rect
+	commandLabelY int
+}
+
+func commandBarLayout(rightX, rightW int) commandBarSpec {
+	const (
+		y      = 784
+		h      = 38
+		gap    = 8
+		runW   = 126
+		leftX  = 18
+		histW  = 92
+		recW   = 72
+		clearW = 76
+	)
+	run := rect(rightX+rightW-144, y, runW, h)
+	x := rightX + leftX
+	history := rect(x, y, histW, h)
+	x += histW + gap
+	last := rect(x, y, recW, h)
+	x += recW + gap
+	clear := rect(x, y, clearW, h)
+	cmdX := x + clearW + 14
+	return commandBarSpec{
+		history:       history,
+		last:          last,
+		clear:         clear,
+		command:       rect(cmdX, y, run.X-cmdX-22, h),
+		run:           run,
+		commandLabelY: y - 20,
+	}
+}
 
 func centeredWindow(w, h int, title string) *uikit.UIWindow {
 	return uikit.NewWindowWithRect(centeredScreenRect(w, h), title)
@@ -1057,6 +1098,18 @@ func (a *finalShellApp) recallLastCommand() {
 	}
 	a.cmdInput.SetText(cmd)
 	a.setStatus("Recalled last command")
+}
+
+func (a *finalShellApp) clearTerminalOutput() {
+	if a.output == nil {
+		return
+	}
+	a.output.SetText(terminalWelcomeText())
+	a.setStatus("Terminal output cleared")
+}
+
+func terminalWelcomeText() string {
+	return "Welcome to NBTerminal FinalShell Mode\n- Select or create a connection.\n- Use local shell for this machine or SSH for remote commands.\n- Passwords are saved encrypted in the app data store.\n\n"
 }
 
 func (a *finalShellApp) runAsync(p connectionProfile, command string) {

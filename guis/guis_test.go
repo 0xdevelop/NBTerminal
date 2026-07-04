@@ -338,6 +338,55 @@ func TestTopFloatRectInBounds(t *testing.T) {
 	}
 }
 
+func TestCommandBarLayoutKeepsControlsInsideTerminalPanel(t *testing.T) {
+	const (
+		winW   = defaultWindowWidth
+		margin = 22
+		leftW  = 492
+		gap    = 22
+		rightX = margin + leftW + gap
+		rightW = winW - rightX - margin
+	)
+	bar := commandBarLayout(rightX, rightW)
+	rightEdge := rightX + rightW
+	ordered := []struct {
+		name string
+		x    int
+		w    int
+	}{
+		{name: "history", x: bar.history.X, w: bar.history.Width},
+		{name: "last", x: bar.last.X, w: bar.last.Width},
+		{name: "clear", x: bar.clear.X, w: bar.clear.Width},
+		{name: "command", x: bar.command.X, w: bar.command.Width},
+		{name: "run", x: bar.run.X, w: bar.run.Width},
+	}
+	prevRight := rightX
+	for _, item := range ordered {
+		if item.x < rightX || item.x+item.w > rightEdge {
+			t.Fatalf("%s is outside terminal panel: x=%d w=%d panel=%d..%d", item.name, item.x, item.w, rightX, rightEdge)
+		}
+		if item.x < prevRight {
+			t.Fatalf("%s overlaps previous control: x=%d previousRight=%d", item.name, item.x, prevRight)
+		}
+		prevRight = item.x + item.w
+	}
+	if bar.command.Width < 360 {
+		t.Fatalf("command input is too narrow for usable UX: %d", bar.command.Width)
+	}
+	if bar.commandLabelY >= bar.command.Y {
+		t.Fatalf("command label should sit above input: labelY=%d inputY=%d", bar.commandLabelY, bar.command.Y)
+	}
+}
+
+func TestTerminalWelcomeText(t *testing.T) {
+	text := terminalWelcomeText()
+	for _, want := range []string{"NBTerminal FinalShell Mode", "local shell", "SSH"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("welcome text missing %q: %q", want, text)
+		}
+	}
+}
+
 func TestConnectionMatchesQuery(t *testing.T) {
 	profile := connectionProfile{
 		Name:        "Prod API",
