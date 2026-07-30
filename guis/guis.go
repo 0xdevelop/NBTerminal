@@ -355,6 +355,12 @@ type finalShellApp struct {
 	output      *uikit.UITextView
 	status      *uikit.UILabel
 	notice      *uikit.UIWindow
+	runButton   *uikit.UIButton
+	stopButton  *uikit.UIButton
+
+	runMu     sync.Mutex
+	runCancel context.CancelFunc
+	runID     uint64
 }
 
 func LoadGUIWithFLTKGO(_ []byte) {
@@ -495,8 +501,11 @@ func (a *finalShellApp) build() {
 	root.AddSubview(mutedLabel(bar.command.X, bar.commandLabelY, 160, 18, "Command"))
 	a.cmdInput = inputNoLabel(bar.command.X, bar.command.Y, bar.command.Width, bar.command.Height, "terminal.command", "Command")
 	root.AddSubview(a.cmdInput)
-	runBtn := primaryButton(bar.run.X, bar.run.Y, bar.run.Width, bar.run.Height, "Run Command", "terminal.run", a.runCommand)
-	root.AddSubview(runBtn)
+	a.stopButton = button(bar.stop.X, bar.stop.Y, bar.stop.Width, bar.stop.Height, "Stop", "terminal.stop", a.stopCommand)
+	root.AddSubview(a.stopButton)
+	a.runButton = primaryButton(bar.run.X, bar.run.Y, bar.run.Width, bar.run.Height, "Run", "terminal.run", a.runCommand)
+	root.AddSubview(a.runButton)
+	a.setCommandRunning(false)
 
 	if len(a.rows) > 0 {
 		a.selectRow(activeConnectionIndex(a.rows))
@@ -596,6 +605,7 @@ type commandBarSpec struct {
 	last          *foundation.Rect
 	clear         *foundation.Rect
 	command       *foundation.Rect
+	stop          *foundation.Rect
 	run           *foundation.Rect
 	commandLabelY int
 }
@@ -605,13 +615,15 @@ func commandBarLayout(rightX, rightW int) commandBarSpec {
 		y      = 784
 		h      = 38
 		gap    = 8
-		runW   = 126
+		runW   = 116
+		stopW  = 68
 		leftX  = 18
-		histW  = 92
-		recW   = 72
-		clearW = 76
+		histW  = 86
+		recW   = 64
+		clearW = 68
 	)
-	run := rect(rightX+rightW-144, y, runW, h)
+	run := rect(rightX+rightW-runW-18, y, runW, h)
+	stop := rect(run.X-gap-stopW, y, stopW, h)
 	x := rightX + leftX
 	history := rect(x, y, histW, h)
 	x += histW + gap
@@ -623,7 +635,8 @@ func commandBarLayout(rightX, rightW int) commandBarSpec {
 		history:       history,
 		last:          last,
 		clear:         clear,
-		command:       rect(cmdX, y, run.X-cmdX-22, h),
+		command:       rect(cmdX, y, stop.X-cmdX-14, h),
+		stop:          stop,
 		run:           run,
 		commandLabelY: y - 20,
 	}
@@ -1112,16 +1125,81 @@ func terminalWelcomeText() string {
 	return "Welcome to NBTerminal FinalShell Mode\n- Select or create a connection.\n- Use local shell for this machine or SSH for remote commands.\n- Passwords are saved encrypted in the app data store.\n\n"
 }
 
+func (a *finalShellApp) beginCommandRun(cancel context.CancelFunc) (uint64, bool) {
+	a.runMu.Lock()
+	defer a.runMu.Unlock()
+	if a.runCancel != nil {
+		return 0, false
+	}
+	a.runID++
+	a.runCancel = cancel
+	return a.runID, true
+}
+
+func (a *finalShellApp) finishCommandRun(id uint64) bool {
+	a.runMu.Lock()
+	defer a.runMu.Unlock()
+	if a.runCancel == nil || a.runID != id {
+		return false
+	}
+	a.runCancel = nil
+	return true
+}
+
+func (a *finalShellApp) stopCommand() {
+	a.runMu.Lock()
+	cancel := a.runCancel
+	a.runMu.Unlock()
+	if cancel == nil {
+		a.setStatus("No command is running")
+		return
+	}
+	cancel()
+	a.appendOutput("[stop requested]\n")
+	a.setStatus("Stopping command...")
+}
+
+func (a *finalShellApp) setCommandRunning(running bool) {
+	if a.runButton != nil && a.runButton.Raw() != nil {
+		if running {
+			a.runButton.Raw().Deactivate()
+		} else {
+			a.runButton.Raw().Activate()
+		}
+		a.runButton.Raw().Redraw()
+	}
+	if a.stopButton != nil && a.stopButton.Raw() != nil {
+		if running {
+			a.stopButton.Raw().Activate()
+			a.stopButton.SetBackgroundColor(uint(themeColor(220, 38, 38)))
+			a.stopButton.SetTitleColor(uint(themeColor(255, 255, 255)))
+		} else {
+			a.stopButton.Raw().Deactivate()
+			a.stopButton.SetBackgroundColor(uint(themeColor(226, 232, 240)))
+			a.stopButton.SetTitleColor(uint(themeColor(100, 116, 139)))
+		}
+		a.stopButton.Raw().Redraw()
+	}
+}
+
 func (a *finalShellApp) runAsync(p connectionProfile, command string) {
 	if err := a.persistRuntimeProfile(p); err != nil {
 		a.appendOutput("save current connection failed: " + err.Error() + "\n")
 		a.setStatus("Save failed; running with current form values")
 		a.showTopNotice("Save failed", err.Error(), true)
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout())
+	runID, ok := a.beginCommandRun(cancel)
+	if !ok {
+		cancel()
+		a.setStatus("A command is already running")
+		a.showTopNotice("Command already running", "Stop the active command before starting another one.", false)
+		return
+	}
 	a.appendOutput(fmt.Sprintf("\n$ [%s] %s\n", p.Name, command))
-	a.setStatus("Running...")
+	a.setStatus("Running " + p.Name + "...")
+	a.setCommandRunning(true)
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), commandTimeout())
 		defer cancel()
 		sess := terminal.NewSession(a.history)
 		sess.OnEvent = func(event terminal.Event) {
@@ -1132,30 +1210,32 @@ func (a *finalShellApp) runAsync(p connectionProfile, command string) {
 			case terminal.StreamStderr:
 				line := event.Line
 				fltk_bridge.Awake(func() { a.appendOutput("[stderr] " + line + "\n") })
-			case terminal.StreamStatus:
-				exitCode := event.ExitCode
-				fltk_bridge.Awake(func() { a.setStatus(fmt.Sprintf("Command finished: exit %d", exitCode)) })
 			}
 		}
 		_, result, err := executeCommandResultWithSession(ctx, sess, p, command)
-		msg := ""
-		if err != nil {
-			msg = fmt.Sprintf("ERROR: %s\n", err.Error())
-		} else if len(result.Events) == 0 && result.Stdout == "" && result.Stderr == "" {
-			msg = "[no output]\n"
-		}
 		fltk_bridge.Awake(func() {
-			if msg != "" {
-				a.appendOutput(msg)
-				if !strings.HasSuffix(msg, "\n") {
-					a.appendOutput("\n")
-				}
+			if !a.finishCommandRun(runID) {
+				return
 			}
-			if err != nil {
-				a.setStatus("Command failed")
+			a.setCommandRunning(false)
+			switch {
+			case errors.Is(err, context.Canceled):
+				a.appendOutput("[command cancelled]\n")
+				a.setStatus("Command cancelled")
+			case errors.Is(err, context.DeadlineExceeded):
+				message := fmt.Sprintf("Command exceeded the %s timeout.", commandTimeout())
+				a.appendOutput("ERROR: " + message + "\n")
+				a.setStatus("Command timed out")
+				a.showTopNotice("Command timed out", message, true)
+			case err != nil:
+				a.appendOutput(fmt.Sprintf("ERROR: %s\n", err.Error()))
+				a.setStatus(fmt.Sprintf("Command failed: exit %d", result.ExitCode))
 				a.showTopNotice("Command failed", err.Error(), true)
-			} else {
-				a.setStatus("Command completed")
+			case len(result.Events) == 0 && result.Stdout == "" && result.Stderr == "":
+				a.appendOutput("[no output]\n")
+				a.setStatus("Command completed: exit 0")
+			default:
+				a.setStatus(fmt.Sprintf("Command completed: exit %d", result.ExitCode))
 			}
 		})
 	}()

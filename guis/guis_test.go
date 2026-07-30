@@ -338,6 +338,33 @@ func TestTopFloatRectInBounds(t *testing.T) {
 	}
 }
 
+func TestCommandRunLifecyclePreventsOverlapAndStopsActiveRun(t *testing.T) {
+	app := &finalShellApp{}
+	ctx, cancel := context.WithCancel(context.Background())
+	id, ok := app.beginCommandRun(cancel)
+	if !ok || id == 0 {
+		t.Fatalf("expected first command run to start: id=%d ok=%v", id, ok)
+	}
+	_, secondOK := app.beginCommandRun(func() {})
+	if secondOK {
+		t.Fatal("overlapping command run should be rejected")
+	}
+
+	app.stopCommand()
+	select {
+	case <-ctx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("stopCommand did not cancel the active run")
+	}
+	if !app.finishCommandRun(id) {
+		t.Fatal("active command run did not finish")
+	}
+	_, nextOK := app.beginCommandRun(func() {})
+	if !nextOK {
+		t.Fatal("new command should start after previous run finishes")
+	}
+}
+
 func TestCommandBarLayoutKeepsControlsInsideTerminalPanel(t *testing.T) {
 	const (
 		winW   = defaultWindowWidth
@@ -358,6 +385,7 @@ func TestCommandBarLayoutKeepsControlsInsideTerminalPanel(t *testing.T) {
 		{name: "last", x: bar.last.X, w: bar.last.Width},
 		{name: "clear", x: bar.clear.X, w: bar.clear.Width},
 		{name: "command", x: bar.command.X, w: bar.command.Width},
+		{name: "stop", x: bar.stop.X, w: bar.stop.Width},
 		{name: "run", x: bar.run.X, w: bar.run.Width},
 	}
 	prevRight := rightX

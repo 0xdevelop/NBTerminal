@@ -119,6 +119,7 @@ func runProcess(ctx context.Context, conn Connection, command string, onEvent Ev
 	if conn.WorkingDir != "" {
 		cmd.Dir = conn.WorkingDir
 	}
+	prepareCommandForCancellation(cmd)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return result, err
@@ -130,6 +131,7 @@ func runProcess(ctx context.Context, conn Connection, command string, onEvent Ev
 	if err := cmd.Start(); err != nil {
 		return result, err
 	}
+	stopCancellationWatch := watchCommandCancellation(ctx, cmd)
 
 	type scanOut struct {
 		stream Stream
@@ -169,6 +171,7 @@ func runProcess(ctx context.Context, conn Connection, command string, onEvent Ev
 	}
 
 	err = cmd.Wait()
+	stopCancellationWatch()
 	result.FinishedAt = time.Now()
 	result.Stdout = outBuf.String()
 	result.Stderr = errBuf.String()
@@ -177,6 +180,9 @@ func runProcess(ctx context.Context, conn Connection, command string, onEvent Ev
 	result.Events = append(result.Events, status)
 	if onEvent != nil {
 		onEvent(status)
+	}
+	if ctx.Err() != nil {
+		return result, ctx.Err()
 	}
 	return result, err
 }
@@ -234,7 +240,17 @@ func (e SSHExecutor) RunWithEvents(ctx context.Context, conn Connection, command
 	var stdout, stderr bytes.Buffer
 	session.SetOutput(&stdout, &stderr)
 	execCommand := commandForRemoteShell(conn, command)
-	err = session.Run(execCommand)
+	runDone := make(chan error, 1)
+	go func() { runDone <- session.Run(execCommand) }()
+	select {
+	case err = <-runDone:
+	case <-ctx.Done():
+		_ = session.Close()
+		_ = client.Close()
+		<-runDone
+		result.FinishedAt = time.Now()
+		return result, ctx.Err()
+	}
 	result.FinishedAt = time.Now()
 	result.Stdout = stdout.String()
 	result.Stderr = stderr.String()

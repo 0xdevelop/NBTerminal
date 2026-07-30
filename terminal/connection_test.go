@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -102,6 +103,26 @@ func TestLocalExecutorRunReportsExitCode(t *testing.T) {
 	}
 }
 
+func TestLocalExecutorRunHonorsCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := NewExecutor().Run(ctx, DefaultLocalConnection(), "sleep 30")
+		done <- err
+	}()
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("expected context cancellation, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("local command did not stop after cancellation")
+	}
+}
+
 func TestLocalExecutorRunCapturesLongLine(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -161,6 +182,23 @@ func (s *fakeSSHSession) Run(command string) error {
 }
 func (s *fakeSSHSession) Close() error { s.closed = true; return nil }
 
+type blockingSSHSession struct {
+	started chan struct{}
+	closed  chan struct{}
+	once    sync.Once
+}
+
+func (s *blockingSSHSession) SetOutput(_, _ io.Writer) {}
+func (s *blockingSSHSession) Run(string) error {
+	close(s.started)
+	<-s.closed
+	return errors.New("session closed")
+}
+func (s *blockingSSHSession) Close() error {
+	s.once.Do(func() { close(s.closed) })
+	return nil
+}
+
 func TestSSHExecutorUsesInjectableDialer(t *testing.T) {
 	session := &fakeSSHSession{}
 	client := &fakeSSHClient{session: session}
@@ -181,6 +219,37 @@ func TestSSHExecutorUsesInjectableDialer(t *testing.T) {
 	}
 	if len(result.Events) < 3 {
 		t.Fatalf("expected stdout/stderr/status events, got %#v", result.Events)
+	}
+}
+
+func TestSSHExecutorRunHonorsCancellation(t *testing.T) {
+	session := &blockingSSHSession{started: make(chan struct{}), closed: make(chan struct{})}
+	client := &fakeSSHClient{session: session}
+	dialer := &fakeSSHDialer{client: client}
+	conn := Connection{ID: "dev", Name: "Dev", Type: ConnectionTypeSSH, Host: "example.com", Port: 22, Username: "root", Password: "secret"}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := (SSHExecutor{Dialer: dialer}).Run(ctx, conn, "sleep 30")
+		done <- err
+	}()
+
+	select {
+	case <-session.started:
+		cancel()
+	case <-time.After(time.Second):
+		t.Fatal("SSH command did not start")
+	}
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("expected context cancellation, got %v", err)
+		}
+		if !client.closed {
+			t.Fatal("SSH client was not closed after cancellation")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("SSH command did not stop after cancellation")
 	}
 }
 
