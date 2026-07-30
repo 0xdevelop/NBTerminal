@@ -20,9 +20,10 @@ func LoadSigHandle(cleanAction func(), testMethods []func()) {
 	if config.CurrentApp.CurrentRunMode == gtbox.RunModeDebug {
 		testMethod(testMethods)
 	}
-	// 创建一个信号通道
-	chSig := make(chan os.Signal)
-	signal.Notify(chSig, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGKILL)
+	// 缓冲区避免信号到达时接收方尚未就绪；SIGKILL 无法被进程捕获。
+	chSig := make(chan os.Signal, 1)
+	signal.Notify(chSig, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
+	defer signal.Stop(chSig)
 
 	// 阻断主进程等待signal
 	asig := <-chSig
