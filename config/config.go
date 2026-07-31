@@ -23,6 +23,9 @@ const (
 	ProjectDescription           = "NB Terminal"
 	APIPortDefault               = 8765
 	CommandTimeoutDefaultSeconds = 60
+	WorkspaceSplitRatioDefault   = 0.35
+	WorkspaceSplitRatioMin       = 0.25
+	WorkspaceSplitRatioMax       = 0.65
 )
 
 var (
@@ -40,12 +43,13 @@ type TerminalSettings struct {
 }
 
 type FileConfig struct {
-	Api                *api_config.ApiConfig `yaml:"api" json:"api"`
-	Auth               *Auth                 `yaml:"auth" json:"auth"`
-	Language           string                `yaml:"language" json:"language"`
-	Terminal           *TerminalSettings     `yaml:"terminal" json:"terminal"`
-	Connections        []terminal.Connection `yaml:"connections" json:"connections"`
-	ActiveConnectionID string                `yaml:"active_connection_id" json:"active_connection_id"`
+	Api                 *api_config.ApiConfig `yaml:"api" json:"api"`
+	Auth                *Auth                 `yaml:"auth" json:"auth"`
+	Language            string                `yaml:"language" json:"language"`
+	Terminal            *TerminalSettings     `yaml:"terminal" json:"terminal"`
+	Connections         []terminal.Connection `yaml:"connections" json:"connections"`
+	ActiveConnectionID  string                `yaml:"active_connection_id" json:"active_connection_id"`
+	WorkspaceSplitRatio float64               `yaml:"workspace_split_ratio" json:"workspace_split_ratio"`
 }
 
 func (fc *FileConfig) Normalize() {
@@ -68,6 +72,14 @@ func (fc *FileConfig) Normalize() {
 	}
 	if fc.Terminal.CommandTimeoutSeconds <= 0 {
 		fc.Terminal.CommandTimeoutSeconds = CommandTimeoutDefaultSeconds
+	}
+
+	if fc.WorkspaceSplitRatio == 0 {
+		fc.WorkspaceSplitRatio = WorkspaceSplitRatioDefault
+	} else if fc.WorkspaceSplitRatio < WorkspaceSplitRatioMin {
+		fc.WorkspaceSplitRatio = WorkspaceSplitRatioMin
+	} else if fc.WorkspaceSplitRatio > WorkspaceSplitRatioMax {
+		fc.WorkspaceSplitRatio = WorkspaceSplitRatioMax
 	}
 	fc.Connections = terminal.NormalizeConnections(fc.Connections)
 	if len(fc.Connections) == 0 {

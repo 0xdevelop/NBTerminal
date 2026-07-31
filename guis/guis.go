@@ -362,9 +362,10 @@ type finalShellApp struct {
 	rows    []connectionProfile
 	idx     int
 
-	window *uikit.UIWindow
-	table  *uikit.UITableView
-	model  *tableModel
+	window    *uikit.UIWindow
+	workspace *uikit.UISplitView
+	table     *uikit.UITableView
+	model     *tableModel
 
 	searchInput *uikit.Input
 	nameInput   *uikit.Input
@@ -502,18 +503,40 @@ func (a *finalShellApp) build() {
 	a.status.View().SetAutomationID("app.status")
 	root.AddSubview(a.status)
 
+	a.workspace = uikit.NewUISplitView(margin, 72, winW-margin*2, 786, uikit.SplitHorizontal)
+	a.workspace.SetAutomationID("workspace.split")
+	a.workspace.SetDividerSize(8)
+	a.workspace.SetMinimumSizes(500, 568)
+	a.workspace.SetDividerColors(
+		uint(tokenColor(modernTheme.border)),
+		uint(tokenColor(modernTheme.selected)),
+		uint(tokenColor(modernTheme.primary)),
+	)
 	left := uikit.NewUIGroup(rect(margin, 72, leftW, 786))
 	left.SetBackgroundColor(uint(tokenColor(modernTheme.card)))
 	left.SetAutomationID("connections.panel")
-	root.AddSubview(left)
-	root.AddSubview(sectionTitle(margin+18, 86, 260, 24, tr("app.connections")))
-	root.AddSubview(mutedLabel(margin+18, 110, 430, 18, tr("connections.subtitle")))
-	root.AddSubview(mutedLabel(margin+18, 132, 70, 18, tr("connections.search")))
+	left.Raw().Resizable(left.Raw())
+	rightPanel := uikit.NewUIGroup(rect(rightX, 72, rightW, 786))
+	rightPanel.SetBackgroundColor(uint(tokenColor(modernTheme.card)))
+	rightPanel.SetAutomationID("terminal.panel")
+	rightPanel.Raw().Resizable(rightPanel.Raw())
+	a.workspace.SetLeftView(left)
+	a.workspace.SetRightView(rightPanel)
+	// Establish the authored 1440x900 design geometry before pane controls are
+	// attached. SplitView lays out empty pane content immediately; resetting this
+	// baseline ensures the final persisted-ratio resize translates every absolute
+	// FLTK child from the same coordinates used below.
+	left.Raw().Resize(margin, 72, leftW, 786)
+	rightPanel.Raw().Resize(rightX, 72, rightW, 786)
+	root.AddSubview(a.workspace)
+	left.AddSubview(sectionTitle(margin+18, 86, 260, 24, tr("app.connections")))
+	left.AddSubview(mutedLabel(margin+18, 110, 430, 18, tr("connections.subtitle")))
+	left.AddSubview(mutedLabel(margin+18, 132, 70, 18, tr("connections.search")))
 	a.searchInput = inputNoLabel(margin+82, 126, leftW-194, 30, "connections.search", tr("connections.search_placeholder"))
 	a.searchInput.OnChange(a.jumpToSearchMatch)
-	root.AddSubview(a.searchInput)
+	left.AddSubview(a.searchInput)
 	findBtn := button(margin+390, 126, 86, 30, tr("connections.find"), "connections.find", a.jumpToSearchMatch)
-	root.AddSubview(findBtn)
+	left.AddSubview(findBtn)
 
 	tv, err := uikit.NewUITableView(margin+14, 166, leftW-28, 362)
 	if err == nil {
@@ -530,52 +553,50 @@ func (a *finalShellApp) build() {
 		a.table.SetBackgroundColor(tokenColor(modernTheme.card))
 		a.table.SetCustomDraw(a.drawConnectionCell)
 		a.table.ReloadData()
-		root.AddSubview(a.table)
+		left.AddSubview(a.table)
 	}
 
-	root.AddSubview(sectionTitle(margin+18, 548, 260, 22, tr("details.title")))
+	left.AddSubview(sectionTitle(margin+18, 548, 260, 22, tr("details.title")))
 	a.nameInput = input(margin+82, 582, 164, 30, tr("field.name"), "form.name")
-	root.AddSubview(a.nameInput)
+	left.AddSubview(a.nameInput)
 	a.groupInput = input(margin+318, 582, 168, 30, tr("field.group"), "form.group")
-	root.AddSubview(a.groupInput)
+	left.AddSubview(a.groupInput)
 
 	a.typeInput = input(margin+82, 622, 92, 30, tr("field.type"), "form.type")
-	root.AddSubview(a.typeInput)
+	left.AddSubview(a.typeInput)
 	a.hostInput = input(margin+246, 622, 152, 30, tr("field.host"), "form.host")
-	root.AddSubview(a.hostInput)
+	left.AddSubview(a.hostInput)
 	a.portInput = input(margin+446, 622, 40, 30, tr("field.port"), "form.port")
-	root.AddSubview(a.portInput)
+	left.AddSubview(a.portInput)
 
 	a.userInput = input(margin+82, 662, 164, 30, tr("field.user"), "form.username")
-	root.AddSubview(a.userInput)
+	left.AddSubview(a.userInput)
 	a.passInput = uikit.NewInputWithType(margin+318, 662, 168, 30, tr("field.password"), uikit.SecretInput)
 	styleInput(a.passInput)
 	a.passInput.View().SetAutomationID("form.password")
-	root.AddSubview(a.passInput)
+	left.AddSubview(a.passInput)
 
 	a.workInput = input(margin+82, 702, 404, 30, tr("field.workdir"), "form.working_dir")
-	root.AddSubview(a.workInput)
+	left.AddSubview(a.workInput)
 
 	a.keyInput = input(margin+82, 742, 404, 30, tr("field.key"), "form.key")
-	root.AddSubview(a.keyInput)
+	left.AddSubview(a.keyInput)
 
 	addBtn := button(margin+14, 816, 82, 34, tr("action.new"), "action.new", a.newProfile)
-	root.AddSubview(addBtn)
+	left.AddSubview(addBtn)
 	saveBtn := button(margin+106, 816, 82, 34, tr("action.save"), "action.save", a.saveProfile)
-	root.AddSubview(saveBtn)
+	left.AddSubview(saveBtn)
 	deleteBtn := button(margin+198, 816, 82, 34, tr("action.delete"), "action.delete", a.deleteProfile)
-	root.AddSubview(deleteBtn)
+	left.AddSubview(deleteBtn)
 	testBtn := button(margin+290, 816, 82, 34, tr("action.test"), "action.test", a.testConnection)
-	root.AddSubview(testBtn)
+	left.AddSubview(testBtn)
 	connectBtn := primaryButton(margin+382, 816, 118, 34, tr("action.connect"), "action.connect", a.connectSelected)
-	root.AddSubview(connectBtn)
+	left.AddSubview(connectBtn)
 
-	rightPanel := uikit.NewUIGroup(rect(rightX, 72, rightW, 786))
 	rightPanel.SetBackgroundColor(uint(tokenColor(modernTheme.card)))
 	rightPanel.SetAutomationID("terminal.panel")
-	root.AddSubview(rightPanel)
-	root.AddSubview(sectionTitle(rightX+18, 86, 330, 24, tr("terminal.title")))
-	root.AddSubview(mutedLabel(rightX+18, 110, 650, 18, tr("terminal.subtitle")))
+	rightPanel.AddSubview(sectionTitle(rightX+18, 86, 330, 24, tr("terminal.title")))
+	rightPanel.AddSubview(mutedLabel(rightX+18, 110, 650, 18, tr("terminal.subtitle")))
 
 	a.output = uikit.NewUITextView(rect(rightX+18, 140, rightW-36, 608))
 	a.output.SetAutomationID("terminal.output").SetAutomationName(tr("terminal.output_name"))
@@ -585,16 +606,16 @@ func (a *finalShellApp) build() {
 	a.output.SetBackgroundColor(uint(tokenColor(modernTheme.terminal)))
 	a.output.SetText(terminalWelcomeText())
 	a.appendRecentHistory()
-	root.AddSubview(a.output)
+	rightPanel.AddSubview(a.output)
 
 	bar := commandBarLayout(rightX, rightW)
 	historyBtn := button(bar.history.X, bar.history.Y, bar.history.Width, bar.history.Height, tr("terminal.history"), "terminal.history", a.showSelectedHistory)
-	root.AddSubview(historyBtn)
+	rightPanel.AddSubview(historyBtn)
 	recallBtn := button(bar.last.X, bar.last.Y, bar.last.Width, bar.last.Height, tr("terminal.last"), "terminal.last_command", a.recallLastCommand)
-	root.AddSubview(recallBtn)
+	rightPanel.AddSubview(recallBtn)
 	clearBtn := button(bar.clear.X, bar.clear.Y, bar.clear.Width, bar.clear.Height, tr("terminal.clear"), "terminal.clear", a.clearTerminalOutput)
-	root.AddSubview(clearBtn)
-	root.AddSubview(mutedLabel(bar.command.X, bar.commandLabelY, 160, 18, tr("terminal.command")))
+	rightPanel.AddSubview(clearBtn)
+	rightPanel.AddSubview(mutedLabel(bar.command.X, bar.commandLabelY, 160, 18, tr("terminal.command")))
 	a.cmdInput = uikit.NewUITextView(rect(bar.command.X, bar.command.Y, bar.command.Width, bar.command.Height))
 	a.cmdInput.SetAutomationID("terminal.command").SetAutomationName(tr("terminal.command"))
 	a.cmdInput.SetWrapNone()
@@ -609,17 +630,39 @@ func (a *finalShellApp) build() {
 		a.runCommand()
 		return true
 	})
-	root.AddSubview(a.cmdInput)
+	rightPanel.AddSubview(a.cmdInput)
 	a.stopButton = button(bar.stop.X, bar.stop.Y, bar.stop.Width, bar.stop.Height, tr("terminal.stop"), "terminal.stop", a.stopCommand)
-	root.AddSubview(a.stopButton)
+	rightPanel.AddSubview(a.stopButton)
 	a.runButton = primaryButton(bar.run.X, bar.run.Y, bar.run.Width, bar.run.Height, tr("terminal.run"), "terminal.run", a.runCommand)
-	root.AddSubview(a.runButton)
+	rightPanel.AddSubview(a.runButton)
+	// Apply the persisted ratio only after pane controls are attached. FLTK uses
+	// absolute child coordinates, so this final native resize translates and
+	// reflows the complete pane hierarchy together (including language rebuilds).
+	if config.GlobalConfig != nil {
+		a.workspace.SetPosition(config.GlobalConfig.WorkspaceSplitRatio)
+	} else {
+		a.workspace.SetPosition(config.WorkspaceSplitRatioDefault)
+	}
+	a.workspace.OnPositionChanged(a.workspacePositionChanged)
 	a.setCommandRunning(false)
 
 	if len(a.rows) > 0 {
 		a.selectRow(activeConnectionIndex(a.rows))
 	}
 	a.window.Show()
+}
+
+func (a *finalShellApp) workspacePositionChanged(change uikit.SplitPositionChange) {
+	if change.Reason != uikit.SplitChangeDrag || config.GlobalConfig == nil || config.CurrentApp == nil {
+		return
+	}
+	previous := config.GlobalConfig.WorkspaceSplitRatio
+	config.GlobalConfig.WorkspaceSplitRatio = change.Geometry.Ratio
+	if err := config.SaveConfig(config.CurrentApp.AppConfigFilePath); err != nil {
+		config.GlobalConfig.WorkspaceSplitRatio = previous
+		gtbox_log.LogErrorf("save workspace split ratio failed: %s", err.Error())
+		a.showTopNotice(tr("notice.failed.title"), err.Error(), true)
+	}
 }
 
 func (a *finalShellApp) changeLanguage(index int) {

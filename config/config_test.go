@@ -85,6 +85,28 @@ func TestFileConfigNormalizePreservesPositiveTerminalTimeout(t *testing.T) {
 	}
 }
 
+func TestFileConfigNormalizeSplitRatio(t *testing.T) {
+	tests := []struct {
+		name string
+		in   float64
+		want float64
+	}{
+		{name: "default", in: 0, want: WorkspaceSplitRatioDefault},
+		{name: "preserved", in: 0.42, want: 0.42},
+		{name: "clamped low", in: 0.01, want: WorkspaceSplitRatioMin},
+		{name: "clamped high", in: 0.99, want: WorkspaceSplitRatioMax},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &FileConfig{WorkspaceSplitRatio: tt.in}
+			cfg.Normalize()
+			if cfg.WorkspaceSplitRatio != tt.want {
+				t.Fatalf("split ratio = %v, want %v", cfg.WorkspaceSplitRatio, tt.want)
+			}
+		})
+	}
+}
+
 func TestFileConfigNormalizeRepairsStaleActiveConnection(t *testing.T) {
 	cfg := &FileConfig{
 		ActiveConnectionID: "missing",
