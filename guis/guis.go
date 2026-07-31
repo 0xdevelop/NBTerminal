@@ -203,6 +203,16 @@ func (s *connectionStore) SaveActive(list []connectionProfile, activeID string) 
 	return syncConfigConnections(s.list, activeID)
 }
 
+// SetActive records a table selection without rewriting the encrypted
+// connection store. Selection changes are frequent enough to deserve a small,
+// explicit path, while the shared config remains the source of truth used at
+// the next launch.
+func (s *connectionStore) SetActive(activeID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return syncConfigConnections(s.list, activeID)
+}
+
 func (s *connectionStore) List() []connectionProfile {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -549,7 +559,14 @@ func (a *finalShellApp) build() {
 		a.table.AddColumn(tableview.TableColumn{Identifier: "last", Title: tr("connections.last_used"), Width: 96})
 		a.model = &tableModel{rows: a.rows}
 		a.table.SetDataSource(a.model)
-		a.table.SetDelegate(tableDelegate{onSelect: a.selectRow})
+		a.table.SetDelegate(tableDelegate{onSelect: func(row int) {
+			a.selectRow(row)
+			if err := a.persistActiveRow(row); err != nil {
+				gtbox_log.LogErrorf("save active connection failed: %s", err.Error())
+				a.setStatus(tr("status.save_failed"))
+				a.showTopNotice(tr("status.save_failed"), err.Error(), true)
+			}
+		}})
 		a.table.SetBackgroundColor(tokenColor(modernTheme.card))
 		a.table.SetCustomDraw(a.drawConnectionCell)
 		a.table.ReloadData()
@@ -1161,6 +1178,13 @@ func (a *finalShellApp) selectRow(row int) {
 	if a.table != nil {
 		a.table.ReloadData()
 	}
+}
+
+func (a *finalShellApp) persistActiveRow(row int) error {
+	if a == nil || a.store == nil || row < 0 || row >= len(a.rows) {
+		return nil
+	}
+	return a.store.SetActive(a.rows[row].ID)
 }
 
 func (a *finalShellApp) newProfile() {

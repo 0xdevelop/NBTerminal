@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -259,6 +260,33 @@ func TestConnectionStoreSaveActiveClearsActiveWhenListEmpty(t *testing.T) {
 	}
 	if config.GlobalConfig.ActiveConnectionID != "" {
 		t.Fatalf("expected active connection to be cleared, got %q", config.GlobalConfig.ActiveConnectionID)
+	}
+}
+
+func TestConnectionStoreSetActivePersistsSelectionWithoutReplacingProfiles(t *testing.T) {
+	oldGlobal := config.GlobalConfig
+	oldApp := config.CurrentApp
+	t.Cleanup(func() { config.GlobalConfig, config.CurrentApp = oldGlobal, oldApp })
+	config.CurrentApp = nil
+	config.GlobalConfig = &config.FileConfig{ActiveConnectionID: "first"}
+
+	profiles := []connectionProfile{
+		{ID: "first", Name: "First", Group: "Default", Type: connectionTypeLocal},
+		{ID: "second", Name: "Second", Group: "Default", Type: connectionTypeLocal},
+	}
+	store := newConnectionStore(t.TempDir())
+	if err := store.SaveActive(profiles, "first"); err != nil {
+		t.Fatalf("SaveActive failed: %v", err)
+	}
+	before := store.List()
+	if err := store.SetActive("second"); err != nil {
+		t.Fatalf("SetActive failed: %v", err)
+	}
+	if config.GlobalConfig.ActiveConnectionID != "second" {
+		t.Fatalf("expected selected active connection second, got %q", config.GlobalConfig.ActiveConnectionID)
+	}
+	if got := store.List(); !reflect.DeepEqual(got, before) {
+		t.Fatalf("SetActive replaced profiles: before=%#v after=%#v", before, got)
 	}
 }
 
