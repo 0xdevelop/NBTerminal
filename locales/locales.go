@@ -3,20 +3,18 @@ package locales
 import (
 	"embed"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+
 	"github.com/george012/gtbox/gtbox_log"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"golang.org/x/text/language"
-	"path/filepath"
-	"sync"
 )
 
 //go:embed *.json
-var locales embed.FS
-
-var (
-	once          sync.Once
-	currentLocale *aLocale
-)
+var localeFiles embed.FS
 
 type Language int
 
@@ -27,88 +25,141 @@ const (
 	LanguageWithZhCN
 )
 
+var supportedLanguages = []Language{
+	LanguageWithEnglish,
+	LanguageWithRussia,
+	LanguageWithZhHK,
+	LanguageWithZhCN,
+}
+
 func (lg Language) LanguageTag() string {
-	return [...]string{"en", "ru", "zh-HK", "zh-CN"}[lg]
+	tags := [...]string{"en", "ru", "zh-HK", "zh-CN"}
+	if int(lg) < 0 || int(lg) >= len(tags) {
+		return tags[LanguageWithEnglish]
+	}
+	return tags[lg]
 }
 
 func (lg Language) String() string {
-	return [...]string{"English", "Русский", "繁體中文", "简体中文"}[lg]
+	names := [...]string{"English", "Русский", "繁體中文", "简体中文"}
+	if int(lg) < 0 || int(lg) >= len(names) {
+		return names[LanguageWithEnglish]
+	}
+	return names[lg]
+}
+
+func SupportedLanguages() []Language {
+	return append([]Language(nil), supportedLanguages...)
 }
 
 func GetLanguageFromTag(tag string) Language {
-	lang := LanguageWithEnglish
-	switch tag {
-	case LanguageWithEnglish.LanguageTag():
-		lang = LanguageWithEnglish
-	case LanguageWithRussia.LanguageTag():
-		lang = LanguageWithRussia
-	case LanguageWithZhHK.LanguageTag():
-		lang = LanguageWithZhHK
-	case LanguageWithZhCN.LanguageTag():
-		lang = LanguageWithZhCN
+	normalized := strings.ToLower(strings.TrimSpace(tag))
+	if i := strings.IndexByte(normalized, ':'); i >= 0 {
+		normalized = normalized[:i]
+	}
+	if i := strings.IndexByte(normalized, '.'); i >= 0 {
+		normalized = normalized[:i]
+	}
+	normalized = strings.ReplaceAll(normalized, "_", "-")
+	switch {
+	case normalized == "ru" || strings.HasPrefix(normalized, "ru-"):
+		return LanguageWithRussia
+	case normalized == "zh-hk", normalized == "zh-tw", normalized == "zh-mo",
+		strings.Contains(normalized, "hant"):
+		return LanguageWithZhHK
+	case normalized == "zh" || strings.HasPrefix(normalized, "zh-"):
+		return LanguageWithZhCN
 	default:
 		return LanguageWithEnglish
 	}
-	return lang
 }
 
-type aLocale struct {
-	sync.Mutex
+func DetectSystemLanguage() Language {
+	for _, key := range []string{"LC_ALL", "LC_MESSAGES", "LANGUAGE", "LANG"} {
+		if value := strings.TrimSpace(os.Getenv(key)); value != "" && value != "C" && value != "POSIX" {
+			return GetLanguageFromTag(value)
+		}
+	}
+	return LanguageWithEnglish
+}
+
+type localeStore struct {
+	sync.RWMutex
 	localizer *i18n.Localizer
+	fallback  *i18n.Localizer
 	bundle    *i18n.Bundle
+	language  Language
 }
 
-func instanceConfig() *aLocale {
+var (
+	once    sync.Once
+	current *localeStore
+)
+
+func instanceConfig() *localeStore {
 	once.Do(func() {
-		currentLocale = &aLocale{}
-		currentLocale.initBundle()
+		current = &localeStore{language: LanguageWithEnglish}
+		current.initBundle()
 	})
-	return currentLocale
+	return current
 }
 
-// 初始化和加载资源文件（仅执行一次）
-func (al *aLocale) initBundle() {
-	al.bundle = i18n.NewBundle(language.English)
-	al.bundle.RegisterUnmarshalFunc("json", json.Unmarshal)
-
-	entries, err := locales.ReadDir(".")
+func (s *localeStore) initBundle() {
+	s.bundle = i18n.NewBundle(language.English)
+	s.bundle.RegisterUnmarshalFunc("json", json.Unmarshal)
+	entries, err := localeFiles.ReadDir(".")
 	if err != nil {
 		gtbox_log.LogErrorf("Failed to read locales directory: %v", err)
 	}
-
-	// 加载嵌入的翻译文件
 	for _, entry := range entries {
-		if entry.IsDir() {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
 			continue
 		}
-		if filepath.Ext(entry.Name()) == ".json" {
-			data, err := locales.ReadFile(entry.Name())
-			if err != nil {
-				gtbox_log.LogErrorf("Failed to read file: %v", err)
-			}
-			if _, err := al.bundle.ParseMessageFileBytes(data, entry.Name()); err != nil {
-				gtbox_log.LogErrorf("Failed to parse message file: %v", err)
-			}
+		data, readErr := localeFiles.ReadFile(entry.Name())
+		if readErr != nil {
+			gtbox_log.LogErrorf("Failed to read locale file %s: %v", entry.Name(), readErr)
+			continue
+		}
+		if _, parseErr := s.bundle.ParseMessageFileBytes(data, entry.Name()); parseErr != nil {
+			gtbox_log.LogErrorf("Failed to parse locale file %s: %v", entry.Name(), parseErr)
 		}
 	}
+	s.fallback = i18n.NewLocalizer(s.bundle, LanguageWithEnglish.LanguageTag())
+	s.localizer = s.fallback
 }
 
-// ResetLocaleLanguage 初始化本地化器
+// ResetLocaleLanguage switches the process-wide UI locale. Unsupported tags
+// safely fall back to English instead of making individual widgets panic.
 func ResetLocaleLanguage(locale string) {
-	al := instanceConfig()
-	al.Lock()
-	defer al.Unlock()
-
-	al.localizer = i18n.NewLocalizer(al.bundle, locale)
+	s := instanceConfig()
+	lang := GetLanguageFromTag(locale)
+	s.Lock()
+	s.language = lang
+	s.localizer = i18n.NewLocalizer(s.bundle, lang.LanguageTag(), LanguageWithEnglish.LanguageTag())
+	s.Unlock()
 }
 
+func CurrentLanguage() Language {
+	s := instanceConfig()
+	s.RLock()
+	defer s.RUnlock()
+	return s.language
+}
+
+// GetLocalesMessage returns a translated UTF-8 string. Missing keys fall back
+// to English, then to the key itself, so an incomplete translation never crashes
+// the GUI or produces an empty control label.
 func GetLocalesMessage(messageID string) string {
-	al := instanceConfig()
-	al.Lock()
-	defer al.Unlock()
-	if al.localizer == nil {
-		gtbox_log.LogErrorf("Localizer is not initialized")
-		return ""
+	s := instanceConfig()
+	s.RLock()
+	defer s.RUnlock()
+	if text, err := s.localizer.Localize(&i18n.LocalizeConfig{MessageID: messageID}); err == nil && text != "" {
+		return text
 	}
-	return al.localizer.MustLocalize(&i18n.LocalizeConfig{MessageID: messageID})
+	if text, err := s.fallback.Localize(&i18n.LocalizeConfig{MessageID: messageID}); err == nil && text != "" {
+		return text
+	}
+	return messageID
 }
+
+func T(messageID string) string { return GetLocalesMessage(messageID) }

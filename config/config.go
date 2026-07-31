@@ -59,7 +59,9 @@ func (fc *FileConfig) Normalize() {
 		}
 	}
 	if fc.Language == "" {
-		fc.Language = locales.LanguageWithEnglish.LanguageTag()
+		fc.Language = locales.DetectSystemLanguage().LanguageTag()
+	} else {
+		fc.Language = locales.GetLanguageFromTag(fc.Language).LanguageTag()
 	}
 	if fc.Terminal == nil {
 		fc.Terminal = &TerminalSettings{}
@@ -142,7 +144,7 @@ func generateDefaultConfigWithJsonContent() []byte {
 			Username: gtbox_encryption.GTEnc("root", "username"),
 			Password: gtbox_encryption.GTEnc("root", "password"),
 		},
-		Language: locales.LanguageWithEnglish.LanguageTag(),
+		Language: locales.DetectSystemLanguage().LanguageTag(),
 	}
 	fCfg.Normalize()
 

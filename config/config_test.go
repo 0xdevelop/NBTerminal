@@ -56,6 +56,21 @@ func TestLoadConfigKeepsOldConfigCompatible(t *testing.T) {
 	}
 }
 
+func TestFileConfigNormalizeDetectsAndNormalizesLanguage(t *testing.T) {
+	t.Setenv("LC_ALL", "zh_CN.UTF-8")
+	cfg := &FileConfig{}
+	cfg.Normalize()
+	if cfg.Language != "zh-CN" {
+		t.Fatalf("detected language = %q", cfg.Language)
+	}
+
+	cfg.Language = "ru_RU.UTF-8"
+	cfg.Normalize()
+	if cfg.Language != "ru" {
+		t.Fatalf("normalized language = %q", cfg.Language)
+	}
+}
+
 func TestFileConfigNormalizePreservesPositiveTerminalTimeout(t *testing.T) {
 	cfg := &FileConfig{Terminal: &TerminalSettings{CommandTimeoutSeconds: 7}}
 	cfg.Normalize()

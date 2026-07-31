@@ -112,7 +112,10 @@ func runProcess(ctx context.Context, conn Connection, command string, onEvent Ev
 	result := CommandResult{Connection: conn, Command: command, StartedAt: started, ExitCode: -1}
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		cmd = exec.CommandContext(ctx, "cmd", "/C", command)
+		// cmd.exe otherwise emits text in the active OEM code page. Switching the
+		// child shell to UTF-8 keeps CJK/emoji output valid before it reaches FLTK.
+		cmd = exec.CommandContext(ctx, "cmd", "/D", "/Q", "/C", "chcp 65001>nul & "+command)
+		cmd.Env = append(os.Environ(), "PYTHONUTF8=1", "PYTHONIOENCODING=utf-8")
 	} else {
 		cmd = exec.CommandContext(ctx, "sh", "-c", command)
 	}
@@ -143,7 +146,7 @@ func runProcess(ctx context.Context, conn Connection, command string, onEvent Ev
 		defer func() { done <- struct{}{} }()
 		s := newLineScanner(r)
 		for s.Scan() {
-			ch <- scanOut{stream: stream, text: s.Text()}
+			ch <- scanOut{stream: stream, text: normalizeUTF8(s.Text())}
 		}
 	}
 	go scan(StreamStdout, stdout)
@@ -252,8 +255,8 @@ func (e SSHExecutor) RunWithEvents(ctx context.Context, conn Connection, command
 		return result, ctx.Err()
 	}
 	result.FinishedAt = time.Now()
-	result.Stdout = stdout.String()
-	result.Stderr = stderr.String()
+	result.Stdout = normalizeUTF8(stdout.String())
+	result.Stderr = normalizeUTF8(stderr.String())
 	if exitErr, ok := err.(*ssh.ExitError); ok {
 		result.ExitCode = exitErr.ExitStatus()
 	} else if err == nil {

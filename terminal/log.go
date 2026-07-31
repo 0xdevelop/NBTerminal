@@ -40,10 +40,10 @@ func HistoryFromResult(result CommandResult) HistoryEntry {
 	}
 	return HistoryEntry{
 		Time:           when,
-		ConnectionID:   result.Connection.ID,
-		ConnectionName: result.Connection.Name,
+		ConnectionID:   normalizeUTF8(result.Connection.ID),
+		ConnectionName: normalizeUTF8(result.Connection.Name),
 		ConnectionType: result.Connection.Type,
-		Command:        result.Command,
+		Command:        normalizeUTF8(result.Command),
 		ExitCode:       result.ExitCode,
 		DurationMS:     duration,
 		Stdout:         truncateHistoryOutput(result.Stdout),
@@ -52,6 +52,7 @@ func HistoryFromResult(result CommandResult) HistoryEntry {
 }
 
 func truncateHistoryOutput(s string) string {
+	s = normalizeUTF8(s)
 	if len(s) <= historyOutputMaxBytes {
 		return s
 	}

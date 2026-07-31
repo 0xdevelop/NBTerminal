@@ -144,6 +144,27 @@ func TestHistoryFromResultTruncatesLargeOutput(t *testing.T) {
 	}
 }
 
+func TestHistoryFromResultNormalizesInvalidUTF8(t *testing.T) {
+	invalid := string([]byte{'x', 0xff})
+	entry := HistoryFromResult(CommandResult{
+		Connection: Connection{ID: invalid, Name: "连接 🚀", Type: ConnectionTypeLocal},
+		Command:    invalid,
+		Stdout:     "中文 " + invalid,
+		Stderr:     "ошибка",
+	})
+	for name, value := range map[string]string{
+		"connection id":   entry.ConnectionID,
+		"connection name": entry.ConnectionName,
+		"command":         entry.Command,
+		"stdout":          entry.Stdout,
+		"stderr":          entry.Stderr,
+	} {
+		if !utf8.ValidString(value) {
+			t.Fatalf("%s is not valid UTF-8: %q", name, value)
+		}
+	}
+}
+
 func TestHistoryFromResultOmitsSecrets(t *testing.T) {
 	started := time.Now().UTC()
 	result := CommandResult{

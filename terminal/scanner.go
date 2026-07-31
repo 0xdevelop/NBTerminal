@@ -3,6 +3,8 @@ package terminal
 import (
 	"bufio"
 	"io"
+	"strings"
+	"unicode/utf8"
 )
 
 const maxTerminalLineBytes = 10 * 1024 * 1024
@@ -16,4 +18,11 @@ func newLineScanner(r io.Reader) *bufio.Scanner {
 	s := bufio.NewScanner(r)
 	s.Buffer(make([]byte, 0, 64*1024), maxTerminalLineBytes)
 	return s
+}
+
+func normalizeUTF8(text string) string {
+	if utf8.ValidString(text) {
+		return text
+	}
+	return strings.ToValidUTF8(text, "\uFFFD")
 }

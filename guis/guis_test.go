@@ -408,9 +408,39 @@ func TestCommandBarLayoutKeepsControlsInsideTerminalPanel(t *testing.T) {
 
 func TestTerminalWelcomeText(t *testing.T) {
 	text := terminalWelcomeText()
-	for _, want := range []string{"NBTerminal FinalShell Mode", "local shell", "SSH"} {
+	for _, want := range []string{"NBTerminal", "Local", "SSH", "UTF-8"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("welcome text missing %q: %q", want, text)
+		}
+	}
+}
+
+func TestNativeFontsCoverSupportedDesktopPlatforms(t *testing.T) {
+	for _, goos := range []string{"linux", "darwin", "windows"} {
+		fonts := nativeFontsForOS(goos)
+		for name, font := range map[string]string{
+			"sans": fonts.sans, "sans bold": fonts.sansBold,
+			"sans italic": fonts.sansItalic, "sans bold italic": fonts.sansBoldItalic,
+			"mono": fonts.mono, "mono bold": fonts.monoBold,
+			"mono italic": fonts.monoItalic, "mono bold italic": fonts.monoBoldItalic,
+			"emoji": fonts.emoji,
+		} {
+			if strings.TrimSpace(font) == "" {
+				t.Fatalf("%s %s font is empty", goos, name)
+			}
+		}
+	}
+}
+
+func TestEmojiRuneDetectionKeepsTextScriptsOnPrimaryFont(t *testing.T) {
+	for _, r := range []rune{'🚀', '😀', '☀', '\ufe0f', '\u200d'} {
+		if !isEmojiRune(r) {
+			t.Errorf("expected %U to use emoji fallback", r)
+		}
+	}
+	for _, r := range []rune{'中', '日', '한', 'e', '\u0301'} {
+		if isEmojiRune(r) {
+			t.Errorf("expected %U to remain on primary font", r)
 		}
 	}
 }

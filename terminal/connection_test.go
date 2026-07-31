@@ -14,6 +14,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -138,6 +139,17 @@ func TestLocalExecutorRunCapturesLongLine(t *testing.T) {
 	}
 }
 
+func TestLocalExecutorPreservesUTF8Output(t *testing.T) {
+	const want = "你好，终端 · 日本語 · 한국어 · 🚀 · é"
+	result, err := NewExecutor().Run(context.Background(), DefaultLocalConnection(), "printf '"+want+"\\n'")
+	if err != nil {
+		t.Fatalf("local UTF-8 command failed: %v", err)
+	}
+	if strings.TrimSpace(result.Stdout) != want {
+		t.Fatalf("UTF-8 output changed: %q", result.Stdout)
+	}
+}
+
 type fakeSSHDialer struct {
 	client SSHClient
 	err    error
@@ -168,6 +180,8 @@ func (c *fakeSSHClient) Close() error { c.closed = true; return nil }
 type fakeSSHSession struct {
 	stdout io.Writer
 	stderr io.Writer
+	out    string
+	errOut string
 	err    error
 	cmd    string
 	closed bool
@@ -176,8 +190,14 @@ type fakeSSHSession struct {
 func (s *fakeSSHSession) SetOutput(stdout, stderr io.Writer) { s.stdout, s.stderr = stdout, stderr }
 func (s *fakeSSHSession) Run(command string) error {
 	s.cmd = command
-	_, _ = io.WriteString(s.stdout, "remote-ok\n")
-	_, _ = io.WriteString(s.stderr, "remote-warn\n")
+	if s.out == "" {
+		s.out = "remote-ok\n"
+	}
+	if s.errOut == "" {
+		s.errOut = "remote-warn\n"
+	}
+	_, _ = io.WriteString(s.stdout, s.out)
+	_, _ = io.WriteString(s.stderr, s.errOut)
 	return s.err
 }
 func (s *fakeSSHSession) Close() error { s.closed = true; return nil }
@@ -219,6 +239,22 @@ func TestSSHExecutorUsesInjectableDialer(t *testing.T) {
 	}
 	if len(result.Events) < 3 {
 		t.Fatalf("expected stdout/stderr/status events, got %#v", result.Events)
+	}
+}
+
+func TestSSHExecutorNormalizesInvalidUTF8(t *testing.T) {
+	session := &fakeSSHSession{out: "中文 " + string([]byte{0xff}) + "\n", errOut: "ошибка\n"}
+	client := &fakeSSHClient{session: session}
+	conn := Connection{ID: "utf8", Name: "日本語 🚀", Type: ConnectionTypeSSH, Host: "example.com", Port: 22, Username: "root", Password: "secret"}
+	result, err := (SSHExecutor{Dialer: &fakeSSHDialer{client: client}}).Run(context.Background(), conn, "printf utf8")
+	if err != nil {
+		t.Fatalf("ssh UTF-8 run failed: %v", err)
+	}
+	if !utf8.ValidString(result.Stdout) || !utf8.ValidString(result.Stderr) {
+		t.Fatalf("SSH output is not valid UTF-8: stdout=%q stderr=%q", result.Stdout, result.Stderr)
+	}
+	if !strings.ContainsRune(result.Stdout, '\uFFFD') || !strings.Contains(result.Stderr, "ошибка") {
+		t.Fatalf("unexpected normalized SSH output: %#v", result)
 	}
 }
 
