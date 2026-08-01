@@ -54,6 +54,13 @@ func TestLoadConfigKeepsOldConfigCompatible(t *testing.T) {
 	if len(GlobalConfig.Connections) != 1 || GlobalConfig.Connections[0].Type != terminal.ConnectionTypeLocal {
 		t.Fatalf("expected default local connection, got %#v", GlobalConfig.Connections)
 	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("loaded config mode = %o, want 600", got)
+	}
 }
 
 func TestFileConfigNormalizeDetectsAndNormalizesLanguage(t *testing.T) {
@@ -124,5 +131,47 @@ func TestFileConfigNormalizeRepairsStaleActiveConnection(t *testing.T) {
 	cfg.Normalize()
 	if cfg.ActiveConnectionID != "local-two" {
 		t.Fatalf("expected valid active id to be preserved, got %q", cfg.ActiveConnectionID)
+	}
+}
+
+func TestSaveConfigAtomicallyPersistsUTF8WithPrivatePermissions(t *testing.T) {
+	oldGlobal := GlobalConfig
+	t.Cleanup(func() { GlobalConfig = oldGlobal })
+	GlobalConfig = &FileConfig{
+		Language: "zh-CN",
+		Connections: []terminal.Connection{
+			{ID: "本地-🚀", Name: "中文 · 日本語 · 한국어 · 🚀 · é", Type: terminal.ConnectionTypeLocal},
+		},
+		ActiveConnectionID: "本地-🚀",
+	}
+
+	path := filepath.Join(t.TempDir(), "nested", "config.json")
+	if err := SaveConfig(path); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("config mode = %o, want 600", got)
+	}
+	buf, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded FileConfig
+	if err := json.Unmarshal(buf, &decoded); err != nil {
+		t.Fatalf("saved config is invalid JSON: %v", err)
+	}
+	if len(decoded.Connections) != 1 || decoded.Connections[0].Name != GlobalConfig.Connections[0].Name {
+		t.Fatalf("UTF-8 config did not round-trip: %#v", decoded.Connections)
+	}
+	matches, err := filepath.Glob(filepath.Join(filepath.Dir(path), ".config.json.tmp-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("temporary files left behind: %v", matches)
 	}
 }

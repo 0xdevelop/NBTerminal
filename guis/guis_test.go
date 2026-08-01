@@ -11,6 +11,7 @@ import (
 
 	"github.com/0xdevelop/NBTerminal/config"
 	"github.com/0xdevelop/NBTerminal/terminal"
+	"github.com/george012/gtbox"
 )
 
 func TestCommandTimeoutUsesConfigDefaultAndOverride(t *testing.T) {
@@ -247,6 +248,48 @@ func TestConnectionStoreSaveActiveSyncsSelectedGlobalConfig(t *testing.T) {
 	}
 }
 
+func TestConnectionStoreSaveActiveRollsBackWhenConfigPersistenceFails(t *testing.T) {
+	oldGlobal := config.GlobalConfig
+	oldApp := config.CurrentApp
+	t.Cleanup(func() { config.GlobalConfig, config.CurrentApp = oldGlobal, oldApp })
+	config.CurrentApp = nil
+	config.GlobalConfig = &config.FileConfig{}
+
+	dir := t.TempDir()
+	store := newConnectionStore(dir)
+	initial := []connectionProfile{{ID: "first", Name: "First", Group: "Default", Type: connectionTypeLocal}}
+	if err := store.SaveActive(initial, "first"); err != nil {
+		t.Fatalf("initial SaveActive failed: %v", err)
+	}
+	beforeProfiles := store.List()
+	beforeConfig := append([]terminal.Connection(nil), config.GlobalConfig.Connections...)
+
+	blocker := filepath.Join(dir, "not-a-directory")
+	if err := os.WriteFile(blocker, []byte("block"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config.CurrentApp = config.NewApp("NBTerminal-test", "test.nbterminal", "test", gtbox.RunModeTest, 0)
+	config.CurrentApp.AppConfigFilePath = filepath.Join(blocker, "config.json")
+
+	next := []connectionProfile{{ID: "second", Name: "Second", Group: "Default", Type: connectionTypeLocal}}
+	if err := store.SaveActive(next, "second"); err == nil {
+		t.Fatal("expected config persistence failure")
+	}
+	if got := store.List(); !reflect.DeepEqual(got, beforeProfiles) {
+		t.Fatalf("in-memory connection store was not rolled back: %#v", got)
+	}
+	reloaded := newConnectionStore(dir)
+	if err := reloaded.Load(); err != nil {
+		t.Fatalf("reload failed: %v", err)
+	}
+	if got := reloaded.List(); !reflect.DeepEqual(got, beforeProfiles) {
+		t.Fatalf("on-disk connection store was not rolled back: %#v", got)
+	}
+	if config.GlobalConfig.ActiveConnectionID != "first" || !reflect.DeepEqual(config.GlobalConfig.Connections, beforeConfig) {
+		t.Fatalf("global config was not rolled back: %#v", config.GlobalConfig)
+	}
+}
+
 func TestConnectionStoreSaveActiveClearsActiveWhenListEmpty(t *testing.T) {
 	oldGlobal := config.GlobalConfig
 	oldApp := config.CurrentApp
@@ -260,6 +303,56 @@ func TestConnectionStoreSaveActiveClearsActiveWhenListEmpty(t *testing.T) {
 	}
 	if config.GlobalConfig.ActiveConnectionID != "" {
 		t.Fatalf("expected active connection to be cleared, got %q", config.GlobalConfig.ActiveConnectionID)
+	}
+}
+
+func TestConnectionStoreAtomicallyPersistsUnicodeWithPrivatePermissions(t *testing.T) {
+	oldGlobal := config.GlobalConfig
+	oldApp := config.CurrentApp
+	t.Cleanup(func() { config.GlobalConfig, config.CurrentApp = oldGlobal, oldApp })
+	config.CurrentApp = nil
+	config.GlobalConfig = nil
+
+	dir := t.TempDir()
+	store := newConnectionStore(dir)
+	profile := connectionProfile{
+		ID: "本地-🚀", Name: "中文 · 日本語 · 한국어 · 🚀 · é", Group: "多语言",
+		Type: connectionTypeLocal, WorkingDir: filepath.Join(dir, "工作目录"),
+	}
+	if err := store.Save([]connectionProfile{profile}); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+	info, err := os.Stat(store.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("connection store mode = %o, want 600", got)
+	}
+	if err := os.Chmod(store.path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	reloaded := newConnectionStore(dir)
+	if err := reloaded.Load(); err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	info, err = os.Stat(store.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("loaded connection store mode = %o, want 600", got)
+	}
+	got := reloaded.List()
+	if len(got) != 1 || got[0].Name != profile.Name || got[0].WorkingDir != profile.WorkingDir {
+		t.Fatalf("UTF-8 profile did not round-trip: %#v", got)
+	}
+	matches, err := filepath.Glob(filepath.Join(dir, ".connections.json.tmp-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("temporary files left behind: %v", matches)
 	}
 }
 
@@ -549,5 +642,43 @@ func TestUpsertAndRemoveProfileByID(t *testing.T) {
 	rows = removeProfileByID(rows, "prod")
 	if len(rows) != 2 || indexProfileByID(rows, "prod") != -1 {
 		t.Fatalf("expected prod removal, got %#v", rows)
+	}
+}
+
+func TestRemoveSelectedProfileCommitsOnlyAfterPersistenceSucceeds(t *testing.T) {
+	oldGlobal := config.GlobalConfig
+	oldApp := config.CurrentApp
+	t.Cleanup(func() { config.GlobalConfig, config.CurrentApp = oldGlobal, oldApp })
+	config.GlobalConfig = nil
+	config.CurrentApp = nil
+
+	rows := []connectionProfile{
+		{ID: "local", Name: "Local", Type: connectionTypeLocal},
+		{ID: "prod", Name: "Prod", Type: connectionTypeSSH},
+	}
+	blocker := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blocker, []byte("block"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	app := &finalShellApp{
+		store:   newConnectionStore(blocker),
+		allRows: append([]connectionProfile(nil), rows...),
+		rows:    append([]connectionProfile(nil), rows...),
+		idx:     1,
+	}
+	if _, err := app.removeSelectedProfile(); err == nil {
+		t.Fatal("expected persistence failure")
+	}
+	if !reflect.DeepEqual(app.allRows, rows) || !reflect.DeepEqual(app.rows, rows) || app.idx != 1 {
+		t.Fatalf("failed delete mutated UI state: all=%#v rows=%#v idx=%d", app.allRows, app.rows, app.idx)
+	}
+
+	app.store = newConnectionStore(t.TempDir())
+	removed, err := app.removeSelectedProfile()
+	if err != nil {
+		t.Fatalf("successful delete failed: %v", err)
+	}
+	if removed.ID != "prod" || len(app.rows) != 1 || app.rows[0].ID != "local" || app.idx != 0 {
+		t.Fatalf("unexpected committed delete: removed=%#v rows=%#v idx=%d", removed, app.rows, app.idx)
 	}
 }

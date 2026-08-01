@@ -10,6 +10,7 @@ import (
 	"regexp"
 
 	"github.com/0xdevelop/NBTerminal/api/api_config"
+	"github.com/0xdevelop/NBTerminal/internal/persistence"
 	"github.com/0xdevelop/NBTerminal/locales"
 	"github.com/0xdevelop/NBTerminal/terminal"
 	"github.com/george012/gtbox/gtbox_encryption"
@@ -120,24 +121,20 @@ func LoadConfig(file string) error {
 		GlobalConfig = &FileConfig{}
 	}
 	GlobalConfig.Normalize()
+	if err := os.Chmod(file, 0o600); err != nil {
+		return err
+	}
 
 	return nil
 }
 
 func SaveConfig(file string) error {
 	//config, err := yaml.Marshal(GlobalConfig)
-	config, err := json.MarshalIndent(GlobalConfig, "", "    ")
-
+	data, err := json.MarshalIndent(GlobalConfig, "", "    ")
 	if err != nil {
 		return err
 	}
-
-	err = os.WriteFile(file, config, 0o644)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return persistence.AtomicWriteFile(file, data, 0o600)
 }
 func GetAuthInfo() *Auth {
 	return &Auth{
@@ -185,7 +182,7 @@ func SyncConfigFile(cfgFilePath string, defaultJsonContent []byte) {
 			defaultJsonContent = generateDefaultConfigWithJsonContent()
 		}
 
-		err = os.WriteFile(cfgFilePath, defaultJsonContent, 0755)
+		err = persistence.AtomicWriteFile(cfgFilePath, defaultJsonContent, 0o600)
 		if err != nil {
 			gtbox_log.LogErrorf("无法写入配置文件 [%s]: %s", cfgFilePath, err.Error())
 			return
@@ -202,7 +199,7 @@ func SyncConfigFile(cfgFilePath string, defaultJsonContent []byte) {
 			if defaultJsonContent == nil {
 				defaultJsonContent = generateDefaultConfigWithJsonContent()
 			} // 写入默认配置文件内容
-			err = os.WriteFile(cfgFilePath, defaultJsonContent, 0755)
+			err = persistence.AtomicWriteFile(cfgFilePath, defaultJsonContent, 0o600)
 			if err != nil {
 				gtbox_log.LogErrorf("无法写入配置文件 [%s]: %s", cfgFilePath, err.Error())
 				return

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/0xdevelop/NBTerminal/config"
+	"github.com/0xdevelop/NBTerminal/internal/persistence"
 	"github.com/0xdevelop/NBTerminal/locales"
 	"github.com/0xdevelop/NBTerminal/terminal"
 	"github.com/0xdevelop/fltk2go"
@@ -173,7 +174,7 @@ func (s *connectionStore) Load() error {
 		return err
 	}
 	s.normalizeLocked()
-	return nil
+	return os.Chmod(s.path, 0o600)
 }
 
 func (s *connectionStore) saveLocked() error {
@@ -182,7 +183,7 @@ func (s *connectionStore) saveLocked() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.path, buf, 0600)
+	return persistence.AtomicWriteFile(s.path, buf, 0o600)
 }
 
 func (s *connectionStore) Save(list []connectionProfile) error {
@@ -196,11 +197,20 @@ func (s *connectionStore) Save(list []connectionProfile) error {
 func (s *connectionStore) SaveActive(list []connectionProfile, activeID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	previous := append([]connectionProfile(nil), s.list...)
 	s.list = append([]connectionProfile(nil), list...)
 	if err := s.saveLocked(); err != nil {
+		s.list = previous
 		return err
 	}
-	return syncConfigConnections(s.list, activeID)
+	if err := syncConfigConnections(s.list, activeID); err != nil {
+		s.list = previous
+		if rollbackErr := s.saveLocked(); rollbackErr != nil {
+			return fmt.Errorf("sync app config: %w; rollback connection store: %v", err, rollbackErr)
+		}
+		return fmt.Errorf("sync app config: %w", err)
+	}
+	return nil
 }
 
 // SetActive records a table selection without rewriting the encrypted
@@ -307,6 +317,8 @@ func syncConfigConnections(profiles []connectionProfile, activeID string) error 
 	if config.GlobalConfig == nil {
 		return nil
 	}
+	previousConnections := append([]terminal.Connection(nil), config.GlobalConfig.Connections...)
+	previousActiveID := config.GlobalConfig.ActiveConnectionID
 	connections := make([]terminal.Connection, 0, len(profiles))
 	for _, profile := range profiles {
 		conn := profileToConfigConnection(profile)
@@ -335,7 +347,12 @@ func syncConfigConnections(profiles []connectionProfile, activeID string) error 
 	if config.CurrentApp == nil || config.CurrentApp.AppConfigFilePath == "" {
 		return nil
 	}
-	return config.SaveConfig(config.CurrentApp.AppConfigFilePath)
+	if err := config.SaveConfig(config.CurrentApp.AppConfigFilePath); err != nil {
+		config.GlobalConfig.Connections = previousConnections
+		config.GlobalConfig.ActiveConnectionID = previousActiveID
+		return err
+	}
+	return nil
 }
 
 type tableModel struct {
@@ -1254,26 +1271,49 @@ func (a *finalShellApp) saveProfile() {
 }
 
 func (a *finalShellApp) deleteProfile() {
-	if a.idx < 0 || a.idx >= len(a.rows) {
+	removed, err := a.removeSelectedProfile()
+	if err != nil {
+		gtbox_log.LogErrorf("delete connection failed: %s", err.Error())
+		a.appendOutput(trf("output.delete_failed", err.Error()))
+		a.setStatus(tr("status.delete_failed"))
+		a.showTopNotice(tr("status.delete_failed"), err.Error(), true)
 		return
 	}
-	removed := a.rows[a.idx]
-	name := removed.Name
-	a.allRows = removeProfileByID(a.allRows, removed.ID)
-	a.rows = removeProfileByID(a.rows, removed.ID)
-	if a.idx >= len(a.rows) {
-		a.idx = len(a.rows) - 1
+	if removed.ID == "" {
+		return
 	}
-	activeID := ""
-	if a.idx >= 0 && a.idx < len(a.rows) {
-		activeID = a.rows[a.idx].ID
-	}
-	_ = a.store.SaveActive(a.allRows, activeID)
 	a.refreshTable()
 	if a.idx >= 0 {
 		a.selectRow(a.idx)
 	}
-	a.setStatus(trf("status.deleted", name))
+	a.setStatus(trf("status.deleted", removed.Name))
+}
+
+// removeSelectedProfile is the transactional state transition behind Delete.
+// Persist first, then publish the new rows to the UI so a disk failure cannot
+// produce a false success that reappears after restart.
+func (a *finalShellApp) removeSelectedProfile() (connectionProfile, error) {
+	if a == nil || a.store == nil || a.idx < 0 || a.idx >= len(a.rows) {
+		return connectionProfile{}, nil
+	}
+	removed := a.rows[a.idx]
+	nextAll := removeProfileByID(append([]connectionProfile(nil), a.allRows...), removed.ID)
+	nextRows := removeProfileByID(append([]connectionProfile(nil), a.rows...), removed.ID)
+	nextIdx := a.idx
+	if nextIdx >= len(nextRows) {
+		nextIdx = len(nextRows) - 1
+	}
+	activeID := ""
+	if nextIdx >= 0 {
+		activeID = nextRows[nextIdx].ID
+	}
+	if err := a.store.SaveActive(nextAll, activeID); err != nil {
+		return connectionProfile{}, err
+	}
+	a.allRows = nextAll
+	a.rows = nextRows
+	a.idx = nextIdx
+	return removed, nil
 }
 
 func (a *finalShellApp) refreshTable() {
