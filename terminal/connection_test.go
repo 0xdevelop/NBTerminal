@@ -219,6 +219,29 @@ func (s *blockingSSHSession) Close() error {
 	return nil
 }
 
+type streamingSSHSession struct {
+	stdout  io.Writer
+	stderr  io.Writer
+	written chan struct{}
+	release chan struct{}
+}
+
+func (s *streamingSSHSession) SetOutput(stdout, stderr io.Writer) {
+	s.stdout, s.stderr = stdout, stderr
+}
+func (s *streamingSSHSession) Run(string) error {
+	// Deliberately split a multi-byte rune across writes: event delivery must be
+	// incremental without corrupting UTF-8 at arbitrary SSH packet boundaries.
+	line := []byte("中文 🚀\n")
+	_, _ = s.stdout.Write(line[:2])
+	_, _ = s.stdout.Write(line[2:])
+	_, _ = io.WriteString(s.stderr, "ошибка\n")
+	close(s.written)
+	<-s.release
+	return nil
+}
+func (*streamingSSHSession) Close() error { return nil }
+
 func TestSSHExecutorUsesInjectableDialer(t *testing.T) {
 	session := &fakeSSHSession{}
 	client := &fakeSSHClient{session: session}
@@ -239,6 +262,55 @@ func TestSSHExecutorUsesInjectableDialer(t *testing.T) {
 	}
 	if len(result.Events) < 3 {
 		t.Fatalf("expected stdout/stderr/status events, got %#v", result.Events)
+	}
+}
+
+func TestSSHExecutorStreamsUTF8EventsBeforeCommandCompletes(t *testing.T) {
+	session := &streamingSSHSession{written: make(chan struct{}), release: make(chan struct{})}
+	client := &fakeSSHClient{session: session}
+	conn := Connection{ID: "stream", Name: "流式 🚀", Type: ConnectionTypeSSH, Host: "example.com", Port: 22, Username: "root", Password: "secret"}
+	events := make(chan Event, 4)
+	done := make(chan CommandResult, 1)
+	go func() {
+		result, _ := (SSHExecutor{Dialer: &fakeSSHDialer{client: client}}).RunWithEvents(context.Background(), conn, "stream", func(event Event) {
+			if event.Stream != StreamStatus {
+				events <- event
+			}
+		})
+		done <- result
+	}()
+
+	select {
+	case <-session.written:
+	case <-time.After(time.Second):
+		t.Fatal("SSH session did not write output")
+	}
+	for _, want := range []struct {
+		stream Stream
+		line   string
+	}{{StreamStdout, "中文 🚀"}, {StreamStderr, "ошибка"}} {
+		select {
+		case event := <-events:
+			if event.Stream != want.stream || event.Line != want.line || !utf8.ValidString(event.Line) {
+				t.Fatalf("unexpected streamed event before completion: %#v", event)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("%s event was buffered until command completion", want.stream)
+		}
+	}
+	select {
+	case result := <-done:
+		t.Fatalf("command unexpectedly completed before release: %#v", result)
+	default:
+	}
+	close(session.release)
+	select {
+	case result := <-done:
+		if result.Stdout != "中文 🚀\n" || result.Stderr != "ошибка\n" {
+			t.Fatalf("streaming changed collected output: %#v", result)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("SSH command did not complete after release")
 	}
 }
 

@@ -21,6 +21,7 @@ import (
 	"github.com/0xdevelop/fltk2go/fltk_bridge"
 	"github.com/0xdevelop/fltk2go/foundation"
 	"github.com/0xdevelop/fltk2go/uikit"
+	"github.com/0xdevelop/fltk2go/uikit/automation"
 	uidropdown "github.com/0xdevelop/fltk2go/uikit/dropdown"
 	"github.com/0xdevelop/fltk2go/uikit/screen"
 	"github.com/0xdevelop/fltk2go/uikit/tableview"
@@ -435,6 +436,21 @@ func LoadGUIWithFLTKGO(_ []byte) {
 	app.allRows = app.store.List()
 	app.rows = append([]connectionProfile(nil), app.allRows...)
 	app.build()
+	if automation.Enabled() {
+		addr := strings.TrimSpace(os.Getenv("FLTK2GO_AUTOMATION_ADDR"))
+		if addr == "" {
+			// Keep the automation endpoint separate from NBTerminal's application
+			// API (8765). The server is compiled out of release-tag builds.
+			addr = "127.0.0.1:8766"
+		}
+		srv, err := automation.StartDebugServer(automation.Config{Addr: addr})
+		if err != nil {
+			gtbox_log.LogErrorf("start GUI automation debug server failed: %s", err.Error())
+		} else {
+			defer srv.Close()
+			gtbox_log.LogInfof("GUI automation debug server listening on http://%s", srv.Addr())
+		}
+	}
 	fltk2go.Run()
 }
 

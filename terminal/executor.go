@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -207,6 +208,58 @@ type SSHSession interface {
 
 type SSHExecutor struct{ Dialer SSHDialer }
 
+// sshStreamCollector preserves the complete byte stream for CommandResult while
+// emitting complete UTF-8-normalized lines as soon as SSH writes them. SSH may
+// split a multi-byte rune across arbitrary packets, so normalization must happen
+// only after a complete line has been assembled rather than per Write call.
+type sshStreamCollector struct {
+	mu      sync.Mutex
+	raw     bytes.Buffer
+	pending []byte
+	stream  Stream
+	emit    func(Stream, string)
+}
+
+func (w *sshStreamCollector) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	_, _ = w.raw.Write(p)
+	w.pending = append(w.pending, p...)
+	var lines [][]byte
+	for {
+		newline := bytes.IndexByte(w.pending, '\n')
+		if newline < 0 {
+			break
+		}
+		line := append([]byte(nil), w.pending[:newline]...)
+		if len(line) > 0 && line[len(line)-1] == '\r' {
+			line = line[:len(line)-1]
+		}
+		lines = append(lines, line)
+		w.pending = w.pending[newline+1:]
+	}
+	w.mu.Unlock()
+	for _, line := range lines {
+		w.emit(w.stream, normalizeUTF8(string(line)))
+	}
+	return len(p), nil
+}
+
+func (w *sshStreamCollector) flush() {
+	w.mu.Lock()
+	line := append([]byte(nil), w.pending...)
+	w.pending = nil
+	w.mu.Unlock()
+	if len(line) > 0 {
+		w.emit(w.stream, normalizeUTF8(string(line)))
+	}
+}
+
+func (w *sshStreamCollector) text() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return normalizeUTF8(w.raw.String())
+}
+
 func (e SSHExecutor) Run(ctx context.Context, conn Connection, command string) (CommandResult, error) {
 	return e.RunWithEvents(ctx, conn, command, nil)
 }
@@ -240,8 +293,19 @@ func (e SSHExecutor) RunWithEvents(ctx context.Context, conn Connection, command
 		return result, err
 	}
 	defer session.Close()
-	var stdout, stderr bytes.Buffer
-	session.SetOutput(&stdout, &stderr)
+	var eventMu sync.Mutex
+	emit := func(stream Stream, line string) {
+		eventMu.Lock()
+		defer eventMu.Unlock()
+		event := Event{Time: time.Now(), ConnectionID: conn.ID, Stream: stream, Line: line}
+		result.Events = append(result.Events, event)
+		if onEvent != nil {
+			onEvent(event)
+		}
+	}
+	stdout := &sshStreamCollector{stream: StreamStdout, emit: emit}
+	stderr := &sshStreamCollector{stream: StreamStderr, emit: emit}
+	session.SetOutput(stdout, stderr)
 	execCommand := commandForRemoteShell(conn, command)
 	runDone := make(chan error, 1)
 	go func() { runDone <- session.Run(execCommand) }()
@@ -252,28 +316,22 @@ func (e SSHExecutor) RunWithEvents(ctx context.Context, conn Connection, command
 		_ = client.Close()
 		<-runDone
 		result.FinishedAt = time.Now()
+		stdout.flush()
+		stderr.flush()
+		result.Stdout = stdout.text()
+		result.Stderr = stderr.text()
 		return result, ctx.Err()
 	}
 	result.FinishedAt = time.Now()
-	result.Stdout = normalizeUTF8(stdout.String())
-	result.Stderr = normalizeUTF8(stderr.String())
+	stdout.flush()
+	stderr.flush()
+	result.Stdout = stdout.text()
+	result.Stderr = stderr.text()
 	if exitErr, ok := err.(*ssh.ExitError); ok {
 		result.ExitCode = exitErr.ExitStatus()
 	} else if err == nil {
 		result.ExitCode = 0
 	}
-	appendLines := func(stream Stream, text string) {
-		s := newLineScanner(strings.NewReader(text))
-		for s.Scan() {
-			event := Event{Time: result.FinishedAt, ConnectionID: conn.ID, Stream: stream, Line: s.Text()}
-			result.Events = append(result.Events, event)
-			if onEvent != nil {
-				onEvent(event)
-			}
-		}
-	}
-	appendLines(StreamStdout, result.Stdout)
-	appendLines(StreamStderr, result.Stderr)
 	status := Event{Time: result.FinishedAt, ConnectionID: conn.ID, Stream: StreamStatus, Line: fmt.Sprintf("exit code %d", result.ExitCode), ExitCode: result.ExitCode}
 	result.Events = append(result.Events, status)
 	if onEvent != nil {
