@@ -486,6 +486,47 @@ func TestCommandRunLifecyclePreventsOverlapAndStopsActiveRun(t *testing.T) {
 	}
 }
 
+func TestGUIOutputBatcherCoalescesPendingUnicodeAndPreservesArrivalOrder(t *testing.T) {
+	var scheduled []func()
+	var appended []string
+	var batcher *guiOutputBatcher
+	batcher = newGUIOutputBatcher(func(fn func()) {
+		scheduled = append(scheduled, fn)
+	}, func(text string) {
+		appended = append(appended, text)
+		if len(appended) == 1 {
+			// Output arriving while the GUI is applying the current batch must be
+			// scheduled afterward rather than lost or inserted out of order.
+			batcher.Enqueue("追加 🚀\n")
+		}
+	})
+
+	batcher.Enqueue("中文\n")
+	batcher.Enqueue("日本語 · 한국어 · é\n")
+	completed := false
+	batcher.AfterFlush(func() { completed = true })
+	if len(scheduled) != 1 {
+		t.Fatalf("pending output should share one GUI wake-up, got %d", len(scheduled))
+	}
+	scheduled[0]()
+	if len(appended) != 1 || appended[0] != "中文\n日本語 · 한국어 · é\n" {
+		t.Fatalf("first batch lost or reordered Unicode output: %#v", appended)
+	}
+	if completed {
+		t.Fatal("completion ran before output queued during the first append")
+	}
+	if len(scheduled) != 2 {
+		t.Fatalf("output arriving during append should schedule one follow-up, got %d", len(scheduled))
+	}
+	scheduled[1]()
+	if len(appended) != 2 || appended[1] != "追加 🚀\n" {
+		t.Fatalf("follow-up batch mismatch: %#v", appended)
+	}
+	if !completed {
+		t.Fatal("completion did not run after all ordered output was appended")
+	}
+}
+
 func TestCommandBarLayoutKeepsControlsInsideTerminalPanel(t *testing.T) {
 	const (
 		winW   = defaultWindowWidth

@@ -417,6 +417,81 @@ type finalShellApp struct {
 	runID     uint64
 }
 
+// guiOutputBatcher coalesces command output that arrives faster than FLTK can
+// paint it. At most one GUI callback is pending at a time, while output that
+// arrives during an append is retained for one ordered follow-up callback. This
+// keeps high-volume local/SSH streams responsive without sacrificing live output
+// for slower commands or moving native widget mutations off the GUI thread.
+type guiOutputBatcher struct {
+	mu        sync.Mutex
+	pending   strings.Builder
+	after     []func()
+	scheduled bool
+	schedule  func(func())
+	append    func(string)
+}
+
+func newGUIOutputBatcher(schedule func(func()), appendText func(string)) *guiOutputBatcher {
+	return &guiOutputBatcher{schedule: schedule, append: appendText}
+}
+
+func (b *guiOutputBatcher) Enqueue(text string) {
+	if b == nil || text == "" {
+		return
+	}
+	b.mu.Lock()
+	b.pending.WriteString(text)
+	if b.scheduled {
+		b.mu.Unlock()
+		return
+	}
+	b.scheduled = true
+	b.mu.Unlock()
+	b.schedule(b.drain)
+}
+
+// AfterFlush runs fn on the GUI thread after every output fragment queued before
+// command completion has been appended. It keeps the final status transition
+// ordered behind output that arrived while an earlier GUI batch was painting.
+func (b *guiOutputBatcher) AfterFlush(fn func()) {
+	if b == nil || fn == nil {
+		return
+	}
+	b.mu.Lock()
+	b.after = append(b.after, fn)
+	if b.scheduled {
+		b.mu.Unlock()
+		return
+	}
+	b.scheduled = true
+	b.mu.Unlock()
+	b.schedule(b.drain)
+}
+
+func (b *guiOutputBatcher) drain() {
+	b.mu.Lock()
+	text := b.pending.String()
+	b.pending.Reset()
+	b.mu.Unlock()
+	if text != "" {
+		b.append(text)
+	}
+
+	b.mu.Lock()
+	if b.pending.Len() > 0 {
+		b.mu.Unlock()
+		b.schedule(b.drain)
+		return
+	}
+	after := append([]func(){}, b.after...)
+	b.after = nil
+	b.scheduled = false
+	b.mu.Unlock()
+	for _, fn := range after {
+		fn()
+	}
+}
+
 func LoadGUIWithFLTKGO(_ []byte) {
 	if runtime.GOOS == "darwin" || runtime.GOOS == "linux" || runtime.GOOS == "windows" {
 		fltk2go.Lock()
@@ -1505,21 +1580,22 @@ func (a *finalShellApp) runAsync(p connectionProfile, command string) {
 	a.appendOutput(fmt.Sprintf("\n$ [%s] %s\n", p.Name, command))
 	a.setStatus(trf("status.running", p.Name))
 	a.setCommandRunning(true)
+	outputBatcher := newGUIOutputBatcher(func(fn func()) {
+		fltk_bridge.Awake(fn)
+	}, a.appendOutput)
 	go func() {
 		defer cancel()
 		sess := terminal.NewSession(a.history)
 		sess.OnEvent = func(event terminal.Event) {
 			switch event.Stream {
 			case terminal.StreamStdout:
-				line := event.Line
-				fltk_bridge.Awake(func() { a.appendOutput(line + "\n") })
+				outputBatcher.Enqueue(event.Line + "\n")
 			case terminal.StreamStderr:
-				line := event.Line
-				fltk_bridge.Awake(func() { a.appendOutput(trf("output.stderr", line)) })
+				outputBatcher.Enqueue(trf("output.stderr", event.Line))
 			}
 		}
 		_, result, err := executeCommandResultWithSession(ctx, sess, p, command)
-		fltk_bridge.Awake(func() {
+		outputBatcher.AfterFlush(func() {
 			if !a.finishCommandRun(runID) {
 				return
 			}
@@ -1732,7 +1808,7 @@ func formatHistoryEntries(p connectionProfile, entries []terminal.HistoryEntry) 
 
 func (a *finalShellApp) appendOutput(s string) {
 	if a.output != nil {
-		a.output.AppendText(s)
+		a.output.AppendAndScroll(s)
 	}
 }
 func (a *finalShellApp) setStatus(s string) {
