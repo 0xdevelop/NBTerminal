@@ -1,9 +1,11 @@
 package terminal
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -84,13 +86,76 @@ func (s *HistoryStore) Append(entry HistoryEntry) error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(s.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	f, err := os.OpenFile(s.path, os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	enc := json.NewEncoder(f)
-	return enc.Encode(entry)
+	closeWithError := func(cause error) error {
+		if closeErr := f.Close(); closeErr != nil && cause == nil {
+			return closeErr
+		}
+		return cause
+	}
+	if err := f.Chmod(0o600); err != nil {
+		return closeWithError(err)
+	}
+	if err := prepareHistoryAppend(f); err != nil {
+		return closeWithError(err)
+	}
+	if err := json.NewEncoder(f).Encode(entry); err != nil {
+		return closeWithError(err)
+	}
+	if err := f.Sync(); err != nil {
+		return closeWithError(err)
+	}
+	return closeWithError(nil)
+}
+
+// prepareHistoryAppend positions f at its end and repairs only an incomplete
+// final JSONL record, the sole record a process crash can leave half-written.
+// A valid legacy final record without a newline receives a separator so the next
+// append cannot concatenate two JSON objects.
+func prepareHistoryAppend(f *os.File) error {
+	info, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	if info.Size() == 0 {
+		_, err = f.Seek(0, io.SeekEnd)
+		return err
+	}
+	const maxTailBytes = int64(maxTerminalLineBytes + 1)
+	readSize := info.Size()
+	if readSize > maxTailBytes {
+		readSize = maxTailBytes
+	}
+	tail := make([]byte, readSize)
+	start := info.Size() - readSize
+	if _, err := f.ReadAt(tail, start); err != nil && !errors.Is(err, io.EOF) {
+		return err
+	}
+	if tail[len(tail)-1] == '\n' {
+		_, err = f.Seek(0, io.SeekEnd)
+		return err
+	}
+	lastNewline := bytes.LastIndexByte(tail, '\n')
+	if lastNewline < 0 && start > 0 {
+		return errors.New("history final record exceeds maximum size")
+	}
+	record := tail[lastNewline+1:]
+	if json.Valid(record) {
+		if _, err := f.Seek(0, io.SeekEnd); err != nil {
+			return err
+		}
+		_, err = f.Write([]byte{'\n'})
+		return err
+	}
+	truncateAt := start + int64(lastNewline+1)
+	if err := f.Truncate(truncateAt); err != nil {
+		return err
+	}
+	_, err = f.Seek(0, io.SeekEnd)
+	return err
 }
 
 func (s *HistoryStore) Load(limit int) ([]HistoryEntry, error) {
@@ -107,21 +172,58 @@ func (s *HistoryStore) Load(limit int) ([]HistoryEntry, error) {
 		return nil, err
 	}
 	defer f.Close()
-	var entries []HistoryEntry
-	scanner := newLineScanner(f)
-	for scanner.Scan() {
-		var entry HistoryEntry
-		if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
+	if err := f.Chmod(0o600); err != nil {
+		return nil, err
+	}
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	endsWithNewline := info.Size() == 0
+	if info.Size() > 0 {
+		var last [1]byte
+		if _, err := f.ReadAt(last[:], info.Size()-1); err != nil {
 			return nil, err
+		}
+		endsWithNewline = last[0] == '\n'
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+
+	var entries []HistoryEntry
+	appendLine := func(line []byte) error {
+		var entry HistoryEntry
+		if err := json.Unmarshal(line, &entry); err != nil {
+			return err
 		}
 		entries = append(entries, entry)
 		if limit > 0 && len(entries) > limit {
 			copy(entries, entries[1:])
 			entries = entries[:limit]
 		}
+		return nil
+	}
+	scanner := newLineScanner(f)
+	var pending []byte
+	for scanner.Scan() {
+		if pending != nil {
+			if err := appendLine(pending); err != nil {
+				return nil, err
+			}
+		}
+		pending = append(pending[:0], scanner.Bytes()...)
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
+	}
+	if pending != nil {
+		if err := appendLine(pending); err != nil {
+			if !endsWithNewline {
+				return entries, nil
+			}
+			return nil, err
+		}
 	}
 	return entries, nil
 }

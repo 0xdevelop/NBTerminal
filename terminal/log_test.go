@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -39,6 +40,116 @@ func TestHistoryStoreAppendAndLoad(t *testing.T) {
 	if len(limited) != 1 || limited[0].Command != "false" {
 		t.Fatalf("expected most recent entry only, got %#v", limited)
 	}
+}
+
+func TestHistoryStoreAppendTightensLegacyPermissionsAndPreservesUnicode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history", "commands.jsonl")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store := NewHistoryStore(path)
+	want := HistoryEntry{
+		Time: time.Now().UTC(), ConnectionID: "本地-🚀", ConnectionName: "中文 · 日本語 · 한국어 · 🚀 · é",
+		ConnectionType: ConnectionTypeLocal, Command: "printf '历史恢复 🚀 é'", Stdout: "历史恢复 🚀 é\n",
+	}
+	if err := store.Append(want); err != nil {
+		t.Fatalf("Append failed: %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("history mode = %o, want 600", got)
+	}
+	entries, err := store.Load(0)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if len(entries) != 1 || entries[0].ConnectionName != want.ConnectionName || entries[0].Stdout != want.Stdout {
+		t.Fatalf("Unicode history did not round-trip: %#v", entries)
+	}
+}
+
+func TestHistoryStoreLoadRecoversCompleteRecordsBeforeTruncatedTail(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history", "commands.jsonl")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	complete := `{"connection_id":"本地-🚀","connection_name":"中文","command":"printf 历史","stdout":"历史 🚀\n"}` + "\n"
+	if err := os.WriteFile(path, []byte(complete+`{"connection_id":"broken"`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := NewHistoryStore(path).Load(0)
+	if err != nil {
+		t.Fatalf("Load should recover complete records before a crash-truncated tail: %v", err)
+	}
+	if len(entries) != 1 || entries[0].ConnectionID != "本地-🚀" || entries[0].Stdout != "历史 🚀\n" {
+		t.Fatalf("unexpected recovered history: %#v", entries)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("loaded history mode = %o, want 600", got)
+	}
+}
+
+func TestHistoryStoreLoadRejectsMalformedCompleteRecord(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history", "commands.jsonl")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{not-json}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewHistoryStore(path).Load(0); err == nil {
+		t.Fatal("expected a malformed complete history record to be rejected")
+	}
+}
+
+func TestHistoryStoreAppendRepairsCrashTailAndSeparatesLegacyRecord(t *testing.T) {
+	t.Run("truncated tail", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "commands.jsonl")
+		first := `{"connection_id":"first","command":"完整"}` + "\n"
+		if err := os.WriteFile(path, []byte(first+`{"connection_id":"broken"`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		store := NewHistoryStore(path)
+		if err := store.Append(HistoryEntry{ConnectionID: "second", Command: "恢复 🚀"}); err != nil {
+			t.Fatalf("Append failed: %v", err)
+		}
+		entries, err := store.Load(0)
+		if err != nil {
+			t.Fatalf("Load failed: %v", err)
+		}
+		if len(entries) != 2 || entries[0].ConnectionID != "first" || entries[1].ConnectionID != "second" {
+			t.Fatalf("unexpected repaired entries: %#v", entries)
+		}
+	})
+
+	t.Run("valid record without newline", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "commands.jsonl")
+		if err := os.WriteFile(path, []byte(`{"connection_id":"first","command":"旧记录"}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		store := NewHistoryStore(path)
+		if err := store.Append(HistoryEntry{ConnectionID: "second", Command: "新记录"}); err != nil {
+			t.Fatalf("Append failed: %v", err)
+		}
+		entries, err := store.Load(0)
+		if err != nil {
+			t.Fatalf("Load failed: %v", err)
+		}
+		if len(entries) != 2 || entries[0].Command != "旧记录" || entries[1].Command != "新记录" {
+			t.Fatalf("legacy record was not separated: %#v", entries)
+		}
+	})
 }
 
 func TestHistoryStoreLoadForConnection(t *testing.T) {
