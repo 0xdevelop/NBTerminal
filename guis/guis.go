@@ -1343,8 +1343,7 @@ func (a *finalShellApp) profileFromForm() connectionProfile {
 
 func (a *finalShellApp) saveProfile() {
 	p := a.profileFromForm()
-	a.allRows = upsertProfile(a.allRows, p)
-	if err := a.store.SaveActive(a.allRows, p.ID); err != nil {
+	if err := a.persistProfile(p); err != nil {
 		a.appendOutput(trf("output.save_failed", err.Error()))
 		a.setStatus(tr("status.save_failed"))
 		a.showTopNotice(tr("status.save_failed"), err.Error(), true)
@@ -1353,7 +1352,6 @@ func (a *finalShellApp) saveProfile() {
 	if a.searchInput != nil {
 		a.searchInput.SetText("")
 	}
-	a.rows = filterConnections(a.allRows, "")
 	a.refreshTable()
 	if i := indexProfileByID(a.rows, p.ID); i >= 0 {
 		a.selectRow(i)
@@ -1568,6 +1566,7 @@ func (a *finalShellApp) runAsync(p connectionProfile, command string) {
 		a.appendOutput(trf("output.save_current_failed", err.Error()))
 		a.setStatus(tr("status.save_runtime_failed"))
 		a.showTopNotice(tr("status.save_failed"), err.Error(), true)
+		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout())
 	runID, ok := a.beginCommandRun(cancel)
@@ -1631,38 +1630,33 @@ func commandTimeout() time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
-// persistRuntimeProfile keeps command execution and connection persistence in
-// sync. Users often edit a FinalShell-style connection and immediately press
-// Test/Run without pressing Save first; the GUI should execute those form values
-// and also make them available on next launch. It updates the in-memory row and
-// encrypted connection store without duplicating command execution logic.
-func (a *finalShellApp) persistRuntimeProfile(p connectionProfile) error {
+// persistProfile publishes an edited profile to GUI state only after both the
+// encrypted connection store and shared config commit successfully. This avoids
+// a false success where an edit appears active until the next restart after a
+// disk error.
+func (a *finalShellApp) persistProfile(p connectionProfile) error {
 	if a == nil || a.store == nil {
 		return nil
 	}
 	if p.ID == "" {
 		p.ID = fmt.Sprintf("conn-%d", time.Now().UnixNano())
 	}
-	found := false
-	if a.idx >= 0 && a.idx < len(a.rows) && (a.rows[a.idx].ID == p.ID || a.rows[a.idx].ID == "") {
-		a.rows[a.idx] = p
-		found = true
-	} else {
-		for i := range a.rows {
-			if a.rows[i].ID == p.ID {
-				a.rows[i] = p
-				a.idx = i
-				found = true
-				break
-			}
-		}
+	nextAll := upsertProfile(append([]connectionProfile(nil), a.allRows...), p)
+	if err := a.store.SaveActive(nextAll, p.ID); err != nil {
+		return err
 	}
-	if !found {
-		a.rows = append(a.rows, p)
-		a.idx = len(a.rows) - 1
-	}
-	a.allRows = upsertProfile(a.allRows, p)
-	if err := a.store.SaveActive(a.allRows, p.ID); err != nil {
+	a.allRows = nextAll
+	a.rows = filterConnections(nextAll, "")
+	a.idx = indexProfileByID(a.rows, p.ID)
+	return nil
+}
+
+// persistRuntimeProfile keeps command execution and connection persistence in
+// sync. Users often edit a FinalShell-style connection and immediately press
+// Test/Run without pressing Save first; the GUI should execute those form values
+// and also make them available on next launch.
+func (a *finalShellApp) persistRuntimeProfile(p connectionProfile) error {
+	if err := a.persistProfile(p); err != nil {
 		return err
 	}
 	a.refreshTable()

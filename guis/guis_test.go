@@ -686,6 +686,46 @@ func TestUpsertAndRemoveProfileByID(t *testing.T) {
 	}
 }
 
+func TestPersistProfileCommitsOnlyAfterPersistenceSucceeds(t *testing.T) {
+	oldGlobal := config.GlobalConfig
+	oldApp := config.CurrentApp
+	t.Cleanup(func() { config.GlobalConfig, config.CurrentApp = oldGlobal, oldApp })
+	config.GlobalConfig = nil
+	config.CurrentApp = nil
+
+	initial := connectionProfile{ID: "local", Name: "Local", Type: connectionTypeLocal}
+	app := &finalShellApp{
+		store:   &connectionStore{path: filepath.Join(t.TempDir(), "connections.json")},
+		allRows: []connectionProfile{initial},
+		rows:    []connectionProfile{initial},
+		idx:     0,
+	}
+	updated := initial
+	updated.Name = "Edited Local"
+	if err := app.persistProfile(updated); err != nil {
+		t.Fatalf("persistProfile failed: %v", err)
+	}
+	if app.allRows[0].Name != updated.Name || app.rows[0].Name != updated.Name {
+		t.Fatalf("successful save was not published: all=%#v rows=%#v", app.allRows, app.rows)
+	}
+
+	blocker := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blocker, []byte("block"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	app.store.path = filepath.Join(blocker, "connections.json")
+	beforeAll := append([]connectionProfile(nil), app.allRows...)
+	beforeRows := append([]connectionProfile(nil), app.rows...)
+	failed := updated
+	failed.Name = "Must Not Leak Into UI"
+	if err := app.persistProfile(failed); err == nil {
+		t.Fatal("expected persistence failure")
+	}
+	if !reflect.DeepEqual(app.allRows, beforeAll) || !reflect.DeepEqual(app.rows, beforeRows) {
+		t.Fatalf("failed save leaked into GUI state: all=%#v rows=%#v", app.allRows, app.rows)
+	}
+}
+
 func TestRemoveSelectedProfileCommitsOnlyAfterPersistenceSucceeds(t *testing.T) {
 	oldGlobal := config.GlobalConfig
 	oldApp := config.CurrentApp
