@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -415,22 +416,39 @@ func (c realSSHClient) NewSession() (SSHSession, error) {
 }
 
 func (*netDialer) Dial(ctx context.Context, network, addr string, config *ssh.ClientConfig) (SSHClient, error) {
-	type res struct {
-		client *ssh.Client
-		err    error
+	// ssh.Dial performs both TCP dialing and the SSH handshake without accepting a
+	// context. Drive those stages explicitly so Stop/timeout can close the socket
+	// even while a server has accepted TCP but never completes its SSH banner or
+	// key exchange.
+	dialer := net.Dialer{}
+	if config != nil && config.Timeout > 0 {
+		dialer.Timeout = config.Timeout
 	}
-	ch := make(chan res, 1)
+	rawConn, err := dialer.DialContext(ctx, network, addr)
+	if err != nil {
+		return nil, err
+	}
+
+	handshakeDone := make(chan struct{})
 	go func() {
-		client, err := ssh.Dial(network, addr, config)
-		ch <- res{client: client, err: err}
-	}()
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case r := <-ch:
-		if r.err != nil {
-			return nil, r.err
+		select {
+		case <-ctx.Done():
+			_ = rawConn.Close()
+		case <-handshakeDone:
 		}
-		return realSSHClient{r.client}, nil
+	}()
+	sshConn, channels, requests, err := ssh.NewClientConn(rawConn, addr, config)
+	close(handshakeDone)
+	if err != nil {
+		_ = rawConn.Close()
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
+		}
+		return nil, err
 	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		_ = sshConn.Close()
+		return nil, ctxErr
+	}
+	return realSSHClient{ssh.NewClient(sshConn, channels, requests)}, nil
 }

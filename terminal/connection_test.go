@@ -8,6 +8,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -358,6 +359,62 @@ func TestSSHExecutorRunHonorsCancellation(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("SSH command did not stop after cancellation")
+	}
+}
+
+func TestNetDialerCancelsDuringSSHHandshake(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer listener.Close()
+
+	accepted := make(chan net.Conn, 1)
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr == nil {
+			accepted <- conn
+		}
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, dialErr := (&netDialer{}).Dial(ctx, "tcp", listener.Addr().String(), &ssh.ClientConfig{
+			User:            "tester",
+			Auth:            []ssh.AuthMethod{ssh.Password("secret")},
+			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+			Timeout:         15 * time.Second,
+		})
+		done <- dialErr
+	}()
+
+	var serverConn net.Conn
+	select {
+	case serverConn = <-accepted:
+		defer serverConn.Close()
+	case <-time.After(time.Second):
+		t.Fatal("TCP connection was not established")
+	}
+	serverClosed := make(chan error, 1)
+	go func() {
+		_, readErr := io.Copy(io.Discard, serverConn)
+		serverClosed <- readErr
+	}()
+	cancel()
+
+	select {
+	case dialErr := <-done:
+		if !errors.Is(dialErr, context.Canceled) {
+			t.Fatalf("expected context cancellation during SSH handshake, got %v", dialErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("SSH handshake did not stop promptly after cancellation")
+	}
+	select {
+	case <-serverClosed:
+	case <-time.After(time.Second):
+		t.Fatal("canceled SSH handshake left its TCP connection open")
 	}
 }
 
