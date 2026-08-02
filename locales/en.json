@@ -113,5 +113,19 @@
   "history.recent": "Recent commands:\n",
   "history.recent_entry": "- [%s] %s (exit %d)\n",
   "output.stderr": "[stderr] %s\n",
-  "output.error": "ERROR: %s\n"
+  "output.error": "ERROR: %s\n",
+  "profile.local_shell": "Local Shell",
+  "profile.new_host": "new host",
+  "profile.never": "never",
+  "profile.new_connection": "New Connection",
+  "profile.default_group": "Default",
+  "profile.local_group": "Local",
+  "profile.examples_group": "Examples",
+  "profile.example_ssh": "Example SSH",
+  "profile.new_ssh": "New SSH",
+  "profile.unnamed": "Unnamed",
+  "profile.local_description": "Run commands on this workstation",
+  "profile.ssh_description": "Edit and save with your own host/user/password or private key",
+  "output.profile_ready": "[%s] ready: %s\n",
+  "output.exit": "[exit %d]\n"
 }

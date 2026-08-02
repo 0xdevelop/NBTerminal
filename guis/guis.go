@@ -101,7 +101,7 @@ func (p *connectionProfile) SetPassword(password string) {
 
 func (p connectionProfile) endpoint() string {
 	if p.Type == connectionTypeLocal {
-		return "local shell"
+		return tr("profile.local_shell")
 	}
 	port := p.Port
 	if port == 0 {
@@ -112,11 +112,11 @@ func (p connectionProfile) endpoint() string {
 
 func (p connectionProfile) tableEndpoint() string {
 	if p.Type == connectionTypeLocal {
-		return "local shell"
+		return tr("profile.local_shell")
 	}
 	host := strings.TrimSpace(p.Host)
 	if host == "" {
-		host = "new host"
+		host = tr("profile.new_host")
 	}
 	port := p.Port
 	if port == 0 {
@@ -128,7 +128,7 @@ func (p connectionProfile) tableEndpoint() string {
 func formatLastUsed(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return "never"
+		return tr("profile.never")
 	}
 	if t, err := time.Parse(time.RFC3339, value); err == nil {
 		return t.Local().Format("01-02 15:04")
@@ -246,10 +246,10 @@ func (s *connectionStore) normalizeLocked() {
 		}
 		s.list[i].ID = uniqueProfileID(s.list[i].ID, seenIDs)
 		if s.list[i].Name == "" {
-			s.list[i].Name = "New Connection"
+			s.list[i].Name = tr("profile.new_connection")
 		}
 		if s.list[i].Group == "" {
-			s.list[i].Group = "Default"
+			s.list[i].Group = tr("profile.default_group")
 		}
 		if s.list[i].Type == "" {
 			s.list[i].Type = connectionTypeSSH
@@ -280,8 +280,8 @@ func uniqueProfileID(id string, seen map[string]struct{}) string {
 
 func defaultConnections() []connectionProfile {
 	return []connectionProfile{
-		{ID: "local-shell", Name: "Local Shell", Group: "Local", Type: connectionTypeLocal, LastUsed: time.Now().UTC().Format(time.RFC3339), Description: "Run commands on this workstation"},
-		{ID: "example-ssh", Name: "Example SSH", Group: "Examples", Type: connectionTypeSSH, Host: "127.0.0.1", Port: 22, Username: os.Getenv("USER"), Description: "Edit and save with your own host/user/password or private key"},
+		{ID: "local-shell", Name: tr("profile.local_shell"), Group: tr("profile.local_group"), Type: connectionTypeLocal, LastUsed: time.Now().UTC().Format(time.RFC3339), Description: tr("profile.local_description")},
+		{ID: "example-ssh", Name: tr("profile.example_ssh"), Group: tr("profile.examples_group"), Type: connectionTypeSSH, Host: "127.0.0.1", Port: 22, Username: os.Getenv("USER"), Description: tr("profile.ssh_description")},
 	}
 }
 
@@ -1296,7 +1296,7 @@ func (a *finalShellApp) persistActiveRow(row int) error {
 }
 
 func (a *finalShellApp) newProfile() {
-	p := connectionProfile{ID: fmt.Sprintf("conn-%d", time.Now().UnixNano()), Name: "New SSH", Group: "Default", Type: connectionTypeSSH, Host: "", Port: 22, Username: os.Getenv("USER")}
+	p := newConnectionProfile(os.Getenv("USER"))
 	a.allRows = append(a.allRows, p)
 	if a.searchInput != nil {
 		a.searchInput.SetText("")
@@ -1304,6 +1304,13 @@ func (a *finalShellApp) newProfile() {
 	a.rows = append([]connectionProfile(nil), a.allRows...)
 	a.refreshTable()
 	a.selectRow(len(a.rows) - 1)
+}
+
+func newConnectionProfile(username string) connectionProfile {
+	return connectionProfile{
+		ID: fmt.Sprintf("conn-%d", time.Now().UnixNano()), Name: tr("profile.new_ssh"),
+		Group: tr("profile.default_group"), Type: connectionTypeSSH, Port: 22, Username: username,
+	}
 }
 
 func (a *finalShellApp) profileFromForm() connectionProfile {
@@ -1327,10 +1334,10 @@ func (a *finalShellApp) profileFromForm() connectionProfile {
 		p.ID = fmt.Sprintf("conn-%d", time.Now().UnixNano())
 	}
 	if p.Name == "" {
-		p.Name = "Unnamed"
+		p.Name = tr("profile.unnamed")
 	}
 	if p.Group == "" {
-		p.Group = "Default"
+		p.Group = tr("profile.default_group")
 	}
 	if p.Type != connectionTypeLocal && p.Type != connectionTypeSSH {
 		p.Type = connectionTypeSSH
@@ -1427,7 +1434,7 @@ func (a *finalShellApp) connectSelected() {
 		return
 	}
 	a.saveProfile()
-	a.appendOutput(fmt.Sprintf("[%s] ready: %s\n", p.Name, p.endpoint()))
+	a.appendOutput(trf("output.profile_ready", p.Name, p.endpoint()))
 	a.setStatus(tr("status.profile_ready"))
 }
 
@@ -1774,7 +1781,7 @@ func formatCommandResult(result terminal.CommandResult) string {
 		if b.Len() > 0 && !strings.HasSuffix(b.String(), "\n") {
 			b.WriteByte('\n')
 		}
-		b.WriteString(fmt.Sprintf("[exit %d]\n", result.ExitCode))
+		b.WriteString(trf("output.exit", result.ExitCode))
 	}
 	return b.String()
 }

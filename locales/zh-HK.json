@@ -113,5 +113,19 @@
   "history.recent": "最近指令：\n",
   "history.recent_entry": "- [%s] %s（結束碼 %d）\n",
   "output.stderr": "[標準錯誤] %s\n",
-  "output.error": "錯誤：%s\n"
+  "output.error": "錯誤：%s\n",
+  "profile.local_shell": "本機終端",
+  "profile.new_host": "新主機",
+  "profile.never": "從未使用",
+  "profile.new_connection": "新連線",
+  "profile.default_group": "預設",
+  "profile.local_group": "本機",
+  "profile.examples_group": "範例",
+  "profile.example_ssh": "SSH 範例",
+  "profile.new_ssh": "新增 SSH",
+  "profile.unnamed": "未命名",
+  "profile.local_description": "在此工作站執行命令",
+  "profile.ssh_description": "使用自己的主機、使用者、密碼或私密金鑰編輯並儲存",
+  "output.profile_ready": "[%s] 已就緒：%s\n",
+  "output.exit": "[結束碼 %d]\n"
 }

@@ -113,5 +113,19 @@
   "history.recent": "最近命令：\n",
   "history.recent_entry": "- [%s] %s（退出码 %d）\n",
   "output.stderr": "[标准错误] %s\n",
-  "output.error": "错误：%s\n"
+  "output.error": "错误：%s\n",
+  "profile.local_shell": "本地终端",
+  "profile.new_host": "新主机",
+  "profile.never": "从未使用",
+  "profile.new_connection": "新连接",
+  "profile.default_group": "默认",
+  "profile.local_group": "本地",
+  "profile.examples_group": "示例",
+  "profile.example_ssh": "SSH 示例",
+  "profile.new_ssh": "新建 SSH",
+  "profile.unnamed": "未命名",
+  "profile.local_description": "在此工作站运行命令",
+  "profile.ssh_description": "使用自己的主机、用户、密码或私钥编辑并保存",
+  "output.profile_ready": "[%s] 已就绪：%s\n",
+  "output.exit": "[退出码 %d]\n"
 }

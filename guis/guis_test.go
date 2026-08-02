@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/0xdevelop/NBTerminal/config"
+	"github.com/0xdevelop/NBTerminal/locales"
 	"github.com/0xdevelop/NBTerminal/terminal"
 	"github.com/george012/gtbox"
 )
@@ -415,6 +416,31 @@ func TestPersistRuntimeProfileUpdatesStoreBeforeRun(t *testing.T) {
 	}
 	if len(config.GlobalConfig.Connections) != 1 || config.GlobalConfig.Connections[0].WorkingDir != dir {
 		t.Fatalf("global config was not synced: %#v", config.GlobalConfig.Connections)
+	}
+}
+
+func TestProductDefaultsAndFallbacksFollowCurrentLocale(t *testing.T) {
+	previous := locales.CurrentLanguage()
+	t.Cleanup(func() { locales.ResetLocaleLanguage(previous.LanguageTag()) })
+	locales.ResetLocaleLanguage("zh-CN")
+
+	local := connectionProfile{Type: connectionTypeLocal}
+	if got := local.endpoint(); got != "本地终端" {
+		t.Fatalf("localized local endpoint = %q", got)
+	}
+	if got := (connectionProfile{Type: connectionTypeSSH}).tableEndpoint(); got != "新主机:22" {
+		t.Fatalf("localized empty host = %q", got)
+	}
+	if got := formatLastUsed(""); got != "从未使用" {
+		t.Fatalf("localized empty last-used = %q", got)
+	}
+	defaults := defaultConnections()
+	if len(defaults) != 2 || defaults[0].Name != "本地终端" || defaults[0].Group != "本地" || defaults[1].Name != "SSH 示例" || defaults[1].Group != "示例" {
+		t.Fatalf("localized seed profiles = %#v", defaults)
+	}
+	created := newConnectionProfile("测试用户")
+	if created.Name != "新建 SSH" || created.Group != "默认" || created.Username != "测试用户" {
+		t.Fatalf("localized new profile = %#v", created)
 	}
 }
 

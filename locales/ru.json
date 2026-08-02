@@ -113,5 +113,19 @@
   "history.recent": "Недавние команды:\n",
   "history.recent_entry": "- [%s] %s (код %d)\n",
   "output.stderr": "[stderr] %s\n",
-  "output.error": "ОШИБКА: %s\n"
+  "output.error": "ОШИБКА: %s\n",
+  "profile.local_shell": "Локальный терминал",
+  "profile.new_host": "новый хост",
+  "profile.never": "никогда",
+  "profile.new_connection": "Новое подключение",
+  "profile.default_group": "По умолчанию",
+  "profile.local_group": "Локальные",
+  "profile.examples_group": "Примеры",
+  "profile.example_ssh": "Пример SSH",
+  "profile.new_ssh": "Новый SSH",
+  "profile.unnamed": "Без имени",
+  "profile.local_description": "Запуск команд на этом компьютере",
+  "profile.ssh_description": "Укажите и сохраните свой хост, пользователя, пароль или закрытый ключ",
+  "output.profile_ready": "[%s] готово: %s\n",
+  "output.exit": "[код выхода %d]\n"
 }
