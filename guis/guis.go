@@ -22,7 +22,6 @@ import (
 	"github.com/0xdevelop/fltk2go/foundation"
 	"github.com/0xdevelop/fltk2go/uikit"
 	"github.com/0xdevelop/fltk2go/uikit/automation"
-	uidropdown "github.com/0xdevelop/fltk2go/uikit/dropdown"
 	"github.com/0xdevelop/fltk2go/uikit/screen"
 	"github.com/0xdevelop/fltk2go/uikit/tableview"
 	"github.com/george012/gtbox/gtbox_encryption"
@@ -411,6 +410,7 @@ type finalShellApp struct {
 	notice      *uikit.UIWindow
 	runButton   *uikit.UIButton
 	stopButton  *uikit.UIButton
+	settings    *settingsWindow
 
 	runMu     sync.Mutex
 	runCancel context.CancelFunc
@@ -599,25 +599,9 @@ func (a *finalShellApp) build() {
 
 	root.AddSubview(titleLabel(margin, 14, 440, 28, tr("app.title")))
 	root.AddSubview(mutedLabel(margin+2, 38, 520, 22, tr("app.subtitle")))
-	root.AddSubview(mutedLabel(rightX+18, 24, 66, 20, tr("app.language")))
-	languageMenu := uidropdown.NewUIDropdown(rect(rightX+82, 18, 142, 30))
-	languages := locales.SupportedLanguages()
-	languageNames := make([]string, 0, len(languages))
-	for _, lang := range languages {
-		languageNames = append(languageNames, lang.String())
-	}
-	languageMenu.SetOptions(languageNames)
-	languageMenu.SetSelectedIndex(int(locales.CurrentLanguage()))
-	if raw := languageMenu.Raw(); raw != nil {
-		raw.SetBox(fltk_bridge.RFLAT_BOX)
-		raw.SetColor(tokenColor(modernTheme.elevated))
-		raw.SetLabelColor(tokenColor(modernTheme.foreground))
-		raw.SetLabelSize(13)
-	}
-	languageMenu.View().SetAutomationID("app.language").SetAutomationName(tr("app.language"))
-	languageMenu.OnSelectionChanged(func(index int, _ string) { a.changeLanguage(index) })
-	root.AddSubview(languageMenu)
-	a.status = pillLabel(rightX+240, 18, rightW-240, 30, tr("app.ready"))
+	settingsButton := button(rightX+18, 18, 124, 30, tr("setting.title"), "app.settings", a.openSettings)
+	root.AddSubview(settingsButton)
+	a.status = pillLabel(rightX+158, 18, rightW-158, 30, tr("app.ready"))
 	a.status.View().SetAutomationID("app.status")
 	root.AddSubview(a.status)
 
@@ -763,7 +747,7 @@ func (a *finalShellApp) build() {
 	// Apply the persisted ratio only after pane controls are attached. FLTK uses
 	// absolute child coordinates, so this final native resize translates and
 	// reflows the complete pane hierarchy together (including language rebuilds).
-	if config.GlobalConfig != nil {
+	if config.GlobalConfig != nil && !config.GlobalConfig.ResetWorkspaceOnStart {
 		a.workspace.SetPosition(config.GlobalConfig.WorkspaceSplitRatio)
 	} else {
 		a.workspace.SetPosition(config.WorkspaceSplitRatioDefault)
@@ -818,21 +802,7 @@ func (a *finalShellApp) changeLanguage(index int) {
 	}
 	locales.ResetLocaleLanguage(lang.LanguageTag())
 
-	oldWindow := a.window
-	next := &finalShellApp{
-		store:   a.store,
-		history: a.history,
-		session: terminal.NewSession(a.history),
-		idx:     -1,
-	}
-	next.allRows = a.store.List()
-	next.rows = append([]connectionProfile(nil), next.allRows...)
-	next.build()
-	next.setStatus(trf("app.language_changed", lang.String()))
-	if oldWindow != nil && oldWindow.Raw() != nil {
-		oldWindow.Raw().Hide()
-		oldWindow.Raw().Destroy()
-	}
+	a.rebuildForLanguage(lang)
 }
 
 func activeConnectionIndex(rows []connectionProfile) int {
@@ -841,6 +811,9 @@ func activeConnectionIndex(rows []connectionProfile) int {
 	}
 	activeID := ""
 	if config.GlobalConfig != nil {
+		if config.GlobalConfig.StartWithFirstConnection {
+			return 0
+		}
 		activeID = strings.TrimSpace(config.GlobalConfig.ActiveConnectionID)
 	}
 	if activeID != "" {

@@ -44,13 +44,15 @@ type TerminalSettings struct {
 }
 
 type FileConfig struct {
-	Api                 *api_config.ApiConfig `yaml:"api" json:"api"`
-	Auth                *Auth                 `yaml:"auth" json:"auth"`
-	Language            string                `yaml:"language" json:"language"`
-	Terminal            *TerminalSettings     `yaml:"terminal" json:"terminal"`
-	Connections         []terminal.Connection `yaml:"connections" json:"connections"`
-	ActiveConnectionID  string                `yaml:"active_connection_id" json:"active_connection_id"`
-	WorkspaceSplitRatio float64               `yaml:"workspace_split_ratio" json:"workspace_split_ratio"`
+	Api                      *api_config.ApiConfig `yaml:"api" json:"api"`
+	Auth                     *Auth                 `yaml:"auth" json:"auth"`
+	Language                 string                `yaml:"language" json:"language"`
+	Terminal                 *TerminalSettings     `yaml:"terminal" json:"terminal"`
+	Connections              []terminal.Connection `yaml:"connections" json:"connections"`
+	ActiveConnectionID       string                `yaml:"active_connection_id" json:"active_connection_id"`
+	WorkspaceSplitRatio      float64               `yaml:"workspace_split_ratio" json:"workspace_split_ratio"`
+	ResetWorkspaceOnStart    bool                  `yaml:"reset_workspace_on_start" json:"reset_workspace_on_start"`
+	StartWithFirstConnection bool                  `yaml:"start_with_first_connection" json:"start_with_first_connection"`
 }
 
 func (fc *FileConfig) Normalize() {
