@@ -620,6 +620,17 @@ func TestNativeFontsCoverSupportedDesktopPlatforms(t *testing.T) {
 	}
 }
 
+func TestNativeWindowClassSupportsIsolatedGUIRuns(t *testing.T) {
+	t.Setenv("NBTERMINAL_WM_CLASS", "NBTerminal-QA")
+	if got := nativeWindowClass(); got != "NBTerminal-QA" {
+		t.Fatalf("native window class = %q", got)
+	}
+	t.Setenv("NBTERMINAL_WM_CLASS", "  ")
+	if got := nativeWindowClass(); got != "NBTerminal" {
+		t.Fatalf("default native window class = %q", got)
+	}
+}
+
 func TestEmojiRuneDetectionKeepsTextScriptsOnPrimaryFont(t *testing.T) {
 	for _, r := range []rune{'🚀', '😀', '☀', '\ufe0f', '\u200d'} {
 		if !isEmojiRune(r) {

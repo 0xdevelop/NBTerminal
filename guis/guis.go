@@ -414,23 +414,18 @@ type finalShellApp struct {
 	table     *uikit.UITableView
 	model     *tableModel
 
-	searchInput *uikit.Input
-	nameInput   *uikit.Input
-	groupInput  *uikit.Input
-	typeInput   *uikit.Input
-	hostInput   *uikit.Input
-	portInput   *uikit.Input
-	userInput   *uikit.Input
-	passInput   *uikit.Input
-	keyInput    *uikit.Input
-	workInput   *uikit.Input
-	cmdInput    *uikit.UITextView
-	output      *uikit.UITextView
-	status      *uikit.UILabel
-	notice      *uikit.UIWindow
-	runButton   *uikit.UIButton
-	stopButton  *uikit.UIButton
-	settings    *settingsWindow
+	searchInput    *uikit.Input
+	selectedName   *uikit.UILabel
+	selectedDetail *uikit.UILabel
+	selectedRecent *uikit.UILabel
+	cmdInput       *uikit.UITextView
+	output         *uikit.UITextView
+	status         *uikit.UILabel
+	notice         *uikit.UIWindow
+	runButton      *uikit.UIButton
+	stopButton     *uikit.UIButton
+	settings       *settingsWindow
+	editor         *connectionEditor
 
 	runMu     sync.Mutex
 	runCancel context.CancelFunc
@@ -612,6 +607,7 @@ func (a *finalShellApp) build() {
 
 	a.window = centeredWindow(winW, winH, tr("app.title"))
 	if raw := a.window.Raw(); raw != nil {
+		raw.SetXClass(nativeWindowClass())
 		raw.SetColor(tokenColor(modernTheme.background))
 		raw.SetSizeRange(1120, 720, 0, 0, 20, 20, false)
 	}
@@ -678,7 +674,7 @@ func (a *finalShellApp) build() {
 	findBtn := button(margin+390, 126, 86, 30, tr("connections.find"), "connections.find", a.jumpToSearchMatch)
 	left.AddSubview(findBtn)
 
-	tv, err := uikit.NewUITableView(margin+14, 166, leftW-28, 362)
+	tv, err := uikit.NewUITableView(margin+14, 166, leftW-28, 478)
 	if err == nil {
 		a.table = tv
 		a.table.View().SetAutomationID("connections.table").SetAutomationName(tr("app.connections"))
@@ -704,36 +700,22 @@ func (a *finalShellApp) build() {
 		left.AddSubview(a.table)
 	}
 
-	left.AddSubview(sectionTitle(margin+18, 548, 260, 22, tr("details.title")))
-	a.nameInput = input(margin+82, 582, 164, 30, tr("field.name"), "form.name")
-	left.AddSubview(a.nameInput)
-	a.groupInput = input(margin+318, 582, 168, 30, tr("field.group"), "form.group")
-	left.AddSubview(a.groupInput)
-
-	a.typeInput = input(margin+82, 622, 92, 30, tr("field.type"), "form.type")
-	left.AddSubview(a.typeInput)
-	a.hostInput = input(margin+246, 622, 152, 30, tr("field.host"), "form.host")
-	left.AddSubview(a.hostInput)
-	a.portInput = input(margin+446, 622, 40, 30, tr("field.port"), "form.port")
-	left.AddSubview(a.portInput)
-
-	a.userInput = input(margin+82, 662, 164, 30, tr("field.user"), "form.username")
-	left.AddSubview(a.userInput)
-	a.passInput = uikit.NewInputWithType(margin+318, 662, 168, 30, tr("field.password"), uikit.SecretInput)
-	styleInput(a.passInput)
-	a.passInput.View().SetAutomationID("form.password")
-	left.AddSubview(a.passInput)
-
-	a.workInput = input(margin+82, 702, 404, 30, tr("field.workdir"), "form.working_dir")
-	left.AddSubview(a.workInput)
-
-	a.keyInput = input(margin+82, 742, 404, 30, tr("field.key"), "form.key")
-	left.AddSubview(a.keyInput)
+	left.AddSubview(sectionTitle(margin+18, 666, 260, 22, tr("connections.selected_summary")))
+	a.selectedName = label(margin+18, 694, leftW-36, 24, "")
+	a.selectedName.SetFontSize(15)
+	a.selectedName.View().SetAutomationID("connections.selected_name")
+	left.AddSubview(a.selectedName)
+	a.selectedDetail = mutedLabel(margin+18, 722, leftW-36, 22, "")
+	a.selectedDetail.View().SetAutomationID("connections.selected_detail")
+	left.AddSubview(a.selectedDetail)
+	a.selectedRecent = mutedLabel(margin+18, 748, leftW-36, 22, "")
+	a.selectedRecent.View().SetAutomationID("connections.selected_recent")
+	left.AddSubview(a.selectedRecent)
 
 	addBtn := button(margin+14, 816, 82, 34, tr("action.new"), "action.new", a.newProfile)
 	left.AddSubview(addBtn)
-	saveBtn := button(margin+106, 816, 82, 34, tr("action.save"), "action.save", a.saveProfile)
-	left.AddSubview(saveBtn)
+	editBtn := button(margin+106, 816, 82, 34, tr("action.edit"), "action.edit", a.editSelectedProfile)
+	left.AddSubview(editBtn)
 	deleteBtn := button(margin+198, 816, 82, 34, tr("action.delete"), "action.delete", a.deleteProfile)
 	left.AddSubview(deleteBtn)
 	testBtn := button(margin+290, 816, 82, 34, tr("action.test"), "action.test", a.testConnection)
@@ -798,6 +780,13 @@ func (a *finalShellApp) build() {
 	if len(a.rows) > 0 {
 		a.table.SelectRow(activeConnectionIndex(a.rows))
 	}
+}
+
+func nativeWindowClass() string {
+	if value := strings.TrimSpace(os.Getenv("NBTERMINAL_WM_CLASS")); value != "" {
+		return value
+	}
+	return "NBTerminal"
 }
 
 func (a *finalShellApp) workspacePositionChanged(change uikit.SplitPositionChange) {
@@ -1285,22 +1274,35 @@ func (a *finalShellApp) selectRow(row int) {
 	}
 	a.idx = row
 	p := a.rows[row]
-	a.nameInput.SetText(p.Name)
-	a.groupInput.SetText(p.Group)
-	a.typeInput.SetText(string(p.Type))
-	a.hostInput.SetText(p.Host)
-	if p.Port > 0 {
-		a.portInput.SetText(fmt.Sprintf("%d", p.Port))
-	} else {
-		a.portInput.SetText("")
-	}
-	a.userInput.SetText(p.Username)
-	a.passInput.SetText("")
-	a.workInput.SetText(p.WorkingDir)
-	a.keyInput.SetText(p.PrivateKey)
+	a.updateSelectedSummary()
 	a.setStatus(trf("status.selected", p.Name))
 	if a.table != nil {
 		a.table.ReloadData()
+	}
+}
+
+func (a *finalShellApp) updateSelectedSummary() {
+	if a == nil || a.idx < 0 || a.idx >= len(a.rows) {
+		if a != nil && a.selectedName != nil {
+			a.selectedName.SetText(tr("connections.none"))
+			if a.selectedDetail != nil {
+				a.selectedDetail.SetText("")
+			}
+			if a.selectedRecent != nil {
+				a.selectedRecent.SetText("")
+			}
+		}
+		return
+	}
+	p := a.rows[a.idx]
+	if a.selectedName != nil {
+		a.selectedName.SetText(p.Name)
+	}
+	if a.selectedDetail != nil {
+		a.selectedDetail.SetText(trf("connections.selected_detail_format", p.Group, strings.ToUpper(string(p.Type)), p.tableEndpoint()))
+	}
+	if a.selectedRecent != nil {
+		a.selectedRecent.SetText(trf("connections.selected_recent_format", formatLastUsed(p.LastUsed)))
 	}
 }
 
@@ -1311,75 +1313,11 @@ func (a *finalShellApp) persistActiveRow(row int) error {
 	return a.store.SetActive(a.rows[row].ID)
 }
 
-func (a *finalShellApp) newProfile() {
-	p := newConnectionProfile(os.Getenv("USER"))
-	a.allRows = append(a.allRows, p)
-	if a.searchInput != nil {
-		a.searchInput.SetText("")
-	}
-	a.rows = append([]connectionProfile(nil), a.allRows...)
-	a.refreshTable()
-	a.selectRow(len(a.rows) - 1)
-}
-
 func newConnectionProfile(username string) connectionProfile {
 	return connectionProfile{
 		ID: fmt.Sprintf("conn-%d", time.Now().UnixNano()), Name: tr("profile.new_ssh"),
 		Group: tr("profile.default_group"), Type: connectionTypeSSH, Port: 22, Username: username,
 	}
-}
-
-func (a *finalShellApp) profileFromForm() connectionProfile {
-	p := connectionProfile{}
-	if a.idx >= 0 && a.idx < len(a.rows) {
-		p = a.rows[a.idx]
-	}
-	p.Name = strings.TrimSpace(a.nameInput.Text())
-	p.Group = strings.TrimSpace(a.groupInput.Text())
-	p.Type = connectionType(strings.ToLower(strings.TrimSpace(a.typeInput.Text())))
-	p.Host = strings.TrimSpace(a.hostInput.Text())
-	fmt.Sscanf(strings.TrimSpace(a.portInput.Text()), "%d", &p.Port)
-	p.Username = strings.TrimSpace(a.userInput.Text())
-	p.WorkingDir = strings.TrimSpace(a.workInput.Text())
-	p.PrivateKey = strings.TrimSpace(a.keyInput.Text())
-	if pw := a.passInput.Text(); pw != "" {
-		p.SetPassword(pw)
-	}
-	if p.ID == "" {
-		p.ID = fmt.Sprintf("conn-%d", time.Now().UnixNano())
-	}
-	if p.Name == "" {
-		p.Name = tr("profile.unnamed")
-	}
-	if p.Group == "" {
-		p.Group = tr("profile.default_group")
-	}
-	if p.Type != connectionTypeLocal && p.Type != connectionTypeSSH {
-		p.Type = connectionTypeSSH
-	}
-	if p.Type == connectionTypeSSH && p.Port == 0 {
-		p.Port = 22
-	}
-	return p
-}
-
-func (a *finalShellApp) saveProfile() {
-	p := a.profileFromForm()
-	if err := a.persistProfile(p); err != nil {
-		a.appendOutput(trf("output.save_failed", err.Error()))
-		a.setStatus(tr("status.save_failed"))
-		a.showTopNotice(tr("status.save_failed"), err.Error(), true)
-		return
-	}
-	if a.searchInput != nil {
-		a.searchInput.SetText("")
-	}
-	a.rows = filterConnections(a.allRows, "")
-	a.refreshTable()
-	if i := indexProfileByID(a.rows, p.ID); i >= 0 {
-		a.table.SelectRow(i)
-	}
-	a.setStatus(trf("status.saved", p.Name))
 }
 
 func (a *finalShellApp) deleteProfile() {
@@ -1441,7 +1379,7 @@ func (a *finalShellApp) selectedProfile() (connectionProfile, bool) {
 	if a.idx < 0 || a.idx >= len(a.rows) {
 		return connectionProfile{}, false
 	}
-	return a.profileFromForm(), true
+	return a.rows[a.idx], true
 }
 
 func (a *finalShellApp) connectSelected() {
@@ -1455,7 +1393,7 @@ func (a *finalShellApp) activateConnectionRow(row int) {
 	if a.idx != row {
 		a.selectRow(row)
 	}
-	p := a.profileFromForm()
+	p := a.rows[row]
 	p = markProfileUsed(p, time.Now())
 	if err := a.persistProfile(p); err != nil {
 		gtbox_log.LogErrorf("activate connection failed: %s", err.Error())

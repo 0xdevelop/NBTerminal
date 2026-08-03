@@ -125,6 +125,7 @@ func (s *settingsWindow) build(draft settingsDraft) {
 	s.window = uikit.NewWindowWithRect(windowRect, tr("settings.window_title"))
 	s.window.SetResizable(false)
 	if raw := s.window.Raw(); raw != nil {
+		raw.SetXClass(nativeWindowClass())
 		raw.SetNonModal()
 		raw.SetColor(tokenColor(modernTheme.background))
 	}
@@ -249,6 +250,9 @@ func (s *settingsWindow) close() {
 func (a *finalShellApp) rebuildForLanguage(language locales.Language) {
 	if a == nil {
 		return
+	}
+	if a.editor != nil {
+		a.editor.close()
 	}
 	oldWindow := a.window
 	next := &finalShellApp{store: a.store, history: a.history, session: terminal.NewSession(a.history), idx: -1}

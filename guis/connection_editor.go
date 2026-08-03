@@ -1,0 +1,245 @@
+package guis
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+
+	"github.com/0xdevelop/fltk2go/uikit"
+)
+
+const (
+	connectionEditorWidth  = 660
+	connectionEditorHeight = 570
+)
+
+// connectionEditorDraft is deliberately independent from native controls. It
+// makes validation deterministic and ensures opening/editing a connection does
+// not mutate durable state until Save succeeds.
+type connectionEditorDraft struct {
+	Name       string
+	Group      string
+	Type       string
+	Host       string
+	Port       string
+	Username   string
+	WorkingDir string
+	PrivateKey string
+}
+
+func (d connectionEditorDraft) Profile(base connectionProfile, password string) (connectionProfile, error) {
+	p := base
+	p.Name = strings.TrimSpace(d.Name)
+	p.Group = strings.TrimSpace(d.Group)
+	p.Type = connectionType(strings.ToLower(strings.TrimSpace(d.Type)))
+	p.Host = strings.TrimSpace(d.Host)
+	p.Username = strings.TrimSpace(d.Username)
+	p.WorkingDir = strings.TrimSpace(d.WorkingDir)
+	p.PrivateKey = strings.TrimSpace(d.PrivateKey)
+
+	if p.Name == "" {
+		p.Name = tr("profile.unnamed")
+	}
+	if p.Group == "" {
+		p.Group = tr("profile.default_group")
+	}
+	if p.Type != connectionTypeLocal && p.Type != connectionTypeSSH {
+		return connectionProfile{}, fmt.Errorf("%s", tr("editor.invalid_type"))
+	}
+	if p.Type == connectionTypeLocal {
+		p.Port = 0
+	} else {
+		portText := strings.TrimSpace(d.Port)
+		if portText == "" {
+			p.Port = 22
+		} else {
+			port, err := strconv.Atoi(portText)
+			if err != nil || port < 1 || port > 65535 {
+				return connectionProfile{}, fmt.Errorf("%s", tr("editor.invalid_port"))
+			}
+			p.Port = port
+		}
+	}
+	if password != "" {
+		p.SetPassword(password)
+	}
+	return p, nil
+}
+
+type connectionEditor struct {
+	owner   *finalShellApp
+	window  *uikit.UIWindow
+	profile connectionProfile
+
+	name       *uikit.Input
+	group      *uikit.Input
+	connType   *uikit.Input
+	host       *uikit.Input
+	port       *uikit.Input
+	username   *uikit.Input
+	password   *uikit.Input
+	workingDir *uikit.Input
+	privateKey *uikit.Input
+}
+
+func (a *finalShellApp) openConnectionEditor(profile connectionProfile) {
+	if a == nil {
+		return
+	}
+	if a.editor != nil && a.editor.window != nil && !a.editor.window.IsClosed() {
+		a.editor.window.Show()
+		if raw := a.editor.window.Raw(); raw != nil {
+			raw.TakeFocus()
+		}
+		return
+	}
+	e := &connectionEditor{owner: a, profile: profile}
+	a.editor = e
+	e.build()
+}
+
+func (a *finalShellApp) newProfile() {
+	a.openConnectionEditor(newConnectionProfile(os.Getenv("USER")))
+}
+
+func (a *finalShellApp) editSelectedProfile() {
+	profile, ok := a.selectedProfile()
+	if !ok {
+		return
+	}
+	a.openConnectionEditor(profile)
+}
+
+func (e *connectionEditor) build() {
+	if e == nil {
+		return
+	}
+	windowRect := centeredScreenRect(connectionEditorWidth, connectionEditorHeight)
+	if e.owner != nil && e.owner.window != nil && e.owner.window.Raw() != nil {
+		raw := e.owner.window.Raw()
+		windowRect = rect(raw.XRoot()+(raw.W()-connectionEditorWidth)/2, raw.YRoot()+(raw.H()-connectionEditorHeight)/2, connectionEditorWidth, connectionEditorHeight)
+	}
+	title := tr("editor.title_edit")
+	if indexProfileByID(e.owner.allRows, e.profile.ID) < 0 {
+		title = tr("editor.title_new")
+	}
+	e.window = uikit.NewWindowWithRect(windowRect, title)
+	e.window.SetResizable(false)
+	if raw := e.window.Raw(); raw != nil {
+		raw.SetXClass(nativeWindowClass())
+		raw.SetNonModal()
+		raw.SetColor(tokenColor(modernTheme.background))
+	}
+	e.window.RootView().SetAutomationID("connection_editor.window").SetAutomationRole("window").SetAutomationName(title)
+	e.window.OnClose(func() {
+		e.window.RootView().SetAutomationID("")
+		if e.owner != nil && e.owner.editor == e {
+			e.owner.editor = nil
+		}
+	})
+
+	root := e.window.RootView()
+	root.AddSubview(titleLabel(28, 22, 500, 30, title))
+	root.AddSubview(mutedLabel(30, 54, 590, 36, tr("editor.subtitle")))
+
+	e.name = editorInput(root, 28, 118, 286, tr("field.name"), "connection_editor.name")
+	e.group = editorInput(root, 334, 118, 298, tr("field.group"), "connection_editor.group")
+	e.connType = editorInput(root, 28, 190, 132, tr("field.type"), "connection_editor.type")
+	e.host = editorInput(root, 180, 190, 292, tr("field.host"), "connection_editor.host")
+	e.port = editorInput(root, 492, 190, 140, tr("field.port"), "connection_editor.port")
+	e.username = editorInput(root, 28, 262, 286, tr("field.user"), "connection_editor.username")
+	root.AddSubview(mutedLabel(334, 238, 298, 20, tr("field.password")))
+	e.password = uikit.NewInputWithType(334, 262, 298, 32, "", uikit.SecretInput)
+	styleInput(e.password)
+	e.password.View().SetAutomationID("connection_editor.password").SetAutomationName(tr("field.password"))
+	root.AddSubview(e.password)
+	root.AddSubview(mutedLabel(334, 296, 298, 20, tr("editor.password_hint")))
+	e.workingDir = editorInput(root, 28, 346, 604, tr("field.workdir"), "connection_editor.working_dir")
+	e.privateKey = editorInput(root, 28, 418, 604, tr("field.key"), "connection_editor.private_key")
+
+	e.name.SetText(e.profile.Name)
+	e.group.SetText(e.profile.Group)
+	e.connType.SetText(string(e.profile.Type))
+	e.host.SetText(e.profile.Host)
+	if e.profile.Port > 0 {
+		e.port.SetText(strconv.Itoa(e.profile.Port))
+	}
+	e.username.SetText(e.profile.Username)
+	e.workingDir.SetText(e.profile.WorkingDir)
+	e.privateKey.SetText(e.profile.PrivateKey)
+
+	root.AddSubview(button(420, 512, 96, 36, tr("button.cancel"), "connection_editor.cancel", e.close))
+	root.AddSubview(primaryButton(528, 512, 104, 36, tr("button.save"), "connection_editor.save", e.save))
+	e.window.Show()
+	if raw := e.name.View().Raw(); raw != nil {
+		if focusable, ok := raw.(interface{ TakeFocus() int }); ok {
+			focusable.TakeFocus()
+		}
+	}
+}
+
+func editorInput(root *uikit.UIView, x, y, width int, fieldTitle, id string) *uikit.Input {
+	root.AddSubview(mutedLabel(x, y-24, width, 20, fieldTitle))
+	in := inputNoLabel(x, y, width, 32, id, fieldTitle)
+	root.AddSubview(in)
+	return in
+}
+
+func (e *connectionEditor) draft() (connectionEditorDraft, error) {
+	if e == nil || e.name == nil || e.group == nil || e.connType == nil || e.host == nil || e.port == nil ||
+		e.username == nil || e.password == nil || e.workingDir == nil || e.privateKey == nil {
+		return connectionEditorDraft{}, errors.New(tr("editor.controls_unavailable"))
+	}
+	return connectionEditorDraft{
+		Name:       e.name.Text(),
+		Group:      e.group.Text(),
+		Type:       e.connType.Text(),
+		Host:       e.host.Text(),
+		Port:       e.port.Text(),
+		Username:   e.username.Text(),
+		WorkingDir: e.workingDir.Text(),
+		PrivateKey: e.privateKey.Text(),
+	}, nil
+}
+
+func (e *connectionEditor) save() {
+	draft, err := e.draft()
+	var profile connectionProfile
+	if err == nil {
+		profile, err = draft.Profile(e.profile, e.password.Text())
+	}
+	if err == nil && e.owner != nil {
+		err = e.owner.persistProfile(profile)
+	}
+	if err != nil {
+		if e.owner != nil {
+			e.owner.setStatus(tr("status.save_failed"))
+			e.owner.showTopNotice(tr("status.save_failed"), err.Error(), true)
+		}
+		return
+	}
+	if e.owner != nil {
+		if e.owner.searchInput != nil {
+			e.owner.searchInput.SetText("")
+		}
+		e.owner.rows = filterConnections(e.owner.allRows, "")
+		e.owner.idx = indexProfileByID(e.owner.rows, profile.ID)
+		e.owner.refreshTable()
+		if e.owner.table != nil && e.owner.idx >= 0 {
+			e.owner.table.SelectRow(e.owner.idx)
+		} else {
+			e.owner.updateSelectedSummary()
+		}
+		e.owner.setStatus(trf("status.saved", profile.Name))
+	}
+	e.close()
+}
+
+func (e *connectionEditor) close() {
+	if e == nil || e.window == nil {
+		return
+	}
+	e.window.Close()
+}
