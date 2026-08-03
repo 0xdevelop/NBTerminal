@@ -633,6 +633,38 @@ func TestEmojiRuneDetectionKeepsTextScriptsOnPrimaryFont(t *testing.T) {
 	}
 }
 
+func TestNavigatorSortsRecentConnectionsDeterministically(t *testing.T) {
+	rows := []connectionProfile{
+		{ID: "never", Name: "Never", Group: "B"},
+		{ID: "older", Name: "Older", Group: "A", LastUsed: "2026-08-01T10:00:00Z"},
+		{ID: "recent-b", Name: "Beta", Group: "B", LastUsed: "2026-08-03T10:00:00Z"},
+		{ID: "recent-a", Name: "Alpha", Group: "A", LastUsed: "2026-08-03T10:00:00Z"},
+	}
+
+	sortConnectionsForNavigator(rows)
+	got := []string{rows[0].ID, rows[1].ID, rows[2].ID, rows[3].ID}
+	want := []string{"recent-a", "recent-b", "older", "never"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("navigator order = %#v, want %#v", got, want)
+	}
+}
+
+func TestMarkProfileUsedUpdatesTimestampWithoutTouchingSecrets(t *testing.T) {
+	profile := connectionProfile{ID: "target", Name: "目标 🚀", PasswordEnc: "encrypted"}
+	usedAt := time.Date(2026, 8, 3, 11, 12, 13, 0, time.UTC)
+
+	used := markProfileUsed(profile, usedAt)
+	if used.ID != "target" || used.LastUsed != usedAt.Format(time.RFC3339) {
+		t.Fatalf("used profile mismatch: %#v", used)
+	}
+	if used.PasswordEnc != "encrypted" {
+		t.Fatalf("secret preservation failed: %#v", used)
+	}
+	if profile.LastUsed != "" {
+		t.Fatalf("input profile was mutated: %#v", profile)
+	}
+}
+
 func TestConnectionMatchesQuery(t *testing.T) {
 	profile := connectionProfile{
 		Name:        "Prod API",

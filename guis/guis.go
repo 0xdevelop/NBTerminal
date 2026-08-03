@@ -227,17 +227,41 @@ func (s *connectionStore) List() []connectionProfile {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := append([]connectionProfile(nil), s.list...)
-	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].Group == out[j].Group {
-			return out[i].Name < out[j].Name
-		}
-		return out[i].Group < out[j].Group
-	})
+	sortConnectionsForNavigator(out)
 	return out
 }
 
+func sortConnectionsForNavigator(rows []connectionProfile) {
+	sort.SliceStable(rows, func(i, j int) bool {
+		leftTime, leftOK := parseLastUsed(rows[i].LastUsed)
+		rightTime, rightOK := parseLastUsed(rows[j].LastUsed)
+		if leftOK != rightOK {
+			return leftOK
+		}
+		if leftOK && !leftTime.Equal(rightTime) {
+			return leftTime.After(rightTime)
+		}
+		if rows[i].Group != rows[j].Group {
+			return rows[i].Group < rows[j].Group
+		}
+		if rows[i].Name != rows[j].Name {
+			return rows[i].Name < rows[j].Name
+		}
+		return rows[i].ID < rows[j].ID
+	})
+}
+
+func parseLastUsed(value string) (time.Time, bool) {
+	parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(value))
+	return parsed, err == nil
+}
+
+func markProfileUsed(profile connectionProfile, usedAt time.Time) connectionProfile {
+	profile.LastUsed = usedAt.UTC().Format(time.RFC3339)
+	return profile
+}
+
 func (s *connectionStore) normalizeLocked() {
-	now := time.Now().UTC().Format(time.RFC3339)
 	seenIDs := make(map[string]struct{}, len(s.list))
 	for i := range s.list {
 		if s.list[i].ID == "" {
@@ -255,9 +279,6 @@ func (s *connectionStore) normalizeLocked() {
 		}
 		if s.list[i].Type == connectionTypeSSH && s.list[i].Port == 0 {
 			s.list[i].Port = 22
-		}
-		if s.list[i].LastUsed == "" {
-			s.list[i].LastUsed = now
 		}
 	}
 }
@@ -279,7 +300,7 @@ func uniqueProfileID(id string, seen map[string]struct{}) string {
 
 func defaultConnections() []connectionProfile {
 	return []connectionProfile{
-		{ID: "local-shell", Name: tr("profile.local_shell"), Group: tr("profile.local_group"), Type: connectionTypeLocal, LastUsed: time.Now().UTC().Format(time.RFC3339), Description: tr("profile.local_description")},
+		{ID: "local-shell", Name: tr("profile.local_shell"), Group: tr("profile.local_group"), Type: connectionTypeLocal, Description: tr("profile.local_description")},
 		{ID: "example-ssh", Name: tr("profile.example_ssh"), Group: tr("profile.examples_group"), Type: connectionTypeSSH, Host: "127.0.0.1", Port: 22, Username: os.Getenv("USER"), Description: tr("profile.ssh_description")},
 	}
 }
@@ -300,7 +321,6 @@ func profilesFromConfig(cfg *config.FileConfig) []connectionProfile {
 			Username:    conn.Username,
 			PrivateKey:  conn.PrivateKey,
 			WorkingDir:  conn.WorkingDir,
-			LastUsed:    time.Now().UTC().Format(time.RFC3339),
 			Description: conn.Description,
 		}
 		if conn.Type == terminal.ConnectionTypeLocal {
@@ -636,6 +656,24 @@ func (a *finalShellApp) build() {
 	left.AddSubview(mutedLabel(margin+18, 132, 70, 18, tr("connections.search")))
 	a.searchInput = inputNoLabel(margin+82, 126, leftW-194, 30, "connections.search", tr("connections.search_placeholder"))
 	a.searchInput.OnChange(a.jumpToSearchMatch)
+	a.searchInput.View().On(fltk_bridge.KEYDOWN, func(fltk_bridge.Event) bool {
+		switch fltk_bridge.EventKey() {
+		case fltk_bridge.ENTER_KEY:
+			a.activateConnectionRow(a.idx)
+			return true
+		case fltk_bridge.DOWN:
+			if a.table != nil && a.idx >= 0 {
+				a.table.SelectRow(a.idx)
+				if raw := a.table.View().Raw(); raw != nil {
+					if focusable, ok := raw.(interface{ TakeFocus() int }); ok {
+						focusable.TakeFocus()
+					}
+				}
+				return true
+			}
+		}
+		return false
+	})
 	left.AddSubview(a.searchInput)
 	findBtn := button(margin+390, 126, 86, 30, tr("connections.find"), "connections.find", a.jumpToSearchMatch)
 	left.AddSubview(findBtn)
@@ -659,6 +697,7 @@ func (a *finalShellApp) build() {
 				a.showTopNotice(tr("status.save_failed"), err.Error(), true)
 			}
 		}})
+		a.table.OnActivate(a.activateConnectionRow)
 		a.table.SetBackgroundColor(tokenColor(modernTheme.card))
 		a.table.SetCustomDraw(a.drawConnectionCell)
 		a.table.ReloadData()
@@ -755,10 +794,10 @@ func (a *finalShellApp) build() {
 	a.workspace.OnPositionChanged(a.workspacePositionChanged)
 	a.setCommandRunning(false)
 
-	if len(a.rows) > 0 {
-		a.selectRow(activeConnectionIndex(a.rows))
-	}
 	a.window.Show()
+	if len(a.rows) > 0 {
+		a.table.SelectRow(activeConnectionIndex(a.rows))
+	}
 }
 
 func (a *finalShellApp) workspacePositionChanged(change uikit.SplitPositionChange) {
@@ -1172,7 +1211,11 @@ func (a *finalShellApp) jumpToSearchMatch() {
 		}
 		return
 	}
-	a.selectRow(0)
+	if a.table != nil {
+		a.table.SelectRow(0)
+	} else {
+		a.selectRow(0)
+	}
 	if query == "" {
 		a.setStatus(trf("connections.showing", len(a.rows)))
 		return
@@ -1302,7 +1345,6 @@ func (a *finalShellApp) profileFromForm() connectionProfile {
 	if pw := a.passInput.Text(); pw != "" {
 		p.SetPassword(pw)
 	}
-	p.LastUsed = time.Now().UTC().Format(time.RFC3339)
 	if p.ID == "" {
 		p.ID = fmt.Sprintf("conn-%d", time.Now().UnixNano())
 	}
@@ -1332,9 +1374,10 @@ func (a *finalShellApp) saveProfile() {
 	if a.searchInput != nil {
 		a.searchInput.SetText("")
 	}
+	a.rows = filterConnections(a.allRows, "")
 	a.refreshTable()
 	if i := indexProfileByID(a.rows, p.ID); i >= 0 {
-		a.selectRow(i)
+		a.table.SelectRow(i)
 	}
 	a.setStatus(trf("status.saved", p.Name))
 }
@@ -1402,13 +1445,38 @@ func (a *finalShellApp) selectedProfile() (connectionProfile, bool) {
 }
 
 func (a *finalShellApp) connectSelected() {
-	p, ok := a.selectedProfile()
-	if !ok {
+	a.activateConnectionRow(a.idx)
+}
+
+func (a *finalShellApp) activateConnectionRow(row int) {
+	if a == nil || row < 0 || row >= len(a.rows) {
 		return
 	}
-	a.saveProfile()
+	if a.idx != row {
+		a.selectRow(row)
+	}
+	p := a.profileFromForm()
+	p = markProfileUsed(p, time.Now())
+	if err := a.persistProfile(p); err != nil {
+		gtbox_log.LogErrorf("activate connection failed: %s", err.Error())
+		a.appendOutput(trf("output.save_failed", err.Error()))
+		a.setStatus(tr("status.save_failed"))
+		a.showTopNotice(tr("status.save_failed"), err.Error(), true)
+		return
+	}
+	a.refreshTable()
+	if a.idx >= 0 {
+		a.table.SelectRow(a.idx)
+	}
 	a.appendOutput(trf("output.profile_ready", p.Name, p.endpoint()))
-	a.setStatus(tr("status.profile_ready"))
+	a.setStatus(trf("status.connection_activated", p.Name))
+	if a.cmdInput != nil && a.cmdInput.View() != nil {
+		if raw := a.cmdInput.View().Raw(); raw != nil {
+			if focusable, ok := raw.(interface{ TakeFocus() int }); ok {
+				focusable.TakeFocus()
+			}
+		}
+	}
 }
 
 func (a *finalShellApp) testConnection() {
@@ -1542,6 +1610,7 @@ func (a *finalShellApp) setCommandRunning(running bool) {
 }
 
 func (a *finalShellApp) runAsync(p connectionProfile, command string) {
+	p = markProfileUsed(p, time.Now())
 	if err := a.persistRuntimeProfile(p); err != nil {
 		a.appendOutput(trf("output.save_current_failed", err.Error()))
 		a.setStatus(tr("status.save_runtime_failed"))
@@ -1622,11 +1691,16 @@ func (a *finalShellApp) persistProfile(p connectionProfile) error {
 		p.ID = fmt.Sprintf("conn-%d", time.Now().UnixNano())
 	}
 	nextAll := upsertProfile(append([]connectionProfile(nil), a.allRows...), p)
+	sortConnectionsForNavigator(nextAll)
 	if err := a.store.SaveActive(nextAll, p.ID); err != nil {
 		return err
 	}
 	a.allRows = nextAll
-	a.rows = filterConnections(nextAll, "")
+	query := ""
+	if a.searchInput != nil {
+		query = a.searchInput.Text()
+	}
+	a.rows = filterConnections(nextAll, query)
 	a.idx = indexProfileByID(a.rows, p.ID)
 	return nil
 }
@@ -1640,6 +1714,9 @@ func (a *finalShellApp) persistRuntimeProfile(p connectionProfile) error {
 		return err
 	}
 	a.refreshTable()
+	if a.table != nil && a.idx >= 0 {
+		a.table.SelectRow(a.idx)
+	}
 	return nil
 }
 

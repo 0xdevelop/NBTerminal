@@ -105,6 +105,7 @@
   "status.deleted": "Deleted %s",
   "status.delete_failed": "Delete failed",
   "status.profile_ready": "Connection profile ready",
+  "status.connection_activated": "Connection activated: %s",
   "status.history_failed": "History load failed",
   "status.history_count": "History: %d entries",
   "status.last_failed": "Last command load failed",

@@ -105,6 +105,7 @@
   "status.deleted": "Удалено: %s",
   "status.delete_failed": "Ошибка удаления",
   "status.profile_ready": "Профиль подключения готов",
+  "status.connection_activated": "Подключение активировано: %s",
   "status.history_failed": "Ошибка загрузки истории",
   "status.history_count": "Записей истории: %d",
   "status.last_failed": "Ошибка загрузки последней команды",

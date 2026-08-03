@@ -105,6 +105,7 @@
   "status.deleted": "已刪除 %s",
   "status.delete_failed": "刪除失敗",
   "status.profile_ready": "連線設定已就緒",
+  "status.connection_activated": "已啟用連線：%s",
   "status.history_failed": "歷史記錄載入失敗",
   "status.history_count": "歷史記錄：%d 條",
   "status.last_failed": "上次指令載入失敗",

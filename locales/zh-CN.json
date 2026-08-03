@@ -105,6 +105,7 @@
   "status.deleted": "已删除 %s",
   "status.delete_failed": "删除失败",
   "status.profile_ready": "连接配置已就绪",
+  "status.connection_activated": "已激活连接：%s",
   "status.history_failed": "历史记录加载失败",
   "status.history_count": "历史记录：%d 条",
   "status.last_failed": "上次命令加载失败",
