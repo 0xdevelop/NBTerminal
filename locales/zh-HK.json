@@ -139,6 +139,7 @@
   "output.stderr": "[標準錯誤] %s\n",
   "output.error": "錯誤：%s\n",
   "profile.local_shell": "本機終端",
+  "profile.local_compact": "本機",
   "profile.new_host": "新主機",
   "profile.never": "從未使用",
   "profile.new_connection": "新連線",

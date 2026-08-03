@@ -117,6 +117,7 @@ func (a *finalShellApp) openSettings() {
 
 func (s *settingsWindow) build(draft settingsDraft) {
 	owner := s.owner
+	layout := settingsLayoutFor(nativeControls)
 	windowRect := centeredScreenRect(settingsWindowWidth, settingsWindowHeight)
 	if owner != nil && owner.window != nil && owner.window.Raw() != nil {
 		raw := owner.window.Raw()
@@ -142,8 +143,8 @@ func (s *settingsWindow) build(draft settingsDraft) {
 	root.AddSubview(mutedLabel(28, 54, 550, 22, tr("settings.subtitle")))
 
 	root.AddSubview(sectionTitle(28, 96, 220, 24, tr("settings.general")))
-	root.AddSubview(label(28, 132, 190, 30, tr("settings.language")))
-	s.language = uidropdown.NewUIDropdown(rect(238, 132, 330, 30))
+	root.AddSubview(label(28, layout.Language.Y, 190, layout.Language.Height, tr("settings.language")))
+	s.language = uidropdown.NewUIDropdown(rect(layout.Language.X, layout.Language.Y, layout.Language.Width, layout.Language.Height))
 	languages := locales.SupportedLanguages()
 	names := make([]string, 0, len(languages))
 	selected := 0
@@ -159,23 +160,23 @@ func (s *settingsWindow) build(draft settingsDraft) {
 		raw.SetBox(fltk_bridge.RFLAT_BOX)
 		raw.SetColor(tokenColor(modernTheme.elevated))
 		raw.SetLabelColor(tokenColor(modernTheme.foreground))
-		raw.SetLabelSize(13)
+		raw.SetLabelSize(nativeTypography.Body)
 	}
 	s.language.View().SetAutomationID("settings.language").SetAutomationName(tr("settings.language"))
 	root.AddSubview(s.language)
 
-	root.AddSubview(label(28, 176, 190, 30, tr("settings.command_timeout")))
-	s.timeout = uikit.NewInputWithType(238, 176, 120, 30, "", uikit.IntInput)
+	root.AddSubview(label(28, layout.Timeout.Y, 190, layout.Timeout.Height, tr("settings.command_timeout")))
+	s.timeout = uikit.NewInputWithType(layout.Timeout.X, layout.Timeout.Y, layout.Timeout.Width, layout.Timeout.Height, "", uikit.IntInput)
 	styleInput(s.timeout)
 	s.timeout.SetText(strconv.Itoa(draft.CommandTimeoutSeconds))
 	s.timeout.View().SetAutomationID("settings.command_timeout").SetAutomationName(tr("settings.command_timeout"))
 	root.AddSubview(s.timeout)
-	root.AddSubview(mutedLabel(370, 181, 198, 22, tr("settings.seconds_hint")))
+	root.AddSubview(mutedLabel(370, layout.Timeout.Y+6, 198, 22, tr("settings.seconds_hint")))
 
-	root.AddSubview(sectionTitle(28, 232, 300, 24, tr("settings.behavior")))
+	root.AddSubview(sectionTitle(28, layout.BehaviorTitleY, 300, 24, tr("settings.behavior")))
 	checkStyle := checkbox.DefaultCheckboxStyle()
 	checkStyle.Font = fltk_bridge.HELVETICA
-	checkStyle.FontSize = 13
+	checkStyle.FontSize = nativeTypography.Body
 	checkStyle.TextColor = uint(tokenColor(modernTheme.foreground))
 	checkStyle.Color = uint(tokenColor(modernTheme.card))
 	s.resetWorkspace = checkbox.NewUICheckboxWithOptions(rect(28, 270, 540, 34), tr("settings.reset_workspace"), checkStyle)
@@ -188,8 +189,8 @@ func (s *settingsWindow) build(draft settingsDraft) {
 	root.AddSubview(s.startFirst)
 	root.AddSubview(mutedLabel(50, 348, 518, 38, tr("settings.behavior_hint")))
 
-	root.AddSubview(button(360, 408, 96, 36, tr("button.cancel"), "settings.cancel", s.close))
-	root.AddSubview(primaryButton(468, 408, 100, 36, tr("button.save"), "settings.save", s.save))
+	root.AddSubview(button(layout.Cancel.X, layout.Cancel.Y, layout.Cancel.Width, layout.Cancel.Height, tr("button.cancel"), "settings.cancel", s.close))
+	root.AddSubview(primaryButton(layout.Save.X, layout.Save.Y, layout.Save.Width, layout.Save.Height, tr("button.save"), "settings.save", s.save))
 	s.window.Show()
 }
 

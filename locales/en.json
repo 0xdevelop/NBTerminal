@@ -139,6 +139,7 @@
   "output.stderr": "[stderr] %s\n",
   "output.error": "ERROR: %s\n",
   "profile.local_shell": "Local Shell",
+  "profile.local_compact": "Local",
   "profile.new_host": "new host",
   "profile.never": "never",
   "profile.new_connection": "New Connection",

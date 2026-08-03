@@ -139,6 +139,7 @@
   "output.stderr": "[标准错误] %s\n",
   "output.error": "错误：%s\n",
   "profile.local_shell": "本地终端",
+  "profile.local_compact": "本地",
   "profile.new_host": "新主机",
   "profile.never": "从未使用",
   "profile.new_connection": "新连接",

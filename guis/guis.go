@@ -111,7 +111,7 @@ func (p connectionProfile) endpoint() string {
 
 func (p connectionProfile) tableEndpoint() string {
 	if p.Type == connectionTypeLocal {
-		return tr("profile.local_shell")
+		return tr("profile.local_compact")
 	}
 	host := strings.TrimSpace(p.Host)
 	if host == "" {
@@ -615,9 +615,9 @@ func (a *finalShellApp) build() {
 
 	root.AddSubview(titleLabel(margin, 14, 440, 28, tr("app.title")))
 	root.AddSubview(mutedLabel(margin+2, 38, 520, 22, tr("app.subtitle")))
-	settingsButton := button(rightX+18, 18, 124, 30, tr("setting.title"), "app.settings", a.openSettings)
+	settingsButton := button(rightX+18, 16, 124, nativeControls.ButtonHeight, tr("setting.title"), "app.settings", a.openSettings)
 	root.AddSubview(settingsButton)
-	a.status = pillLabel(rightX+158, 18, rightW-158, 30, tr("app.ready"))
+	a.status = pillLabel(rightX+158, 16, rightW-158, nativeControls.ButtonHeight, tr("app.ready"))
 	a.status.View().SetAutomationID("app.status")
 	root.AddSubview(a.status)
 
@@ -650,7 +650,7 @@ func (a *finalShellApp) build() {
 	left.AddSubview(sectionTitle(margin+18, 86, 260, 24, tr("app.connections")))
 	left.AddSubview(mutedLabel(margin+18, 110, 430, 18, tr("connections.subtitle")))
 	left.AddSubview(mutedLabel(margin+18, 132, 70, 18, tr("connections.search")))
-	a.searchInput = inputNoLabel(margin+82, 126, leftW-194, 30, "connections.search", tr("connections.search_placeholder"))
+	a.searchInput = inputNoLabel(margin+82, 124, leftW-194, nativeControls.InputHeight, "connections.search", tr("connections.search_placeholder"))
 	a.searchInput.OnChange(a.jumpToSearchMatch)
 	a.searchInput.View().On(fltk_bridge.KEYDOWN, func(fltk_bridge.Event) bool {
 		switch fltk_bridge.EventKey() {
@@ -671,12 +671,14 @@ func (a *finalShellApp) build() {
 		return false
 	})
 	left.AddSubview(a.searchInput)
-	findBtn := button(margin+390, 126, 86, 30, tr("connections.find"), "connections.find", a.jumpToSearchMatch)
+	findBtn := button(margin+390, 124, 86, nativeControls.ButtonHeight, tr("connections.find"), "connections.find", a.jumpToSearchMatch)
 	left.AddSubview(findBtn)
 
 	tv, err := uikit.NewUITableView(margin+14, 166, leftW-28, 478)
 	if err == nil {
 		a.table = tv
+		a.table.SetHeaderHeight(nativeControls.TableHeaderHeight)
+		a.table.SetDefaultRowHeight(nativeControls.TableRowHeight)
 		a.table.View().SetAutomationID("connections.table").SetAutomationName(tr("app.connections"))
 		a.table.AddColumn(tableview.TableColumn{Identifier: "group", Title: tr("connections.group"), Width: 78})
 		a.table.AddColumn(tableview.TableColumn{Identifier: "name", Title: tr("connections.name"), Width: 108})
@@ -702,7 +704,7 @@ func (a *finalShellApp) build() {
 
 	left.AddSubview(sectionTitle(margin+18, 666, 260, 22, tr("connections.selected_summary")))
 	a.selectedName = label(margin+18, 694, leftW-36, 24, "")
-	a.selectedName.SetFontSize(15)
+	a.selectedName.SetFontSize(nativeTypography.SectionTitle)
 	a.selectedName.View().SetAutomationID("connections.selected_name")
 	left.AddSubview(a.selectedName)
 	a.selectedDetail = mutedLabel(margin+18, 722, leftW-36, 22, "")
@@ -712,15 +714,15 @@ func (a *finalShellApp) build() {
 	a.selectedRecent.View().SetAutomationID("connections.selected_recent")
 	left.AddSubview(a.selectedRecent)
 
-	addBtn := button(margin+14, 816, 82, 34, tr("action.new"), "action.new", a.newProfile)
+	addBtn := button(margin+14, 816, 82, nativeControls.ButtonHeight, tr("action.new"), "action.new", a.newProfile)
 	left.AddSubview(addBtn)
-	editBtn := button(margin+106, 816, 82, 34, tr("action.edit"), "action.edit", a.editSelectedProfile)
+	editBtn := button(margin+106, 816, 82, nativeControls.ButtonHeight, tr("action.edit"), "action.edit", a.editSelectedProfile)
 	left.AddSubview(editBtn)
-	deleteBtn := button(margin+198, 816, 82, 34, tr("action.delete"), "action.delete", a.deleteProfile)
+	deleteBtn := button(margin+198, 816, 82, nativeControls.ButtonHeight, tr("action.delete"), "action.delete", a.deleteProfile)
 	left.AddSubview(deleteBtn)
-	testBtn := button(margin+290, 816, 82, 34, tr("action.test"), "action.test", a.testConnection)
+	testBtn := button(margin+290, 816, 82, nativeControls.ButtonHeight, tr("action.test"), "action.test", a.testConnection)
 	left.AddSubview(testBtn)
-	connectBtn := primaryButton(margin+382, 816, 118, 34, tr("action.connect"), "action.connect", a.connectSelected)
+	connectBtn := primaryButton(margin+382, 814, 118, nativeControls.PrimaryButtonHeight, tr("action.connect"), "action.connect", a.connectSelected)
 	left.AddSubview(connectBtn)
 
 	rightPanel.SetBackgroundColor(uint(tokenColor(modernTheme.card)))
@@ -730,7 +732,7 @@ func (a *finalShellApp) build() {
 
 	a.output = uikit.NewUITextView(rect(rightX+18, 140, rightW-36, 608))
 	a.output.SetAutomationID("terminal.output").SetAutomationName(tr("terminal.output_name"))
-	a.output.SetFontSize(14)
+	a.output.SetFontSize(nativeTypography.Terminal)
 	a.output.SetTextColor(uint(tokenColor(modernTheme.foreground)))
 	a.output.SetFallbackFont(fltk_bridge.FREE_FONT, isEmojiRune)
 	a.output.SetBackgroundColor(uint(tokenColor(modernTheme.terminal)))
@@ -749,7 +751,7 @@ func (a *finalShellApp) build() {
 	a.cmdInput = uikit.NewUITextView(rect(bar.command.X, bar.command.Y, bar.command.Width, bar.command.Height))
 	a.cmdInput.SetAutomationID("terminal.command").SetAutomationName(tr("terminal.command"))
 	a.cmdInput.SetWrapNone()
-	a.cmdInput.SetFontSize(14)
+	a.cmdInput.SetFontSize(nativeTypography.Terminal)
 	a.cmdInput.SetTextColor(uint(themeColor(51, 65, 85)))
 	a.cmdInput.SetFallbackFont(fltk_bridge.FREE_FONT, isEmojiRune)
 	a.cmdInput.SetBackgroundColor(uint(themeColor(248, 250, 252)))
@@ -861,7 +863,9 @@ func (d tableDelegate) DidSelectRow(_ *tableview.TableView, row int) {
 		d.onSelect(row)
 	}
 }
-func (d tableDelegate) RowHeight(_ *tableview.TableView, _ int) int { return 0 }
+func (d tableDelegate) RowHeight(_ *tableview.TableView, _ int) int {
+	return nativeControls.TableRowHeight
+}
 
 func (a *finalShellApp) drawConnectionCell(ctx fltk_bridge.TableContext, row, col, x, y, w, h int) {
 	switch ctx {
@@ -874,9 +878,9 @@ func (a *finalShellApp) drawConnectionCell(ctx fltk_bridge.TableContext, row, co
 		fltk_bridge.PushClip(x, y, w, h)
 		fltk_bridge.DrawBox(fltk_bridge.FLAT_BOX, x, y, w, h, tokenColor(modernTheme.elevated))
 		fltk_bridge.SetDrawColor(tokenColor(modernTheme.foreground))
-		fltk_bridge.SetDrawFont(fltk_bridge.HELVETICA, 13)
+		fltk_bridge.SetDrawFont(fltk_bridge.HELVETICA, nativeTypography.Body)
 		if col >= 0 && col < len(titles) {
-			fltk_bridge.Draw(titles[col], x+5, y, w-10, h, fltk_bridge.ALIGN_CENTER|fltk_bridge.ALIGN_CLIP)
+			fltk_bridge.Draw(titles[col], x+nativeControls.TextInset, y, w-nativeControls.TextInset*2, h, fltk_bridge.ALIGN_CENTER|fltk_bridge.ALIGN_CLIP)
 		}
 		fltk_bridge.SetDrawColor(tokenColor(modernTheme.border))
 		fltk_bridge.DrawRect(x, y, w, h)
@@ -896,8 +900,8 @@ func (a *finalShellApp) drawConnectionCell(ctx fltk_bridge.TableContext, row, co
 		fltk_bridge.PushClip(x, y, w, h)
 		fltk_bridge.DrawBox(fltk_bridge.FLAT_BOX, x, y, w, h, bg)
 		fltk_bridge.SetDrawColor(fg)
-		fltk_bridge.SetDrawFont(fltk_bridge.HELVETICA, 13)
-		fltk_bridge.Draw(a.connectionCellText(row, col), x+6, y, w-12, h, fltk_bridge.ALIGN_CENTER|fltk_bridge.ALIGN_CLIP)
+		fltk_bridge.SetDrawFont(fltk_bridge.HELVETICA, nativeTypography.Body)
+		fltk_bridge.Draw(a.connectionCellText(row, col), x+nativeControls.TextInset, y, w-nativeControls.TextInset*2, h, fltk_bridge.ALIGN_CENTER|fltk_bridge.ALIGN_CLIP)
 		fltk_bridge.SetDrawColor(tokenColor(modernTheme.border))
 		fltk_bridge.DrawRect(x, y, w, h)
 		fltk_bridge.PopClip()
@@ -940,7 +944,6 @@ type commandBarSpec struct {
 func commandBarLayout(rightX, rightW int) commandBarSpec {
 	const (
 		y      = 784
-		h      = 38
 		gap    = 8
 		runW   = 116
 		stopW  = 68
@@ -949,6 +952,7 @@ func commandBarLayout(rightX, rightW int) commandBarSpec {
 		recW   = 64
 		clearW = 68
 	)
+	h := nativeControls.PrimaryButtonHeight
 	run := rect(rightX+rightW-runW-18, y, runW, h)
 	stop := rect(run.X-gap-stopW, y, stopW, h)
 	x := rightX + leftX
@@ -1050,7 +1054,7 @@ func themeColor(r, g, b uint8) fltk_bridge.Color { return fltk_bridge.ColorFromR
 
 func label(x, y, w, h int, text string) *uikit.UILabel {
 	l := uikit.NewUILabel(rect(x, y, w, h), text)
-	l.SetFontSize(13)
+	l.SetFontSize(nativeTypography.Body)
 	l.SetTextColor(uint(tokenColor(modernTheme.foreground)))
 	l.SetAlignment(fltk_bridge.ALIGN_LEFT | fltk_bridge.ALIGN_INSIDE | fltk_bridge.ALIGN_CLIP)
 	return l
@@ -1058,21 +1062,21 @@ func label(x, y, w, h int, text string) *uikit.UILabel {
 
 func titleLabel(x, y, w, h int, text string) *uikit.UILabel {
 	l := label(x, y, w, h, text)
-	l.SetFontSize(20)
+	l.SetFontSize(nativeTypography.WindowTitle)
 	l.SetTextColor(uint(tokenColor(modernTheme.foreground)))
 	return l
 }
 
 func sectionTitle(x, y, w, h int, text string) *uikit.UILabel {
 	l := label(x, y, w, h, text)
-	l.SetFontSize(15)
+	l.SetFontSize(nativeTypography.SectionTitle)
 	l.SetTextColor(uint(tokenColor(modernTheme.foreground)))
 	return l
 }
 
 func mutedLabel(x, y, w, h int, text string) *uikit.UILabel {
 	l := label(x, y, w, h, text)
-	l.SetFontSize(12)
+	l.SetFontSize(nativeTypography.Supporting)
 	l.SetTextColor(uint(tokenColor(modernTheme.muted)))
 	return l
 }
@@ -1104,7 +1108,7 @@ func styleInput(in *uikit.Input) {
 	if in == nil {
 		return
 	}
-	in.SetFontSize(13)
+	in.SetFontSize(nativeTypography.Body)
 	in.SetTextColor(uint(tokenColor(modernTheme.muted)))
 	// FLTK input text color is not exposed by the current uikit bridge; keep a
 	// high-contrast light input surface so typed UTF-8 text remains readable.
@@ -1134,7 +1138,7 @@ func styleButton(b *uikit.UIButton, primary bool) {
 	if raw := b.Raw(); raw != nil {
 		raw.SetBox(fltk_bridge.RFLAT_BOX)
 		raw.SetDownBox(fltk_bridge.RSHADOW_BOX)
-		raw.SetLabelSize(13)
+		raw.SetLabelSize(nativeTypography.Body)
 	}
 	if primary {
 		b.SetBackgroundColor(uint(tokenColor(modernTheme.primary)))

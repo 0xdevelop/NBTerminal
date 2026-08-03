@@ -116,6 +116,7 @@ func (e *connectionEditor) build() {
 	if e == nil {
 		return
 	}
+	layout := connectionEditorLayoutFor(nativeControls)
 	windowRect := centeredScreenRect(connectionEditorWidth, connectionEditorHeight)
 	if e.owner != nil && e.owner.window != nil && e.owner.window.Raw() != nil {
 		raw := e.owner.window.Raw()
@@ -144,20 +145,20 @@ func (e *connectionEditor) build() {
 	root.AddSubview(titleLabel(28, 22, 500, 30, title))
 	root.AddSubview(mutedLabel(30, 54, 590, 36, tr("editor.subtitle")))
 
-	e.name = editorInput(root, 28, 118, 286, tr("field.name"), "connection_editor.name")
-	e.group = editorInput(root, 334, 118, 298, tr("field.group"), "connection_editor.group")
-	e.connType = editorInput(root, 28, 190, 132, tr("field.type"), "connection_editor.type")
-	e.host = editorInput(root, 180, 190, 292, tr("field.host"), "connection_editor.host")
-	e.port = editorInput(root, 492, 190, 140, tr("field.port"), "connection_editor.port")
-	e.username = editorInput(root, 28, 262, 286, tr("field.user"), "connection_editor.username")
-	root.AddSubview(mutedLabel(334, 238, 298, 20, tr("field.password")))
-	e.password = uikit.NewInputWithType(334, 262, 298, 32, "", uikit.SecretInput)
+	e.name = editorInput(root, layout.Name, tr("field.name"), "connection_editor.name")
+	e.group = editorInput(root, layout.Group, tr("field.group"), "connection_editor.group")
+	e.connType = editorInput(root, layout.Type, tr("field.type"), "connection_editor.type")
+	e.host = editorInput(root, layout.Host, tr("field.host"), "connection_editor.host")
+	e.port = editorInput(root, layout.Port, tr("field.port"), "connection_editor.port")
+	e.username = editorInput(root, layout.Username, tr("field.user"), "connection_editor.username")
+	root.AddSubview(mutedLabel(layout.Password.X, layout.Password.Y-nativeTypography.Supporting-nativeControls.FieldLabelGap, layout.Password.Width, 20, tr("field.password")))
+	e.password = uikit.NewInputWithType(layout.Password.X, layout.Password.Y, layout.Password.Width, layout.Password.Height, "", uikit.SecretInput)
 	styleInput(e.password)
 	e.password.View().SetAutomationID("connection_editor.password").SetAutomationName(tr("field.password"))
 	root.AddSubview(e.password)
-	root.AddSubview(mutedLabel(334, 296, 298, 20, tr("editor.password_hint")))
-	e.workingDir = editorInput(root, 28, 346, 604, tr("field.workdir"), "connection_editor.working_dir")
-	e.privateKey = editorInput(root, 28, 418, 604, tr("field.key"), "connection_editor.private_key")
+	root.AddSubview(mutedLabel(layout.Password.X, layout.Password.Bottom()+4, layout.Password.Width, 20, tr("editor.password_hint")))
+	e.workingDir = editorInput(root, layout.WorkingDir, tr("field.workdir"), "connection_editor.working_dir")
+	e.privateKey = editorInput(root, layout.PrivateKey, tr("field.key"), "connection_editor.private_key")
 
 	e.name.SetText(e.profile.Name)
 	e.group.SetText(e.profile.Group)
@@ -170,8 +171,8 @@ func (e *connectionEditor) build() {
 	e.workingDir.SetText(e.profile.WorkingDir)
 	e.privateKey.SetText(e.profile.PrivateKey)
 
-	root.AddSubview(button(420, 512, 96, 36, tr("button.cancel"), "connection_editor.cancel", e.close))
-	root.AddSubview(primaryButton(528, 512, 104, 36, tr("button.save"), "connection_editor.save", e.save))
+	root.AddSubview(button(layout.Cancel.X, layout.Cancel.Y, layout.Cancel.Width, layout.Cancel.Height, tr("button.cancel"), "connection_editor.cancel", e.close))
+	root.AddSubview(primaryButton(layout.Save.X, layout.Save.Y, layout.Save.Width, layout.Save.Height, tr("button.save"), "connection_editor.save", e.save))
 	e.window.Show()
 	if raw := e.name.View().Raw(); raw != nil {
 		if focusable, ok := raw.(interface{ TakeFocus() int }); ok {
@@ -180,9 +181,9 @@ func (e *connectionEditor) build() {
 	}
 }
 
-func editorInput(root *uikit.UIView, x, y, width int, fieldTitle, id string) *uikit.Input {
-	root.AddSubview(mutedLabel(x, y-24, width, 20, fieldTitle))
-	in := inputNoLabel(x, y, width, 32, id, fieldTitle)
+func editorInput(root *uikit.UIView, frame layoutRect, fieldTitle, id string) *uikit.Input {
+	root.AddSubview(mutedLabel(frame.X, frame.Y-nativeTypography.Supporting-nativeControls.FieldLabelGap, frame.Width, 20, fieldTitle))
+	in := inputNoLabel(frame.X, frame.Y, frame.Width, frame.Height, id, fieldTitle)
 	root.AddSubview(in)
 	return in
 }

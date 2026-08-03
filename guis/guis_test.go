@@ -419,6 +419,23 @@ func TestPersistRuntimeProfileUpdatesStoreBeforeRun(t *testing.T) {
 	}
 }
 
+func TestLocalTableEndpointUsesCompactLocaleText(t *testing.T) {
+	previous := locales.CurrentLanguage()
+	t.Cleanup(func() { locales.ResetLocaleLanguage(previous.LanguageTag()) })
+	want := map[string]string{
+		"en":    "Local",
+		"ru":    "Локально",
+		"zh-HK": "本機",
+		"zh-CN": "本地",
+	}
+	for tag, expected := range want {
+		locales.ResetLocaleLanguage(tag)
+		if got := (connectionProfile{Type: connectionTypeLocal}).tableEndpoint(); got != expected {
+			t.Fatalf("table endpoint for %s = %q, want %q", tag, got, expected)
+		}
+	}
+}
+
 func TestProductDefaultsAndFallbacksFollowCurrentLocale(t *testing.T) {
 	previous := locales.CurrentLanguage()
 	t.Cleanup(func() { locales.ResetLocaleLanguage(previous.LanguageTag()) })
