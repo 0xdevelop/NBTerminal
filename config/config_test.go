@@ -138,7 +138,8 @@ func TestSaveConfigAtomicallyPersistsUTF8WithPrivatePermissions(t *testing.T) {
 	oldGlobal := GlobalConfig
 	t.Cleanup(func() { GlobalConfig = oldGlobal })
 	GlobalConfig = &FileConfig{
-		Language: "zh-CN",
+		Language:                 "zh-CN",
+		CloseManagerAfterConnect: true,
 		Connections: []terminal.Connection{
 			{ID: "本地-🚀", Name: "中文 · 日本語 · 한국어 · 🚀 · é", Type: terminal.ConnectionTypeLocal},
 		},
@@ -166,6 +167,9 @@ func TestSaveConfigAtomicallyPersistsUTF8WithPrivatePermissions(t *testing.T) {
 	}
 	if len(decoded.Connections) != 1 || decoded.Connections[0].Name != GlobalConfig.Connections[0].Name {
 		t.Fatalf("UTF-8 config did not round-trip: %#v", decoded.Connections)
+	}
+	if !decoded.CloseManagerAfterConnect {
+		t.Fatal("close-manager preference did not round-trip")
 	}
 	matches, err := filepath.Glob(filepath.Join(filepath.Dir(path), ".config.json.tmp-*"))
 	if err != nil {

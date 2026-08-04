@@ -1646,9 +1646,9 @@ func (a *finalShellApp) activateConnectionRow(row int) {
 	a.activateProfile(a.rows[row])
 }
 
-func (a *finalShellApp) activateProfile(p connectionProfile) {
+func (a *finalShellApp) activateProfile(p connectionProfile) bool {
 	if a == nil || strings.TrimSpace(p.ID) == "" {
-		return
+		return false
 	}
 	p = markProfileUsed(p, time.Now())
 	if err := a.persistProfile(p); err != nil {
@@ -1656,7 +1656,7 @@ func (a *finalShellApp) activateProfile(p connectionProfile) {
 		a.appendOutput(trf("output.save_failed", err.Error()))
 		a.setStatus(tr("status.save_failed"))
 		a.showTopNotice(tr("status.save_failed"), err.Error(), true)
-		return
+		return false
 	}
 	a.refreshTable()
 	if a.idx >= 0 && a.table != nil {
@@ -1672,6 +1672,7 @@ func (a *finalShellApp) activateProfile(p connectionProfile) {
 			}
 		}
 	}
+	return true
 }
 
 func (a *finalShellApp) testConnection() {

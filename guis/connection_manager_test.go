@@ -1,8 +1,14 @@
 package guis
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/0xdevelop/NBTerminal/config"
+	"github.com/george012/gtbox"
 )
 
 func TestQuickConnectionProjectionPrioritizesFavoritesThenRecent(t *testing.T) {
@@ -52,5 +58,41 @@ func TestToggleFavoritePreservesProfileAndChangesOnlyFavorite(t *testing.T) {
 	}
 	if toggledFavorite(got).Favorite {
 		t.Fatal("second toggle should clear favorite")
+	}
+}
+
+func TestCloseAfterConnectPreferencePersistsAndRollsBackOnFailure(t *testing.T) {
+	oldGlobal := config.GlobalConfig
+	oldApp := config.CurrentApp
+	t.Cleanup(func() { config.GlobalConfig, config.CurrentApp = oldGlobal, oldApp })
+
+	config.GlobalConfig = &config.FileConfig{Language: "en"}
+	config.GlobalConfig.Normalize()
+	config.CurrentApp = config.NewApp("NBTerminal-test", "test.nbterminal", "test", gtbox.RunModeTest, 0)
+	config.CurrentApp.AppConfigFilePath = filepath.Join(t.TempDir(), "config.json")
+
+	manager := &connectionManagerWindow{}
+	manager.persistCloseAfterConnect(true)
+	buf, err := os.ReadFile(config.CurrentApp.AppConfigFilePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved config.FileConfig
+	if err := json.Unmarshal(buf, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if !saved.CloseManagerAfterConnect || !config.GlobalConfig.CloseManagerAfterConnect {
+		t.Fatal("close-after-connect preference was not durably saved")
+	}
+
+	config.GlobalConfig.CloseManagerAfterConnect = false
+	blocker := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blocker, []byte("block"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config.CurrentApp.AppConfigFilePath = filepath.Join(blocker, "config.json")
+	manager.persistCloseAfterConnect(true)
+	if config.GlobalConfig.CloseManagerAfterConnect {
+		t.Fatal("failed save did not roll preference back")
 	}
 }

@@ -3,8 +3,10 @@ package guis
 import (
 	"strings"
 
+	"github.com/0xdevelop/NBTerminal/config"
 	"github.com/0xdevelop/fltk2go/fltk_bridge"
 	"github.com/0xdevelop/fltk2go/uikit"
+	"github.com/0xdevelop/fltk2go/uikit/checkbox"
 	"github.com/0xdevelop/fltk2go/uikit/tableview"
 	"github.com/george012/gtbox/gtbox_log"
 )
@@ -18,14 +20,15 @@ const (
 // window intentionally presents only favorites/recent connections so terminal
 // sessions are not coupled to editing state.
 type connectionManagerWindow struct {
-	owner  *finalShellApp
-	window *uikit.UIWindow
-	search *uikit.Input
-	table  *uikit.UITableView
-	model  *tableModel
-	rows   []connectionProfile
-	idx    int
-	status *uikit.UILabel
+	owner             *finalShellApp
+	window            *uikit.UIWindow
+	search            *uikit.Input
+	table             *uikit.UITableView
+	model             *tableModel
+	rows              []connectionProfile
+	idx               int
+	status            *uikit.UILabel
+	closeAfterConnect *checkbox.UICheckbox
 }
 
 func (a *finalShellApp) openConnectionManager() {
@@ -102,9 +105,21 @@ func (m *connectionManagerWindow) build() {
 		root.AddSubview(m.table)
 	}
 
-	m.status = mutedLabel(30, 536, 862, 22, tr("manager.selection_hint"))
+	m.status = mutedLabel(30, 530, 862, 18, tr("manager.selection_hint"))
 	m.status.View().SetAutomationID("connection_manager.status")
 	root.AddSubview(m.status)
+	checkStyle := checkbox.DefaultCheckboxStyle()
+	checkStyle.Font = fltk_bridge.HELVETICA
+	checkStyle.FontSize = nativeTypography.Body
+	checkStyle.TextColor = uint(tokenColor(modernTheme.foreground))
+	checkStyle.Color = uint(tokenColor(modernTheme.background))
+	m.closeAfterConnect = checkbox.NewUICheckboxWithOptions(rect(28, 552, 360, 30), tr("manager.close_after_connect"), checkStyle)
+	if config.GlobalConfig != nil {
+		m.closeAfterConnect.SetValue(config.GlobalConfig.CloseManagerAfterConnect)
+	}
+	m.closeAfterConnect.View().SetAutomationID("connection_manager.close_after_connect").SetAutomationName(tr("manager.close_after_connect"))
+	m.closeAfterConnect.OnValueChanged(m.persistCloseAfterConnect)
+	root.AddSubview(m.closeAfterConnect)
 	root.AddSubview(button(28, 586, 94, nativeControls.ButtonHeight, tr("action.new"), "connection_manager.new", m.newProfile))
 	root.AddSubview(button(134, 586, 94, nativeControls.ButtonHeight, tr("action.edit"), "connection_manager.edit", m.editSelected))
 	root.AddSubview(button(240, 586, 112, nativeControls.ButtonHeight, tr("action.delete"), "connection_manager.delete", m.deleteSelected))
@@ -211,11 +226,38 @@ func (m *connectionManagerWindow) activate(row int) {
 		return
 	}
 	m.idx = row
-	m.owner.activateProfile(m.rows[row])
+	if !m.owner.activateProfile(m.rows[row]) {
+		return
+	}
+	if m.closeAfterConnect != nil && m.closeAfterConnect.Value() && m.window != nil {
+		m.window.Close()
+		return
+	}
 	m.reload(m.rows[row].ID)
 }
 
 func (m *connectionManagerWindow) connectSelected() { m.activate(m.idx) }
+
+func (m *connectionManagerWindow) persistCloseAfterConnect(value bool) {
+	if config.GlobalConfig == nil {
+		config.GlobalConfig = &config.FileConfig{}
+	}
+	previous := config.GlobalConfig.CloseManagerAfterConnect
+	config.GlobalConfig.CloseManagerAfterConnect = value
+	if config.CurrentApp == nil || config.CurrentApp.AppConfigFilePath == "" {
+		return
+	}
+	if err := config.SaveConfig(config.CurrentApp.AppConfigFilePath); err != nil {
+		config.GlobalConfig.CloseManagerAfterConnect = previous
+		if m.closeAfterConnect != nil {
+			m.closeAfterConnect.SetValue(previous)
+		}
+		if m.owner != nil {
+			m.owner.setStatus(tr("status.save_failed"))
+			m.owner.showTopNotice(tr("status.save_failed"), err.Error(), true)
+		}
+	}
+}
 
 func (m *connectionManagerWindow) toggleFavorite() {
 	profile, ok := m.selectedProfile()

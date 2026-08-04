@@ -56,6 +56,7 @@
   "manager.not_favorite": "未收藏",
   "manager.selected_format": "%s · %s · %s",
   "manager.favorite_updated": "收藏状态已更新：%s",
+  "manager.close_after_connect": "连接后关闭管理器",
   "quick.title": "收藏与最近",
   "quick.subtitle": "快捷启动；搜索全部已保存连接。",
   "connections.subtitle": "搜索已保存连接，双击或按回车即可快速启动。",

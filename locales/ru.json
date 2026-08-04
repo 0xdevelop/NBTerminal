@@ -56,6 +56,7 @@
   "manager.not_favorite": "не в избранном",
   "manager.selected_format": "%s · %s · %s",
   "manager.favorite_updated": "Избранное обновлено: %s",
+  "manager.close_after_connect": "Закрывать менеджер после подключения",
   "quick.title": "Избранное и недавние",
   "quick.subtitle": "Быстрый запуск; поиск по всем подключениям.",
   "connections.subtitle": "Найдите подключение и запустите двойным щелчком или Enter.",

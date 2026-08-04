@@ -56,6 +56,7 @@
   "manager.not_favorite": "not favorite",
   "manager.selected_format": "%s · %s · %s",
   "manager.favorite_updated": "Favorite updated: %s",
+  "manager.close_after_connect": "Close manager after connecting",
   "quick.title": "Favorites & recent",
   "quick.subtitle": "Quick launch; search all saved connections.",
   "connections.subtitle": "Search saved connections and launch with double-click or Enter.",

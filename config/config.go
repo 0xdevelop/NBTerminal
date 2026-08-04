@@ -53,6 +53,7 @@ type FileConfig struct {
 	WorkspaceSplitRatio      float64               `yaml:"workspace_split_ratio" json:"workspace_split_ratio"`
 	ResetWorkspaceOnStart    bool                  `yaml:"reset_workspace_on_start" json:"reset_workspace_on_start"`
 	StartWithFirstConnection bool                  `yaml:"start_with_first_connection" json:"start_with_first_connection"`
+	CloseManagerAfterConnect bool                  `yaml:"close_manager_after_connect" json:"close_manager_after_connect"`
 }
 
 func (fc *FileConfig) Normalize() {
