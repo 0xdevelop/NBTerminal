@@ -234,6 +234,9 @@ func (e *connectionEditor) save() {
 			e.owner.updateSelectedSummary()
 		}
 		e.owner.setStatus(trf("status.saved", profile.Name))
+		if e.owner.manager != nil {
+			e.owner.manager.reload(profile.ID)
+		}
 	}
 	e.close()
 }

@@ -81,6 +81,7 @@ type connectionProfile struct {
 	PrivateKey  string         `json:"private_key,omitempty"`
 	WorkingDir  string         `json:"working_dir,omitempty"`
 	LastUsed    string         `json:"last_used,omitempty"`
+	Favorite    bool           `json:"favorite,omitempty"`
 	Description string         `json:"description,omitempty"`
 }
 
@@ -426,6 +427,7 @@ type finalShellApp struct {
 	stopButton     *uikit.UIButton
 	settings       *settingsWindow
 	editor         *connectionEditor
+	manager        *connectionManagerWindow
 
 	runMu     sync.Mutex
 	runCancel context.CancelFunc
@@ -524,7 +526,7 @@ func LoadGUIWithFLTKGO(_ []byte) {
 		gtbox_log.LogErrorf("load connection store failed: %s", err.Error())
 	}
 	app.allRows = app.store.List()
-	app.rows = append([]connectionProfile(nil), app.allRows...)
+	app.rows = navigatorRows(app.allRows, "", quickConnectionLimit)
 	app.build()
 	if automation.Enabled() {
 		addr := strings.TrimSpace(os.Getenv("FLTK2GO_AUTOMATION_ADDR"))
@@ -615,9 +617,12 @@ func (a *finalShellApp) build() {
 
 	root.AddSubview(titleLabel(margin, 14, 440, 28, tr("app.title")))
 	root.AddSubview(mutedLabel(margin+2, 38, 520, 22, tr("app.subtitle")))
-	settingsButton := button(rightX+18, 16, 124, nativeControls.ButtonHeight, tr("setting.title"), "app.settings", a.openSettings)
+	managerButton := button(rightX+18, 16, 174, nativeControls.ButtonHeight, tr("manager.open_compact"), "app.connection_manager", a.openConnectionManager)
+	managerButton.View().SetAutomationName(tr("manager.open"))
+	root.AddSubview(managerButton)
+	settingsButton := button(rightX+204, 16, 124, nativeControls.ButtonHeight, tr("setting.title"), "app.settings", a.openSettings)
 	root.AddSubview(settingsButton)
-	a.status = pillLabel(rightX+158, 16, rightW-158, nativeControls.ButtonHeight, tr("app.ready"))
+	a.status = pillLabel(rightX+342, 16, rightW-342, nativeControls.ButtonHeight, tr("app.ready"))
 	a.status.View().SetAutomationID("app.status")
 	root.AddSubview(a.status)
 
@@ -647,8 +652,8 @@ func (a *finalShellApp) build() {
 	left.Raw().Resize(margin, 72, leftW, 786)
 	rightPanel.Raw().Resize(rightX, 72, rightW, 786)
 	root.AddSubview(a.workspace)
-	left.AddSubview(sectionTitle(margin+18, 86, 260, 24, tr("app.connections")))
-	left.AddSubview(mutedLabel(margin+18, 110, 430, 18, tr("connections.subtitle")))
+	left.AddSubview(sectionTitle(margin+18, 86, 260, 24, tr("quick.title")))
+	left.AddSubview(mutedLabel(margin+18, 110, 430, 18, tr("quick.subtitle")))
 	left.AddSubview(mutedLabel(margin+18, 132, 70, 18, tr("connections.search")))
 	a.searchInput = inputNoLabel(margin+82, 124, leftW-194, nativeControls.InputHeight, "connections.search", tr("connections.search_placeholder"))
 	a.searchInput.OnChange(a.jumpToSearchMatch)
@@ -727,8 +732,8 @@ func (a *finalShellApp) build() {
 
 	rightPanel.SetBackgroundColor(uint(tokenColor(modernTheme.card)))
 	rightPanel.SetAutomationID("terminal.panel")
-	rightPanel.AddSubview(sectionTitle(rightX+18, 86, 330, 24, tr("terminal.title")))
-	rightPanel.AddSubview(mutedLabel(rightX+18, 110, 650, 18, tr("terminal.subtitle")))
+	rightPanel.AddSubview(sectionTitle(rightX+18, 86, 500, 24, tr("terminal.title")))
+	rightPanel.AddSubview(mutedLabel(rightX+18, 110, 760, 18, tr("terminal.subtitle")))
 
 	a.output = uikit.NewUITextView(rect(rightX+18, 140, rightW-36, 608))
 	a.output.SetAutomationID("terminal.output").SetAutomationName(tr("terminal.output_name"))
@@ -741,11 +746,14 @@ func (a *finalShellApp) build() {
 	rightPanel.AddSubview(a.output)
 
 	bar := commandBarLayout(rightX, rightW)
-	historyBtn := button(bar.history.X, bar.history.Y, bar.history.Width, bar.history.Height, tr("terminal.history"), "terminal.history", a.showSelectedHistory)
+	historyBtn := button(bar.history.X, bar.history.Y, bar.history.Width, bar.history.Height, tr("terminal.history_compact"), "terminal.history", a.showSelectedHistory)
+	historyBtn.View().SetAutomationName(tr("terminal.history"))
 	rightPanel.AddSubview(historyBtn)
-	recallBtn := button(bar.last.X, bar.last.Y, bar.last.Width, bar.last.Height, tr("terminal.last"), "terminal.last_command", a.recallLastCommand)
+	recallBtn := button(bar.last.X, bar.last.Y, bar.last.Width, bar.last.Height, tr("terminal.last_compact"), "terminal.last_command", a.recallLastCommand)
+	recallBtn.View().SetAutomationName(tr("terminal.last"))
 	rightPanel.AddSubview(recallBtn)
-	clearBtn := button(bar.clear.X, bar.clear.Y, bar.clear.Width, bar.clear.Height, tr("terminal.clear"), "terminal.clear", a.clearTerminalOutput)
+	clearBtn := button(bar.clear.X, bar.clear.Y, bar.clear.Width, bar.clear.Height, tr("terminal.clear_compact"), "terminal.clear", a.clearTerminalOutput)
+	clearBtn.View().SetAutomationName(tr("terminal.clear"))
 	rightPanel.AddSubview(clearBtn)
 	rightPanel.AddSubview(mutedLabel(bar.command.X, bar.commandLabelY, 160, 18, tr("terminal.command")))
 	a.cmdInput = uikit.NewUITextView(rect(bar.command.X, bar.command.Y, bar.command.Width, bar.command.Height))
@@ -1193,7 +1201,7 @@ func (a *finalShellApp) jumpToSearchMatch() {
 		return
 	}
 	query := strings.TrimSpace(a.searchInput.Text())
-	a.rows = filterConnections(a.allRows, query)
+	a.rows = navigatorRows(a.allRows, query, quickConnectionLimit)
 	a.idx = -1
 	a.refreshTable()
 	if len(a.rows) == 0 {
@@ -1228,6 +1236,48 @@ func filterConnections(rows []connectionProfile, query string) []connectionProfi
 		}
 	}
 	return out
+}
+
+const quickConnectionLimit = 12
+
+// navigatorRows keeps the terminal workspace focused: an empty query shows a
+// compact favorite/recent projection, while explicit search reaches every saved
+// profile. The independent Connection Manager remains the full edit surface.
+func navigatorRows(rows []connectionProfile, query string, limit int) []connectionProfile {
+	if strings.TrimSpace(query) != "" {
+		return filterConnections(rows, query)
+	}
+	return quickConnectionProjection(rows, limit)
+}
+
+func quickConnectionProjection(rows []connectionProfile, limit int) []connectionProfile {
+	out := append([]connectionProfile(nil), rows...)
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Favorite != out[j].Favorite {
+			return out[i].Favorite
+		}
+		leftTime, leftOK := parseLastUsed(out[i].LastUsed)
+		rightTime, rightOK := parseLastUsed(out[j].LastUsed)
+		if leftOK != rightOK {
+			return leftOK
+		}
+		if leftOK && !leftTime.Equal(rightTime) {
+			return leftTime.After(rightTime)
+		}
+		if out[i].Name != out[j].Name {
+			return out[i].Name < out[j].Name
+		}
+		return out[i].ID < out[j].ID
+	})
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}
+
+func toggledFavorite(profile connectionProfile) connectionProfile {
+	profile.Favorite = !profile.Favorite
+	return profile
 }
 
 func connectionMatchesQuery(p connectionProfile, query string) bool {
@@ -1397,7 +1447,13 @@ func (a *finalShellApp) activateConnectionRow(row int) {
 	if a.idx != row {
 		a.selectRow(row)
 	}
-	p := a.rows[row]
+	a.activateProfile(a.rows[row])
+}
+
+func (a *finalShellApp) activateProfile(p connectionProfile) {
+	if a == nil || strings.TrimSpace(p.ID) == "" {
+		return
+	}
 	p = markProfileUsed(p, time.Now())
 	if err := a.persistProfile(p); err != nil {
 		gtbox_log.LogErrorf("activate connection failed: %s", err.Error())
@@ -1407,7 +1463,7 @@ func (a *finalShellApp) activateConnectionRow(row int) {
 		return
 	}
 	a.refreshTable()
-	if a.idx >= 0 {
+	if a.idx >= 0 && a.table != nil {
 		a.table.SelectRow(a.idx)
 	}
 	a.appendOutput(trf("output.profile_ready", p.Name, p.endpoint()))
@@ -1642,7 +1698,7 @@ func (a *finalShellApp) persistProfile(p connectionProfile) error {
 	if a.searchInput != nil {
 		query = a.searchInput.Text()
 	}
-	a.rows = filterConnections(nextAll, query)
+	a.rows = navigatorRows(nextAll, query, quickConnectionLimit)
 	a.idx = indexProfileByID(a.rows, p.ID)
 	return nil
 }

@@ -255,10 +255,13 @@ func (a *finalShellApp) rebuildForLanguage(language locales.Language) {
 	if a.editor != nil {
 		a.editor.close()
 	}
+	if a.manager != nil && a.manager.window != nil {
+		a.manager.window.Close()
+	}
 	oldWindow := a.window
 	next := &finalShellApp{store: a.store, history: a.history, session: terminal.NewSession(a.history), idx: -1}
 	next.allRows = a.store.List()
-	next.rows = append([]connectionProfile(nil), next.allRows...)
+	next.rows = navigatorRows(next.allRows, "", quickConnectionLimit)
 	next.build()
 	next.setStatus(trf("app.language_changed", language.String()))
 	if oldWindow != nil {
