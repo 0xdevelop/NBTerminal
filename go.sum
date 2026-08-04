@@ -8,8 +8,6 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/gen2brain/shm v0.2.1 h1:4ARWVKmLPeXE6Qq547N1Fdub+S285OEca+0BoxUJX6g=
 github.com/gen2brain/shm v0.2.1/go.mod h1:UgIcVtvmOu+aCJpqJX7GOtiN7X2ct+TKLg4RTxwPIUA=
-github.com/george012/fltk_go v0.0.96 h1:jdpkUNgiZGzipVGNlJ/GJf3x47p1G+lzA8S6VGVB0tY=
-github.com/george012/fltk_go v0.0.96/go.mod h1:U3wkRjfiqI6xaugEfrgRO3cFQwXahb5YO3PDNBBkGSc=
 github.com/george012/gtbox v0.1.113 h1:elaLfTbkNX1Mog0mhtgu+8K2RE/NBMZz8ErCXvOcF0o=
 github.com/george012/gtbox v0.1.113/go.mod h1:EnpZCInyeA9kj/cRHECXHZZXiS+NyKbS5xvMFSmyYjg=
 github.com/godbus/dbus/v5 v5.2.2 h1:TUR3TgtSVDmjiXOgAAyaZbYmIeP3DPkld3jgKGV8mXQ=
