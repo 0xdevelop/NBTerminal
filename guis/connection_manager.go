@@ -48,6 +48,7 @@ func (a *finalShellApp) openConnectionManager() {
 }
 
 func (m *connectionManagerWindow) build() {
+	layout := connectionManagerLayoutFor(nativeControls)
 	windowRect := centeredScreenRect(connectionManagerWidth, connectionManagerHeight)
 	if m.owner != nil && m.owner.window != nil && m.owner.window.Raw() != nil {
 		raw := m.owner.window.Raw()
@@ -72,19 +73,30 @@ func (m *connectionManagerWindow) build() {
 	root.AddSubview(titleLabel(28, 20, 500, 30, tr("manager.title")))
 	root.AddSubview(mutedLabel(30, 52, 850, 22, tr("manager.subtitle")))
 	root.AddSubview(mutedLabel(30, 99, 72, 20, tr("connections.search")))
-	m.search = inputNoLabel(102, 91, 650, nativeControls.InputHeight, "connection_manager.search", tr("connections.search_placeholder"))
+	m.search = inputNoLabel(layout.Search.X, layout.Search.Y, layout.Search.Width, layout.Search.Height, "connection_manager.search", tr("connections.search_placeholder"))
 	m.search.OnChange(m.applySearch)
 	m.search.View().On(fltk_bridge.KEYDOWN, func(fltk_bridge.Event) bool {
-		if fltk_bridge.EventKey() == fltk_bridge.ENTER_KEY {
+		switch fltk_bridge.EventKey() {
+		case fltk_bridge.ENTER_KEY:
 			m.activate(m.idx)
 			return true
+		case fltk_bridge.DOWN:
+			if m.table != nil && m.idx >= 0 {
+				m.table.SelectRow(m.idx)
+				if raw := m.table.View().Raw(); raw != nil {
+					if focusable, ok := raw.(interface{ TakeFocus() int }); ok {
+						focusable.TakeFocus()
+					}
+				}
+				return true
+			}
 		}
 		return false
 	})
 	root.AddSubview(m.search)
-	root.AddSubview(button(764, 91, 128, nativeControls.ButtonHeight, tr("connections.find"), "connection_manager.find", m.applySearch))
+	root.AddSubview(button(layout.Find.X, layout.Find.Y, layout.Find.Width, layout.Find.Height, tr("connections.find"), "connection_manager.find", m.applySearch))
 
-	table, err := uikit.NewUITableView(28, 143, 864, 382)
+	table, err := uikit.NewUITableView(layout.Table.X, layout.Table.Y, layout.Table.Width, layout.Table.Height)
 	if err == nil {
 		m.table = table
 		m.table.SetHeaderHeight(nativeControls.TableHeaderHeight)
@@ -105,7 +117,7 @@ func (m *connectionManagerWindow) build() {
 		root.AddSubview(m.table)
 	}
 
-	m.status = mutedLabel(30, 530, 862, 18, tr("manager.selection_hint"))
+	m.status = mutedLabel(layout.Status.X, layout.Status.Y, layout.Status.Width, layout.Status.Height, tr("manager.selection_hint"))
 	m.status.View().SetAutomationID("connection_manager.status")
 	root.AddSubview(m.status)
 	checkStyle := checkbox.DefaultCheckboxStyle()
@@ -113,18 +125,18 @@ func (m *connectionManagerWindow) build() {
 	checkStyle.FontSize = nativeTypography.Body
 	checkStyle.TextColor = uint(tokenColor(modernTheme.foreground))
 	checkStyle.Color = uint(tokenColor(modernTheme.background))
-	m.closeAfterConnect = checkbox.NewUICheckboxWithOptions(rect(28, 552, 360, 30), tr("manager.close_after_connect"), checkStyle)
+	m.closeAfterConnect = checkbox.NewUICheckboxWithOptions(rect(layout.CloseAfterConnect.X, layout.CloseAfterConnect.Y, layout.CloseAfterConnect.Width, layout.CloseAfterConnect.Height), tr("manager.close_after_connect"), checkStyle)
 	if config.GlobalConfig != nil {
 		m.closeAfterConnect.SetValue(config.GlobalConfig.CloseManagerAfterConnect)
 	}
 	m.closeAfterConnect.View().SetAutomationID("connection_manager.close_after_connect").SetAutomationName(tr("manager.close_after_connect"))
 	m.closeAfterConnect.OnValueChanged(m.persistCloseAfterConnect)
 	root.AddSubview(m.closeAfterConnect)
-	root.AddSubview(button(28, 586, 94, nativeControls.ButtonHeight, tr("action.new"), "connection_manager.new", m.newProfile))
-	root.AddSubview(button(134, 586, 94, nativeControls.ButtonHeight, tr("action.edit"), "connection_manager.edit", m.editSelected))
-	root.AddSubview(button(240, 586, 112, nativeControls.ButtonHeight, tr("action.delete"), "connection_manager.delete", m.deleteSelected))
-	root.AddSubview(button(500, 586, 180, nativeControls.ButtonHeight, tr("manager.favorite"), "connection_manager.favorite", m.toggleFavorite))
-	root.AddSubview(primaryButton(692, 584, 200, nativeControls.PrimaryButtonHeight, tr("action.connect"), "connection_manager.connect", m.connectSelected))
+	root.AddSubview(button(layout.New.X, layout.New.Y, layout.New.Width, layout.New.Height, tr("action.new"), "connection_manager.new", m.newProfile))
+	root.AddSubview(button(layout.Edit.X, layout.Edit.Y, layout.Edit.Width, layout.Edit.Height, tr("action.edit"), "connection_manager.edit", m.editSelected))
+	root.AddSubview(button(layout.Delete.X, layout.Delete.Y, layout.Delete.Width, layout.Delete.Height, tr("action.delete"), "connection_manager.delete", m.deleteSelected))
+	root.AddSubview(button(layout.Favorite.X, layout.Favorite.Y, layout.Favorite.Width, layout.Favorite.Height, tr("manager.favorite"), "connection_manager.favorite", m.toggleFavorite))
+	root.AddSubview(primaryButton(layout.Connect.X, layout.Connect.Y, layout.Connect.Width, layout.Connect.Height, tr("action.connect"), "connection_manager.connect", m.connectSelected))
 
 	m.reload("")
 	m.window.Show()

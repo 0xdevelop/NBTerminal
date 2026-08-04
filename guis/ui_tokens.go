@@ -51,6 +51,26 @@ type layoutRect struct {
 
 func (r layoutRect) Bottom() int { return r.Y + r.Height }
 
+type connectionManagerLayout struct {
+	Search, Find, Table, Status, CloseAfterConnect layoutRect
+	New, Edit, Delete, Favorite, Connect           layoutRect
+}
+
+func connectionManagerLayoutFor(tokens controlMetricSet) connectionManagerLayout {
+	return connectionManagerLayout{
+		Search:            layoutRect{X: 102, Y: 91, Width: 650, Height: tokens.InputHeight},
+		Find:              layoutRect{X: 764, Y: 91, Width: 128, Height: tokens.ButtonHeight},
+		Table:             layoutRect{X: 28, Y: 143, Width: 864, Height: 382},
+		Status:            layoutRect{X: 30, Y: 530, Width: 862, Height: 18},
+		CloseAfterConnect: layoutRect{X: 28, Y: 554, Width: 420, Height: tokens.InputHeight},
+		New:               layoutRect{X: 28, Y: 594, Width: 94, Height: tokens.ButtonHeight},
+		Edit:              layoutRect{X: 134, Y: 594, Width: 94, Height: tokens.ButtonHeight},
+		Delete:            layoutRect{X: 240, Y: 594, Width: 112, Height: tokens.ButtonHeight},
+		Favorite:          layoutRect{X: 500, Y: 594, Width: 180, Height: tokens.ButtonHeight},
+		Connect:           layoutRect{X: 692, Y: 592, Width: 200, Height: tokens.PrimaryButtonHeight},
+	}
+}
+
 type settingsLayout struct {
 	Language, Timeout, Save, Cancel layoutRect
 	BehaviorTitleY                  int

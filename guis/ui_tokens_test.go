@@ -16,7 +16,7 @@ func TestNativeDesktopDesignTokensMatchProductBaseline(t *testing.T) {
 	}
 }
 
-func TestSettingsAndEditorLayoutsUseSemanticControlMetrics(t *testing.T) {
+func TestSettingsEditorAndManagerLayoutsUseSemanticControlMetrics(t *testing.T) {
 	settings := settingsLayoutFor(nativeControls)
 	if settings.Language.Height != nativeControls.InputHeight || settings.Timeout.Height != nativeControls.InputHeight {
 		t.Fatalf("settings controls do not use input-height token: %#v", settings)
@@ -43,5 +43,17 @@ func TestSettingsAndEditorLayoutsUseSemanticControlMetrics(t *testing.T) {
 	}
 	if editor.WorkingDir.Y-editor.Password.Bottom() < nativeControls.FieldGroupGap+nativeTypography.Supporting {
 		t.Fatalf("password hint/group spacing is too tight: %#v", editor)
+	}
+
+	manager := connectionManagerLayoutFor(nativeControls)
+	if manager.Search.Height != nativeControls.InputHeight || manager.Find.Height != nativeControls.ButtonHeight ||
+		manager.CloseAfterConnect.Height != nativeControls.InputHeight || manager.New.Height != nativeControls.ButtonHeight ||
+		manager.Edit.Height != nativeControls.ButtonHeight || manager.Delete.Height != nativeControls.ButtonHeight ||
+		manager.Favorite.Height != nativeControls.ButtonHeight || manager.Connect.Height != nativeControls.PrimaryButtonHeight {
+		t.Fatalf("manager controls do not use semantic heights: %#v", manager)
+	}
+	if manager.CloseAfterConnect.Y-manager.Status.Bottom() < nativeControls.FieldLabelGap ||
+		manager.New.Y-manager.CloseAfterConnect.Bottom() < nativeControls.FieldLabelGap {
+		t.Fatalf("manager footer spacing is too tight: %#v", manager)
 	}
 }
