@@ -432,10 +432,14 @@ type finalShellApp struct {
 	editor         *connectionEditor
 	manager        *connectionManagerWindow
 
-	runMu        sync.Mutex
-	runCancel    context.CancelFunc
-	runID        uint64
-	runSessionID string
+	runMu sync.Mutex
+	runID uint64
+	runs  map[string]commandRun
+}
+
+type commandRun struct {
+	id     uint64
+	cancel context.CancelFunc
 }
 
 // guiOutputBatcher coalesces command output that arrives faster than FLTK can
@@ -822,7 +826,7 @@ func (a *finalShellApp) build() {
 		a.workspace.SetPosition(config.WorkspaceSplitRatioDefault)
 	}
 	a.workspace.OnPositionChanged(a.workspacePositionChanged)
-	a.setCommandRunning(false)
+	a.updateCommandControls()
 
 	a.window.Show()
 	if len(a.rows) > 0 {
@@ -855,10 +859,7 @@ func (a *finalShellApp) changeLanguage(index int) {
 	if index < 0 || index >= len(languages) {
 		return
 	}
-	a.runMu.Lock()
-	running := a.runCancel != nil
-	a.runMu.Unlock()
-	if running {
+	if a.anyCommandRunning() {
 		a.setStatus(tr("status.command_active"))
 		return
 	}
@@ -1530,6 +1531,7 @@ func (a *finalShellApp) renderActiveSession() {
 		if a.cmdInput != nil {
 			a.cmdInput.SetText("")
 		}
+		a.updateCommandControls()
 		return
 	}
 	if a.output != nil {
@@ -1541,6 +1543,7 @@ func (a *finalShellApp) renderActiveSession() {
 	if a.sessionTabs != nil {
 		a.sessionTabs.SetTabTitle(a.sessions.ActiveIndex(), sessionTabTitle(state))
 	}
+	a.updateCommandControls()
 }
 
 func (a *finalShellApp) selectSessionTab(index int) {
@@ -1748,48 +1751,82 @@ func terminalWelcomeText() string {
 	return tr("terminal.welcome")
 }
 
-func (a *finalShellApp) beginCommandRun(cancel context.CancelFunc) (uint64, bool) {
-	return a.beginCommandRunForSession(cancel, "")
-}
-
 func (a *finalShellApp) beginCommandRunForSession(cancel context.CancelFunc, sessionID string) (uint64, bool) {
+	sessionID = strings.TrimSpace(sessionID)
+	if cancel == nil || sessionID == "" {
+		return 0, false
+	}
 	a.runMu.Lock()
 	defer a.runMu.Unlock()
-	if a.runCancel != nil {
+	if _, running := a.runs[sessionID]; running {
 		return 0, false
 	}
 	a.runID++
-	a.runCancel = cancel
-	a.runSessionID = sessionID
+	if a.runs == nil {
+		a.runs = make(map[string]commandRun)
+	}
+	a.runs[sessionID] = commandRun{id: a.runID, cancel: cancel}
 	return a.runID, true
 }
 
-func (a *finalShellApp) finishCommandRun(id uint64) bool {
+func (a *finalShellApp) finishCommandRun(sessionID string, id uint64) bool {
 	a.runMu.Lock()
 	defer a.runMu.Unlock()
-	if a.runCancel == nil || a.runID != id {
+	run, ok := a.runs[sessionID]
+	if !ok || run.id != id {
 		return false
 	}
-	a.runCancel = nil
-	a.runSessionID = ""
+	delete(a.runs, sessionID)
 	return true
 }
 
-func (a *finalShellApp) stopCommand() {
+func (a *finalShellApp) commandRunningForSession(sessionID string) bool {
 	a.runMu.Lock()
-	cancel := a.runCancel
-	sessionID := a.runSessionID
+	defer a.runMu.Unlock()
+	_, ok := a.runs[sessionID]
+	return ok
+}
+
+func (a *finalShellApp) anyCommandRunning() bool {
+	a.runMu.Lock()
+	defer a.runMu.Unlock()
+	return len(a.runs) > 0
+}
+
+func (a *finalShellApp) cancelCommandRun(sessionID string) bool {
+	a.runMu.Lock()
+	run, ok := a.runs[sessionID]
 	a.runMu.Unlock()
-	if cancel == nil {
+	if !ok || run.cancel == nil {
+		return false
+	}
+	run.cancel()
+	return true
+}
+
+func (a *finalShellApp) activeSessionID() string {
+	if a == nil || a.sessions == nil {
+		return ""
+	}
+	state, ok := a.sessions.Active()
+	if !ok {
+		return ""
+	}
+	return state.ID
+}
+
+func (a *finalShellApp) stopCommand() {
+	sessionID := a.activeSessionID()
+	if sessionID == "" || !a.cancelCommandRun(sessionID) {
 		a.setStatus(tr("status.no_command"))
 		return
 	}
-	cancel()
 	a.appendSessionOutput(sessionID, tr("output.stop_requested"))
 	a.setStatus(tr("status.stopping"))
 }
 
-func (a *finalShellApp) setCommandRunning(running bool) {
+func (a *finalShellApp) updateCommandControls() {
+	running := a.commandRunningForSession(a.activeSessionID())
 	if a.runButton != nil && a.runButton.Raw() != nil {
 		if running {
 			a.runButton.Raw().Deactivate()
@@ -1832,7 +1869,7 @@ func (a *finalShellApp) runAsync(p connectionProfile, command string) {
 	}
 	runToken := fmt.Sprintf("%s:%d", sessionID, runID)
 	if a.sessions == nil || !a.sessions.BeginRun(runToken) {
-		a.finishCommandRun(runID)
+		a.finishCommandRun(sessionID, runID)
 		cancel()
 		a.setStatus(tr("status.command_active"))
 		return
@@ -1841,7 +1878,7 @@ func (a *finalShellApp) runAsync(p connectionProfile, command string) {
 	a.refreshSessionTabs()
 	a.appendSessionOutput(sessionID, fmt.Sprintf("\n$ [%s] %s\n", p.Name, command))
 	a.setStatus(trf("status.running", p.Name))
-	a.setCommandRunning(true)
+	a.updateCommandControls()
 	outputBatcher := newGUIOutputBatcher(func(fn func()) {
 		fltk_bridge.Awake(fn)
 	}, func(text string) { a.appendSessionOutput(sessionID, text) })
@@ -1858,32 +1895,43 @@ func (a *finalShellApp) runAsync(p connectionProfile, command string) {
 		}
 		_, result, err := executeCommandResultWithSession(ctx, sess, p, command)
 		outputBatcher.AfterFlush(func() {
-			if !a.finishCommandRun(runID) {
+			if !a.finishCommandRun(sessionID, runID) {
 				return
 			}
-			a.setCommandRunning(false)
+			a.updateCommandControls()
+			active := a.activeSessionID() == sessionID
 			finalStatus := sessionSucceeded
 			switch {
 			case errors.Is(err, context.Canceled):
 				finalStatus = sessionStopped
 				a.appendSessionOutput(sessionID, tr("output.cancelled"))
-				a.setStatus(tr("status.cancelled"))
+				if active {
+					a.setStatus(tr("status.cancelled"))
+				}
 			case errors.Is(err, context.DeadlineExceeded):
 				finalStatus = sessionFailed
 				message := trf("notice.timeout.message", commandTimeout())
 				a.appendSessionOutput(sessionID, trf("output.error", message))
-				a.setStatus(tr("status.timed_out"))
-				a.showTopNotice(tr("notice.timeout.title"), message, true)
+				if active {
+					a.setStatus(tr("status.timed_out"))
+					a.showTopNotice(tr("notice.timeout.title"), message, true)
+				}
 			case err != nil:
 				finalStatus = sessionFailed
 				a.appendSessionOutput(sessionID, trf("output.error", err.Error()))
-				a.setStatus(trf("status.failed", result.ExitCode))
-				a.showTopNotice(tr("notice.failed.title"), err.Error(), true)
+				if active {
+					a.setStatus(trf("status.failed", result.ExitCode))
+					a.showTopNotice(tr("notice.failed.title"), err.Error(), true)
+				}
 			case len(result.Events) == 0 && result.Stdout == "" && result.Stderr == "":
 				a.appendSessionOutput(sessionID, tr("output.no_output"))
-				a.setStatus(trf("status.completed", 0))
+				if active {
+					a.setStatus(trf("status.completed", 0))
+				}
 			default:
-				a.setStatus(trf("status.completed", result.ExitCode))
+				if active {
+					a.setStatus(trf("status.completed", result.ExitCode))
+				}
 			}
 			a.updateSessionTab(runToken, finalStatus)
 		})

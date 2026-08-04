@@ -502,30 +502,74 @@ func TestTopFloatRectInBounds(t *testing.T) {
 	}
 }
 
-func TestCommandRunLifecyclePreventsOverlapAndStopsActiveRun(t *testing.T) {
+func TestCommandRunLifecycleAllowsIndependentSessionsAndRejectsSameSessionOverlap(t *testing.T) {
 	app := &finalShellApp{}
-	ctx, cancel := context.WithCancel(context.Background())
-	id, ok := app.beginCommandRun(cancel)
-	if !ok || id == 0 {
-		t.Fatalf("expected first command run to start: id=%d ok=%v", id, ok)
+	firstContext, firstCancel := context.WithCancel(context.Background())
+	firstID, ok := app.beginCommandRunForSession(firstCancel, "first")
+	if !ok || firstID == 0 {
+		t.Fatalf("expected first session command to start: id=%d ok=%v", firstID, ok)
 	}
-	_, secondOK := app.beginCommandRun(func() {})
-	if secondOK {
-		t.Fatal("overlapping command run should be rejected")
+	if _, duplicateOK := app.beginCommandRunForSession(func() {}, "first"); duplicateOK {
+		t.Fatal("overlapping command in the same session should be rejected")
 	}
 
+	secondContext, secondCancel := context.WithCancel(context.Background())
+	secondID, secondOK := app.beginCommandRunForSession(secondCancel, "second")
+	if !secondOK || secondID == firstID {
+		t.Fatalf("independent session command should start: id=%d ok=%v", secondID, secondOK)
+	}
+	if !app.commandRunningForSession("first") || !app.commandRunningForSession("second") || !app.anyCommandRunning() {
+		t.Fatal("run registry did not retain both active sessions")
+	}
+
+	if !app.cancelCommandRun("first") {
+		t.Fatal("first session run was not cancelled")
+	}
+	select {
+	case <-firstContext.Done():
+	case <-time.After(time.Second):
+		t.Fatal("cancelling first session did not invoke its cancel function")
+	}
+	select {
+	case <-secondContext.Done():
+		t.Fatal("cancelling first session also cancelled the second")
+	default:
+	}
+	if !app.finishCommandRun("first", firstID) {
+		t.Fatal("first session command did not finish")
+	}
+	if app.finishCommandRun("second", firstID) {
+		t.Fatal("stale run ID finished a different session")
+	}
+	if !app.commandRunningForSession("second") || !app.finishCommandRun("second", secondID) || app.anyCommandRunning() {
+		t.Fatal("second session run lifecycle did not finish independently")
+	}
+}
+
+func TestStopCommandCancelsOnlyActiveSession(t *testing.T) {
+	app := &finalShellApp{sessions: newSessionWorkspace()}
+	app.sessions.Open(connectionProfile{ID: "first", Name: "First", Type: connectionTypeLocal})
+	app.sessions.Open(connectionProfile{ID: "second", Name: "Second", Type: connectionTypeLocal})
+	firstContext, firstCancel := context.WithCancel(context.Background())
+	secondContext, secondCancel := context.WithCancel(context.Background())
+	if _, ok := app.beginCommandRunForSession(firstCancel, "first"); !ok {
+		t.Fatal("first session run did not start")
+	}
+	if _, ok := app.beginCommandRunForSession(secondCancel, "second"); !ok {
+		t.Fatal("second session run did not start")
+	}
+
+	app.sessions.Select(0)
 	app.stopCommand()
 	select {
-	case <-ctx.Done():
+	case <-firstContext.Done():
 	case <-time.After(time.Second):
-		t.Fatal("stopCommand did not cancel the active run")
+		t.Fatal("Stop did not cancel the active tab")
 	}
-	if !app.finishCommandRun(id) {
-		t.Fatal("active command run did not finish")
-	}
-	_, nextOK := app.beginCommandRun(func() {})
-	if !nextOK {
-		t.Fatal("new command should start after previous run finishes")
+	select {
+	case <-secondContext.Done():
+		t.Fatal("Stop cancelled a background tab")
+	default:
 	}
 }
 
