@@ -259,7 +259,8 @@ func (a *finalShellApp) rebuildForLanguage(language locales.Language) {
 		a.manager.window.Close()
 	}
 	oldWindow := a.window
-	next := &finalShellApp{store: a.store, history: a.history, session: terminal.NewSession(a.history), idx: -1}
+	a.syncActiveSessionView()
+	next := &finalShellApp{store: a.store, history: a.history, session: terminal.NewSession(a.history), sessions: a.sessions, idx: -1}
 	next.allRows = a.store.List()
 	next.rows = navigatorRows(next.allRows, "", quickConnectionLimit)
 	next.build()

@@ -24,6 +24,7 @@ import (
 	"github.com/0xdevelop/fltk2go/uikit/automation"
 	"github.com/0xdevelop/fltk2go/uikit/screen"
 	"github.com/0xdevelop/fltk2go/uikit/tableview"
+	"github.com/0xdevelop/fltk2go/uikit/tabview"
 	"github.com/george012/gtbox/gtbox_encryption"
 	"github.com/george012/gtbox/gtbox_log"
 )
@@ -403,12 +404,13 @@ func (m *tableModel) CellForColumn(_ *tableview.TableView, row, col int) *tablev
 }
 
 type finalShellApp struct {
-	store   *connectionStore
-	history *terminal.HistoryStore
-	session *terminal.Session
-	allRows []connectionProfile
-	rows    []connectionProfile
-	idx     int
+	store    *connectionStore
+	history  *terminal.HistoryStore
+	session  *terminal.Session
+	sessions *sessionWorkspace
+	allRows  []connectionProfile
+	rows     []connectionProfile
+	idx      int
 
 	window    *uikit.UIWindow
 	workspace *uikit.UISplitView
@@ -421,6 +423,7 @@ type finalShellApp struct {
 	selectedRecent *uikit.UILabel
 	cmdInput       *uikit.UITextView
 	output         *uikit.UITextView
+	sessionTabs    *uikit.UITabView
 	status         *uikit.UILabel
 	notice         *uikit.UIWindow
 	runButton      *uikit.UIButton
@@ -429,9 +432,10 @@ type finalShellApp struct {
 	editor         *connectionEditor
 	manager        *connectionManagerWindow
 
-	runMu     sync.Mutex
-	runCancel context.CancelFunc
-	runID     uint64
+	runMu        sync.Mutex
+	runCancel    context.CancelFunc
+	runID        uint64
+	runSessionID string
 }
 
 // guiOutputBatcher coalesces command output that arrives faster than FLTK can
@@ -517,10 +521,11 @@ func LoadGUIWithFLTKGO(_ []byte) {
 
 	history := terminal.NewHistoryStore(filepath.Join(config.CurrentApp.DataDir, "terminal-history.jsonl"))
 	app := &finalShellApp{
-		store:   newConnectionStore(config.CurrentApp.DataDir),
-		history: history,
-		session: terminal.NewSession(history),
-		idx:     -1,
+		store:    newConnectionStore(config.CurrentApp.DataDir),
+		history:  history,
+		session:  terminal.NewSession(history),
+		sessions: newSessionWorkspace(),
+		idx:      -1,
 	}
 	if err := app.store.Load(); err != nil {
 		gtbox_log.LogErrorf("load connection store failed: %s", err.Error())
@@ -685,11 +690,11 @@ func (a *finalShellApp) build() {
 		a.table.SetHeaderHeight(nativeControls.TableHeaderHeight)
 		a.table.SetDefaultRowHeight(nativeControls.TableRowHeight)
 		a.table.View().SetAutomationID("connections.table").SetAutomationName(tr("app.connections"))
-		a.table.AddColumn(tableview.TableColumn{Identifier: "group", Title: tr("connections.group"), Width: 78})
-		a.table.AddColumn(tableview.TableColumn{Identifier: "name", Title: tr("connections.name"), Width: 108})
-		a.table.AddColumn(tableview.TableColumn{Identifier: "type", Title: tr("connections.type"), Width: 50})
-		a.table.AddColumn(tableview.TableColumn{Identifier: "endpoint", Title: tr("connections.endpoint"), Width: 126})
-		a.table.AddColumn(tableview.TableColumn{Identifier: "last", Title: tr("connections.last_used"), Width: 96})
+		a.table.AddColumn(tableview.TableColumn{Identifier: "group", Title: tr("connections.group"), Width: 70})
+		a.table.AddColumn(tableview.TableColumn{Identifier: "name", Title: tr("connections.name"), Width: 132})
+		a.table.AddColumn(tableview.TableColumn{Identifier: "type", Title: tr("connections.type"), Width: 48})
+		a.table.AddColumn(tableview.TableColumn{Identifier: "endpoint", Title: tr("connections.endpoint"), Width: 108})
+		a.table.AddColumn(tableview.TableColumn{Identifier: "last", Title: tr("connections.last_used"), Width: 92})
 		a.model = &tableModel{rows: a.rows}
 		a.table.SetDataSource(a.model)
 		a.table.SetDelegate(tableDelegate{onSelect: func(row int) {
@@ -710,12 +715,15 @@ func (a *finalShellApp) build() {
 	left.AddSubview(sectionTitle(margin+18, 666, 260, 22, tr("connections.selected_summary")))
 	a.selectedName = label(margin+18, 694, leftW-36, 24, "")
 	a.selectedName.SetFontSize(nativeTypography.SectionTitle)
+	styleDynamicLabel(a.selectedName)
 	a.selectedName.View().SetAutomationID("connections.selected_name")
 	left.AddSubview(a.selectedName)
 	a.selectedDetail = mutedLabel(margin+18, 722, leftW-36, 22, "")
+	styleDynamicLabel(a.selectedDetail)
 	a.selectedDetail.View().SetAutomationID("connections.selected_detail")
 	left.AddSubview(a.selectedDetail)
 	a.selectedRecent = mutedLabel(margin+18, 748, leftW-36, 22, "")
+	styleDynamicLabel(a.selectedRecent)
 	a.selectedRecent.View().SetAutomationID("connections.selected_recent")
 	left.AddSubview(a.selectedRecent)
 
@@ -733,16 +741,46 @@ func (a *finalShellApp) build() {
 	rightPanel.SetBackgroundColor(uint(tokenColor(modernTheme.card)))
 	rightPanel.SetAutomationID("terminal.panel")
 	rightPanel.AddSubview(sectionTitle(rightX+18, 86, 500, 24, tr("terminal.title")))
-	rightPanel.AddSubview(mutedLabel(rightX+18, 110, 760, 18, tr("terminal.subtitle")))
+	rightPanel.AddSubview(mutedLabel(rightX+18, 110, 560, 18, tr("terminal.subtitle")))
+	closeTabButton := button(rightX+rightW-146, 90, 128, nativeControls.ButtonHeight, tr("session.close"), "terminal.session_close", a.closeActiveSession)
+	rightPanel.AddSubview(closeTabButton)
 
-	a.output = uikit.NewUITextView(rect(rightX+18, 140, rightW-36, 608))
+	if a.sessions == nil {
+		a.sessions = newSessionWorkspace()
+	}
+	a.sessionTabs = uikit.NewUITabView(rect(rightX+18, 134, rightW-36, 40))
+	a.sessionTabs.SetAutomationID("terminal.sessions")
+	a.sessionTabs.SetStyle(tabview.Style{
+		BarBackground:     uint(tokenColor(modernTheme.elevated)),
+		ContentBackground: uint(tokenColor(modernTheme.card)),
+		NormalText:        uint(tokenColor(modernTheme.muted)),
+		ActiveText:        uint(tokenColor(modernTheme.foreground)),
+		Indicator:         uint(tokenColor(modernTheme.primary)),
+		FontSize:          nativeTypography.Body,
+	})
+	rightPanel.AddSubview(a.sessionTabs)
+	activeSessionIndex := a.sessions.ActiveIndex()
+	for _, state := range a.sessions.Tabs() {
+		a.sessionTabs.AddTabWithID(state.ID, sessionTabTitle(state), nil)
+	}
+	if activeSessionIndex >= 0 {
+		a.sessionTabs.SelectTab(activeSessionIndex)
+		a.sessions.Select(activeSessionIndex)
+	}
+	a.sessionTabs.OnTabChanged(a.selectSessionTab)
+
+	a.output = uikit.NewUITextView(rect(rightX+18, 180, rightW-36, 568))
 	a.output.SetAutomationID("terminal.output").SetAutomationName(tr("terminal.output_name"))
 	a.output.SetFontSize(nativeTypography.Terminal)
 	a.output.SetTextColor(uint(tokenColor(modernTheme.foreground)))
 	a.output.SetFallbackFont(fltk_bridge.FREE_FONT, isEmojiRune)
 	a.output.SetBackgroundColor(uint(tokenColor(modernTheme.terminal)))
 	a.output.SetText(terminalWelcomeText())
-	a.appendRecentHistory()
+	if _, ok := a.sessions.Active(); ok {
+		a.renderActiveSession()
+	} else {
+		a.appendRecentHistory()
+	}
 	rightPanel.AddSubview(a.output)
 
 	bar := commandBarLayout(rightX, rightW)
@@ -1089,6 +1127,16 @@ func mutedLabel(x, y, w, h int, text string) *uikit.UILabel {
 	return l
 }
 
+// styleDynamicLabel gives frequently changing native labels an opaque backing
+// surface so shorter replacement text cannot leave stale glyphs behind.
+func styleDynamicLabel(l *uikit.UILabel) {
+	if l == nil {
+		return
+	}
+	l.SetFrame(fltk_bridge.FLAT_BOX)
+	l.SetBackgroundColor(uint(tokenColor(modernTheme.card)))
+}
+
 func pillLabel(x, y, w, h int, text string) *uikit.UILabel {
 	l := label(x, y, w, h, text)
 	l.SetFrame(fltk_bridge.RFLAT_BOX)
@@ -1328,6 +1376,9 @@ func (a *finalShellApp) selectRow(row int) {
 	}
 	a.idx = row
 	p := a.rows[row]
+	if a.sessions != nil {
+		a.sessions.SetProfileSelection(p.ID)
+	}
 	a.updateSelectedSummary()
 	a.setStatus(trf("status.selected", p.Name))
 	if a.table != nil {
@@ -1440,6 +1491,148 @@ func (a *finalShellApp) connectSelected() {
 	a.activateConnectionRow(a.idx)
 }
 
+func sessionTabTitle(state terminalTabState) string {
+	prefix := ""
+	switch state.Status {
+	case sessionRunning:
+		prefix = "▶ "
+	case sessionSucceeded:
+		prefix = "✓ "
+	case sessionFailed:
+		prefix = "! "
+	case sessionStopped:
+		prefix = "■ "
+	}
+	return prefix + state.Profile.Name
+}
+
+func (a *finalShellApp) syncActiveSessionView() {
+	if a == nil || a.sessions == nil {
+		return
+	}
+	if a.cmdInput != nil {
+		a.sessions.SetActiveDraft(a.cmdInput.Text())
+	}
+	if a.output != nil {
+		a.sessions.SetActiveOutput(a.output.Text())
+	}
+}
+
+func (a *finalShellApp) renderActiveSession() {
+	if a == nil || a.sessions == nil {
+		return
+	}
+	state, ok := a.sessions.Active()
+	if !ok {
+		if a.output != nil {
+			a.output.SetText(terminalWelcomeText())
+		}
+		if a.cmdInput != nil {
+			a.cmdInput.SetText("")
+		}
+		return
+	}
+	if a.output != nil {
+		a.output.SetText(state.Output)
+	}
+	if a.cmdInput != nil {
+		a.cmdInput.SetText(state.CommandDraft)
+	}
+	if a.sessionTabs != nil {
+		a.sessionTabs.SetTabTitle(a.sessions.ActiveIndex(), sessionTabTitle(state))
+	}
+}
+
+func (a *finalShellApp) selectSessionTab(index int) {
+	if a == nil || a.sessions == nil || index == a.sessions.ActiveIndex() {
+		return
+	}
+	a.syncActiveSessionView()
+	if a.sessions.Select(index) {
+		a.renderActiveSession()
+		if state, ok := a.sessions.Active(); ok {
+			a.setStatus(trf("session.active", state.Profile.Name))
+		}
+	}
+}
+
+func (a *finalShellApp) openSession(profile connectionProfile) {
+	if a == nil {
+		return
+	}
+	if a.sessions == nil {
+		a.sessions = newSessionWorkspace()
+	}
+	a.syncActiveSessionView()
+	index, created := a.sessions.Open(profile)
+	if a.sessionTabs != nil {
+		state, _ := a.sessions.Active()
+		if created {
+			a.sessionTabs.AddTabWithID(state.ID, sessionTabTitle(state), nil)
+			a.sessionTabs.SelectTab(index)
+		} else {
+			a.sessionTabs.SetTabTitle(index, sessionTabTitle(state))
+			a.sessionTabs.SelectTab(index)
+		}
+	}
+	a.renderActiveSession()
+}
+
+func (a *finalShellApp) closeActiveSession() {
+	if a == nil || a.sessions == nil {
+		return
+	}
+	index := a.sessions.ActiveIndex()
+	state, ok := a.sessions.Active()
+	if !ok {
+		return
+	}
+	a.syncActiveSessionView()
+	if !a.sessions.Close(index) {
+		a.setStatus(tr("session.close_running"))
+		a.showTopNotice(tr("session.close_running_title"), tr("session.close_running"), false)
+		return
+	}
+	if a.sessionTabs != nil {
+		a.sessionTabs.RemoveTab(index)
+	}
+	a.renderActiveSession()
+	if next, exists := a.sessions.Active(); exists {
+		a.setStatus(trf("session.closed_active", state.Profile.Name, next.Profile.Name))
+	} else {
+		a.setStatus(trf("session.closed", state.Profile.Name))
+	}
+}
+
+func (a *finalShellApp) activeSessionProfile() (connectionProfile, bool) {
+	if a != nil && a.sessions != nil {
+		if state, ok := a.sessions.Active(); ok {
+			return state.Profile, true
+		}
+	}
+	profile, ok := a.selectedProfile()
+	if ok {
+		a.openSession(profile)
+	}
+	return profile, ok
+}
+
+func (a *finalShellApp) updateSessionTab(runID string, status sessionStatus) {
+	if a == nil || a.sessions == nil || !a.sessions.FinishRun(runID, status) {
+		return
+	}
+	a.refreshSessionTabs()
+}
+
+func (a *finalShellApp) refreshSessionTabs() {
+	if a == nil || a.sessions == nil || a.sessionTabs == nil {
+		return
+	}
+	for index, state := range a.sessions.Tabs() {
+		a.sessionTabs.SetTabTitle(index, sessionTabTitle(state))
+	}
+}
+
 func (a *finalShellApp) activateConnectionRow(row int) {
 	if a == nil || row < 0 || row >= len(a.rows) {
 		return
@@ -1466,7 +1659,8 @@ func (a *finalShellApp) activateProfile(p connectionProfile) {
 	if a.idx >= 0 && a.table != nil {
 		a.table.SelectRow(a.idx)
 	}
-	a.appendOutput(trf("output.profile_ready", p.Name, p.endpoint()))
+	a.openSession(p)
+	a.appendOutput(trf("output.profile_ready", p.Name))
 	a.setStatus(trf("status.connection_activated", p.Name))
 	if a.cmdInput != nil && a.cmdInput.View() != nil {
 		if raw := a.cmdInput.View().Raw(); raw != nil {
@@ -1482,6 +1676,7 @@ func (a *finalShellApp) testConnection() {
 	if !ok {
 		return
 	}
+	a.openSession(p)
 	if p.Type == connectionTypeLocal {
 		a.runAsync(p, "pwd && whoami && uname -a")
 		return
@@ -1490,7 +1685,7 @@ func (a *finalShellApp) testConnection() {
 }
 
 func (a *finalShellApp) runCommand() {
-	p, ok := a.selectedProfile()
+	p, ok := a.activeSessionProfile()
 	if !ok {
 		return
 	}
@@ -1502,7 +1697,7 @@ func (a *finalShellApp) runCommand() {
 }
 
 func (a *finalShellApp) showSelectedHistory() {
-	p, ok := a.selectedProfile()
+	p, ok := a.activeSessionProfile()
 	if !ok || a.history == nil {
 		return
 	}
@@ -1518,7 +1713,7 @@ func (a *finalShellApp) showSelectedHistory() {
 }
 
 func (a *finalShellApp) recallLastCommand() {
-	p, ok := a.selectedProfile()
+	p, ok := a.activeSessionProfile()
 	if !ok || a.history == nil || a.cmdInput == nil {
 		return
 	}
@@ -1543,6 +1738,9 @@ func (a *finalShellApp) clearTerminalOutput() {
 		return
 	}
 	a.output.SetText(terminalWelcomeText())
+	if a.sessions != nil {
+		a.sessions.SetActiveOutput(terminalWelcomeText())
+	}
 	a.setStatus(tr("terminal.cleared"))
 }
 
@@ -1551,6 +1749,10 @@ func terminalWelcomeText() string {
 }
 
 func (a *finalShellApp) beginCommandRun(cancel context.CancelFunc) (uint64, bool) {
+	return a.beginCommandRunForSession(cancel, "")
+}
+
+func (a *finalShellApp) beginCommandRunForSession(cancel context.CancelFunc, sessionID string) (uint64, bool) {
 	a.runMu.Lock()
 	defer a.runMu.Unlock()
 	if a.runCancel != nil {
@@ -1558,6 +1760,7 @@ func (a *finalShellApp) beginCommandRun(cancel context.CancelFunc) (uint64, bool
 	}
 	a.runID++
 	a.runCancel = cancel
+	a.runSessionID = sessionID
 	return a.runID, true
 }
 
@@ -1568,19 +1771,21 @@ func (a *finalShellApp) finishCommandRun(id uint64) bool {
 		return false
 	}
 	a.runCancel = nil
+	a.runSessionID = ""
 	return true
 }
 
 func (a *finalShellApp) stopCommand() {
 	a.runMu.Lock()
 	cancel := a.runCancel
+	sessionID := a.runSessionID
 	a.runMu.Unlock()
 	if cancel == nil {
 		a.setStatus(tr("status.no_command"))
 		return
 	}
 	cancel()
-	a.appendOutput(tr("output.stop_requested"))
+	a.appendSessionOutput(sessionID, tr("output.stop_requested"))
 	a.setStatus(tr("status.stopping"))
 }
 
@@ -1615,20 +1820,31 @@ func (a *finalShellApp) runAsync(p connectionProfile, command string) {
 		a.showTopNotice(tr("status.save_failed"), err.Error(), true)
 		return
 	}
+	a.openSession(p)
+	sessionID := p.ID
 	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout())
-	runID, ok := a.beginCommandRun(cancel)
+	runID, ok := a.beginCommandRunForSession(cancel, sessionID)
 	if !ok {
 		cancel()
 		a.setStatus(tr("status.command_active"))
 		a.showTopNotice(tr("notice.command_active.title"), tr("notice.command_active.message"), false)
 		return
 	}
-	a.appendOutput(fmt.Sprintf("\n$ [%s] %s\n", p.Name, command))
+	runToken := fmt.Sprintf("%s:%d", sessionID, runID)
+	if a.sessions == nil || !a.sessions.BeginRun(runToken) {
+		a.finishCommandRun(runID)
+		cancel()
+		a.setStatus(tr("status.command_active"))
+		return
+	}
+	a.sessions.SetActiveDraft(command)
+	a.refreshSessionTabs()
+	a.appendSessionOutput(sessionID, fmt.Sprintf("\n$ [%s] %s\n", p.Name, command))
 	a.setStatus(trf("status.running", p.Name))
 	a.setCommandRunning(true)
 	outputBatcher := newGUIOutputBatcher(func(fn func()) {
 		fltk_bridge.Awake(fn)
-	}, a.appendOutput)
+	}, func(text string) { a.appendSessionOutput(sessionID, text) })
 	go func() {
 		defer cancel()
 		sess := terminal.NewSession(a.history)
@@ -1646,25 +1862,30 @@ func (a *finalShellApp) runAsync(p connectionProfile, command string) {
 				return
 			}
 			a.setCommandRunning(false)
+			finalStatus := sessionSucceeded
 			switch {
 			case errors.Is(err, context.Canceled):
-				a.appendOutput(tr("output.cancelled"))
+				finalStatus = sessionStopped
+				a.appendSessionOutput(sessionID, tr("output.cancelled"))
 				a.setStatus(tr("status.cancelled"))
 			case errors.Is(err, context.DeadlineExceeded):
+				finalStatus = sessionFailed
 				message := trf("notice.timeout.message", commandTimeout())
-				a.appendOutput(trf("output.error", message))
+				a.appendSessionOutput(sessionID, trf("output.error", message))
 				a.setStatus(tr("status.timed_out"))
 				a.showTopNotice(tr("notice.timeout.title"), message, true)
 			case err != nil:
-				a.appendOutput(trf("output.error", err.Error()))
+				finalStatus = sessionFailed
+				a.appendSessionOutput(sessionID, trf("output.error", err.Error()))
 				a.setStatus(trf("status.failed", result.ExitCode))
 				a.showTopNotice(tr("notice.failed.title"), err.Error(), true)
 			case len(result.Events) == 0 && result.Stdout == "" && result.Stderr == "":
-				a.appendOutput(tr("output.no_output"))
+				a.appendSessionOutput(sessionID, tr("output.no_output"))
 				a.setStatus(trf("status.completed", 0))
 			default:
 				a.setStatus(trf("status.completed", result.ExitCode))
 			}
+			a.updateSessionTab(runToken, finalStatus)
 		})
 	}()
 }
@@ -1856,10 +2077,29 @@ func formatHistoryEntries(p connectionProfile, entries []terminal.HistoryEntry) 
 }
 
 func (a *finalShellApp) appendOutput(s string) {
+	if a == nil || s == "" {
+		return
+	}
+	if a.sessions != nil {
+		a.sessions.AppendActiveOutput(s)
+	}
 	if a.output != nil {
 		a.output.AppendAndScroll(s)
 	}
 }
+
+func (a *finalShellApp) appendSessionOutput(sessionID, s string) {
+	if a == nil || s == "" {
+		return
+	}
+	if a.sessions == nil || !a.sessions.AppendOutput(sessionID, s) {
+		return
+	}
+	if active, ok := a.sessions.Active(); ok && active.ID == sessionID && a.output != nil {
+		a.output.AppendAndScroll(s)
+	}
+}
+
 func (a *finalShellApp) setStatus(s string) {
 	if a.status != nil {
 		a.status.SetText(s)

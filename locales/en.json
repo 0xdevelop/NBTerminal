@@ -109,6 +109,12 @@
   "terminal.command": "Command",
   "terminal.stop": "Stop",
   "terminal.run": "Run",
+  "session.close": "Close Tab",
+  "session.active": "Active session: %s",
+  "session.closed": "Closed session: %s",
+  "session.closed_active": "Closed %s · Active session: %s",
+  "session.close_running_title": "Session is running",
+  "session.close_running": "Stop the running command before closing this terminal tab.",
   "terminal.welcome": "Welcome to NBTerminal\n• Select or create a connection.\n• Use Local for this machine or SSH for remote commands.\n• UTF-8 input, output and history are preserved end to end.\n\n",
   "status.running": "Running %s...",
   "status.stopping": "Stopping command...",
@@ -168,6 +174,6 @@
   "profile.unnamed": "Unnamed",
   "profile.local_description": "Run commands on this workstation",
   "profile.ssh_description": "Edit and save with your own host/user/password or private key",
-  "output.profile_ready": "[%s] ready: %s\n",
+  "output.profile_ready": "[%s] ready\n",
   "output.exit": "[exit %d]\n"
 }

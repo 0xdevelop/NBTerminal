@@ -109,6 +109,12 @@
   "terminal.command": "命令",
   "terminal.stop": "停止",
   "terminal.run": "运行",
+  "session.close": "关闭标签",
+  "session.active": "当前会话：%s",
+  "session.closed": "已关闭会话：%s",
+  "session.closed_active": "已关闭 %s · 当前会话：%s",
+  "session.close_running_title": "会话正在运行",
+  "session.close_running": "请先停止运行中的命令，再关闭此终端标签。",
   "terminal.welcome": "欢迎使用 NBTerminal\n• 请选择或创建连接。\n• 本机命令使用本地连接，远程命令使用 SSH。\n• UTF-8 输入、输出与历史记录全链路保留。\n\n",
   "status.running": "正在 %s 上运行...",
   "status.stopping": "正在停止命令...",
@@ -168,6 +174,6 @@
   "profile.unnamed": "未命名",
   "profile.local_description": "在此工作站运行命令",
   "profile.ssh_description": "使用自己的主机、用户、密码或私钥编辑并保存",
-  "output.profile_ready": "[%s] 已就绪：%s\n",
+  "output.profile_ready": "[%s] 已就绪\n",
   "output.exit": "[退出码 %d]\n"
 }

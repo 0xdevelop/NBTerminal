@@ -109,6 +109,12 @@
   "terminal.command": "Команда",
   "terminal.stop": "Стоп",
   "terminal.run": "Запустить",
+  "session.close": "Закрыть вкладку",
+  "session.active": "Активный сеанс: %s",
+  "session.closed": "Сеанс закрыт: %s",
+  "session.closed_active": "Закрыт %s · Активный сеанс: %s",
+  "session.close_running_title": "Сеанс выполняется",
+  "session.close_running": "Остановите команду перед закрытием вкладки терминала.",
   "terminal.welcome": "Добро пожаловать в NBTerminal\n• Выберите или создайте подключение.\n• Используйте Local для этого компьютера или SSH для удалённых команд.\n• Ввод, вывод и история UTF-8 сохраняются без потерь.\n\n",
   "status.running": "Выполняется на %s...",
   "status.stopping": "Остановка команды...",
@@ -168,6 +174,6 @@
   "profile.unnamed": "Без имени",
   "profile.local_description": "Запуск команд на этом компьютере",
   "profile.ssh_description": "Укажите и сохраните свой хост, пользователя, пароль или закрытый ключ",
-  "output.profile_ready": "[%s] готово: %s\n",
+  "output.profile_ready": "[%s] готово\n",
   "output.exit": "[код выхода %d]\n"
 }
