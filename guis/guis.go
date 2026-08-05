@@ -1314,8 +1314,7 @@ func (a *finalShellApp) jumpToSearchMatch() {
 		return
 	}
 	query := strings.TrimSpace(a.searchInput.Text())
-	a.rows = navigatorRows(a.allRows, query, quickConnectionLimit)
-	a.idx = -1
+	a.refreshNavigator("")
 	a.refreshTable()
 	if len(a.rows) == 0 {
 		if query == "" {
@@ -1335,6 +1334,24 @@ func (a *finalShellApp) jumpToSearchMatch() {
 		return
 	}
 	a.setStatus(trf("connections.matched", len(a.rows), a.rows[0].Name))
+}
+
+// refreshNavigator rebuilds the main-window favorite/recent projection from the
+// complete saved-profile model. Editors and the Connection Manager must call
+// this instead of publishing their full rows into the compact launch surface.
+func (a *finalShellApp) refreshNavigator(preferredID string) {
+	if a == nil {
+		return
+	}
+	query := ""
+	if a.searchInput != nil {
+		query = strings.TrimSpace(a.searchInput.Text())
+	}
+	a.rows = navigatorRows(a.allRows, query, quickConnectionLimit)
+	a.idx = indexProfileByID(a.rows, preferredID)
+	if a.idx < 0 {
+		a.idx = activeConnectionIndex(a.rows)
+	}
 }
 
 func filterConnections(rows []connectionProfile, query string) []connectionProfile {
@@ -2059,12 +2076,7 @@ func (a *finalShellApp) persistProfile(p connectionProfile) error {
 		return err
 	}
 	a.allRows = nextAll
-	query := ""
-	if a.searchInput != nil {
-		query = a.searchInput.Text()
-	}
-	a.rows = navigatorRows(nextAll, query, quickConnectionLimit)
-	a.idx = indexProfileByID(a.rows, p.ID)
+	a.refreshNavigator(p.ID)
 	return nil
 }
 

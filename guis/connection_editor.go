@@ -225,8 +225,7 @@ func (e *connectionEditor) save() {
 		if e.owner.searchInput != nil {
 			e.owner.searchInput.SetText("")
 		}
-		e.owner.rows = filterConnections(e.owner.allRows, "")
-		e.owner.idx = indexProfileByID(e.owner.rows, profile.ID)
+		e.owner.refreshNavigator(profile.ID)
 		e.owner.refreshTable()
 		if e.owner.table != nil && e.owner.idx >= 0 {
 			e.owner.table.SelectRow(e.owner.idx)

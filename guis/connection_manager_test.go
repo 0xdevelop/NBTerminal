@@ -2,6 +2,7 @@ package guis
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -58,6 +59,27 @@ func TestToggleFavoritePreservesProfileAndChangesOnlyFavorite(t *testing.T) {
 	}
 	if toggledFavorite(got).Favorite {
 		t.Fatal("second toggle should clear favorite")
+	}
+}
+
+func TestRefreshNavigatorKeepsMainWindowAsCompactProjectionAfterEditorSave(t *testing.T) {
+	rows := make([]connectionProfile, 0, quickConnectionLimit+3)
+	for index := 0; index < quickConnectionLimit+3; index++ {
+		rows = append(rows, connectionProfile{
+			ID:       fmt.Sprintf("profile-%02d", index),
+			Name:     fmt.Sprintf("Profile %02d", index),
+			LastUsed: fmt.Sprintf("2026-08-%02dT10:00:00Z", index+1),
+		})
+	}
+	app := &finalShellApp{allRows: rows, idx: -1}
+
+	app.refreshNavigator("profile-00")
+
+	if len(app.rows) != quickConnectionLimit {
+		t.Fatalf("main navigator expanded to %d rows after save, want compact limit %d", len(app.rows), quickConnectionLimit)
+	}
+	if app.idx < 0 || app.idx >= len(app.rows) {
+		t.Fatalf("navigator did not retain a valid fallback selection: idx=%d rows=%#v", app.idx, app.rows)
 	}
 }
 
