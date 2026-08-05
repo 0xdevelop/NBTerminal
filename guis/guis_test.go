@@ -502,6 +502,29 @@ func TestTopFloatRectInBounds(t *testing.T) {
 	}
 }
 
+func TestEnsureRuntimeSessionReusesActiveRuntimeIdentity(t *testing.T) {
+	app := &finalShellApp{sessions: newSessionWorkspace()}
+	profile := connectionProfile{ID: "saved-local", Name: "本地", Type: connectionTypeSSH}
+
+	first, ok := app.ensureRuntimeSession(profile)
+	if !ok || first.ID == "" || first.ID == profile.ID {
+		t.Fatalf("first runtime session = %#v ok=%t", first, ok)
+	}
+	second, ok := app.ensureRuntimeSession(profile)
+	if !ok || second.ID != first.ID {
+		t.Fatalf("active runtime identity changed: first=%#v second=%#v ok=%t", first, second, ok)
+	}
+	if got := len(app.sessions.Tabs()); got != 1 {
+		t.Fatalf("command preparation created duplicate runtime tabs: %d", got)
+	}
+
+	other := connectionProfile{ID: "saved-ssh", Name: "Сервер", Type: connectionTypeSSH}
+	third, ok := app.ensureRuntimeSession(other)
+	if !ok || third.ID == first.ID || third.ProfileID != other.ID {
+		t.Fatalf("different profile did not receive a distinct runtime: %#v ok=%t", third, ok)
+	}
+}
+
 func TestCommandRunLifecycleAllowsIndependentSessionsAndRejectsSameSessionOverlap(t *testing.T) {
 	app := &finalShellApp{}
 	firstContext, firstCancel := context.WithCancel(context.Background())

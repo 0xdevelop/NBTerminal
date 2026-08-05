@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/0xdevelop/NBTerminal/config"
+	"github.com/0xdevelop/NBTerminal/hostmonitor"
 	"github.com/0xdevelop/NBTerminal/internal/persistence"
 	"github.com/0xdevelop/NBTerminal/locales"
 	"github.com/0xdevelop/NBTerminal/terminal"
@@ -22,6 +23,7 @@ import (
 	"github.com/0xdevelop/fltk2go/foundation"
 	"github.com/0xdevelop/fltk2go/uikit"
 	"github.com/0xdevelop/fltk2go/uikit/automation"
+	"github.com/0xdevelop/fltk2go/uikit/progress"
 	"github.com/0xdevelop/fltk2go/uikit/screen"
 	"github.com/0xdevelop/fltk2go/uikit/tableview"
 	"github.com/0xdevelop/fltk2go/uikit/tabview"
@@ -412,10 +414,11 @@ type finalShellApp struct {
 	rows     []connectionProfile
 	idx      int
 
-	window    *uikit.UIWindow
-	workspace *uikit.UISplitView
-	table     *uikit.UITableView
-	model     *tableModel
+	window     *uikit.UIWindow
+	workspace  *uikit.UISplitView
+	quickPanel *uikit.UIGroup
+	table      *uikit.UITableView
+	model      *tableModel
 
 	searchInput    *uikit.Input
 	selectedName   *uikit.UILabel
@@ -431,10 +434,22 @@ type finalShellApp struct {
 	settings       *settingsWindow
 	editor         *connectionEditor
 	manager        *connectionManagerWindow
+	monitorPanel   *uikit.UIGroup
+	monitorTitle   *uikit.UILabel
+	monitorStatus  *uikit.UILabel
+	monitorUptime  *uikit.UILabel
+	monitorLoad    *uikit.UILabel
+	monitorCPU     *uikit.UILabel
+	monitorMemory  *uikit.UILabel
+	monitorNetwork *uikit.UILabel
+	monitorCPUBar  *progress.UIProgressView
+	monitorMemBar  *progress.UIProgressView
 
-	runMu sync.Mutex
-	runID uint64
-	runs  map[string]commandRun
+	runMu     sync.Mutex
+	runID     uint64
+	runs      map[string]commandRun
+	monitorMu sync.RWMutex
+	monitors  map[string]*hostmonitor.Session
 }
 
 type commandRun struct {
@@ -531,6 +546,7 @@ func LoadGUIWithFLTKGO(_ []byte) {
 		sessions: newSessionWorkspace(),
 		idx:      -1,
 	}
+	defer app.stopAllMonitors()
 	if err := app.store.Load(); err != nil {
 		gtbox_log.LogErrorf("load connection store failed: %s", err.Error())
 	}
@@ -648,6 +664,11 @@ func (a *finalShellApp) build() {
 	left.SetBackgroundColor(uint(tokenColor(modernTheme.card)))
 	left.SetAutomationID("connections.panel")
 	left.Raw().Resizable(left.Raw())
+	quickPanel := uikit.NewUIGroup(rect(margin, 72, leftW, 786))
+	quickPanel.SetBackgroundColor(uint(tokenColor(modernTheme.card)))
+	quickPanel.SetAutomationID("connections.quick_panel")
+	quickPanel.Raw().Resizable(quickPanel.Raw())
+	a.quickPanel = quickPanel
 	rightPanel := uikit.NewUIGroup(rect(rightX, 72, rightW, 786))
 	rightPanel.SetBackgroundColor(uint(tokenColor(modernTheme.card)))
 	rightPanel.SetAutomationID("terminal.panel")
@@ -661,9 +682,9 @@ func (a *finalShellApp) build() {
 	left.Raw().Resize(margin, 72, leftW, 786)
 	rightPanel.Raw().Resize(rightX, 72, rightW, 786)
 	root.AddSubview(a.workspace)
-	left.AddSubview(sectionTitle(margin+18, 86, 260, 24, tr("quick.title")))
-	left.AddSubview(mutedLabel(margin+18, 110, 430, 18, tr("quick.subtitle")))
-	left.AddSubview(mutedLabel(margin+18, 132, 70, 18, tr("connections.search")))
+	quickPanel.AddSubview(sectionTitle(margin+18, 86, 260, 24, tr("quick.title")))
+	quickPanel.AddSubview(mutedLabel(margin+18, 110, 430, 18, tr("quick.subtitle")))
+	quickPanel.AddSubview(mutedLabel(margin+18, 132, 70, 18, tr("connections.search")))
 	a.searchInput = inputNoLabel(margin+82, 124, leftW-194, nativeControls.InputHeight, "connections.search", tr("connections.search_placeholder"))
 	a.searchInput.OnChange(a.jumpToSearchMatch)
 	a.searchInput.View().On(fltk_bridge.KEYDOWN, func(fltk_bridge.Event) bool {
@@ -684,9 +705,9 @@ func (a *finalShellApp) build() {
 		}
 		return false
 	})
-	left.AddSubview(a.searchInput)
+	quickPanel.AddSubview(a.searchInput)
 	findBtn := button(margin+390, 124, 86, nativeControls.ButtonHeight, tr("connections.find"), "connections.find", a.jumpToSearchMatch)
-	left.AddSubview(findBtn)
+	quickPanel.AddSubview(findBtn)
 
 	tv, err := uikit.NewUITableView(margin+14, 166, leftW-28, 478)
 	if err == nil {
@@ -713,34 +734,36 @@ func (a *finalShellApp) build() {
 		a.table.SetBackgroundColor(tokenColor(modernTheme.card))
 		a.table.SetCustomDraw(a.drawConnectionCell)
 		a.table.ReloadData()
-		left.AddSubview(a.table)
+		quickPanel.AddSubview(a.table)
 	}
 
-	left.AddSubview(sectionTitle(margin+18, 666, 260, 22, tr("connections.selected_summary")))
+	quickPanel.AddSubview(sectionTitle(margin+18, 666, 260, 22, tr("connections.selected_summary")))
 	a.selectedName = label(margin+18, 694, leftW-36, 24, "")
 	a.selectedName.SetFontSize(nativeTypography.SectionTitle)
 	styleDynamicLabel(a.selectedName)
 	a.selectedName.View().SetAutomationID("connections.selected_name")
-	left.AddSubview(a.selectedName)
+	quickPanel.AddSubview(a.selectedName)
 	a.selectedDetail = mutedLabel(margin+18, 722, leftW-36, 22, "")
 	styleDynamicLabel(a.selectedDetail)
 	a.selectedDetail.View().SetAutomationID("connections.selected_detail")
-	left.AddSubview(a.selectedDetail)
+	quickPanel.AddSubview(a.selectedDetail)
 	a.selectedRecent = mutedLabel(margin+18, 748, leftW-36, 22, "")
 	styleDynamicLabel(a.selectedRecent)
 	a.selectedRecent.View().SetAutomationID("connections.selected_recent")
-	left.AddSubview(a.selectedRecent)
+	quickPanel.AddSubview(a.selectedRecent)
 
 	addBtn := button(margin+14, 816, 82, nativeControls.ButtonHeight, tr("action.new"), "action.new", a.newProfile)
-	left.AddSubview(addBtn)
+	quickPanel.AddSubview(addBtn)
 	editBtn := button(margin+106, 816, 82, nativeControls.ButtonHeight, tr("action.edit"), "action.edit", a.editSelectedProfile)
-	left.AddSubview(editBtn)
+	quickPanel.AddSubview(editBtn)
 	deleteBtn := button(margin+198, 816, 82, nativeControls.ButtonHeight, tr("action.delete"), "action.delete", a.deleteProfile)
-	left.AddSubview(deleteBtn)
+	quickPanel.AddSubview(deleteBtn)
 	testBtn := button(margin+290, 816, 82, nativeControls.ButtonHeight, tr("action.test"), "action.test", a.testConnection)
-	left.AddSubview(testBtn)
+	quickPanel.AddSubview(testBtn)
 	connectBtn := primaryButton(margin+382, 814, 118, nativeControls.PrimaryButtonHeight, tr("action.connect"), "action.connect", a.connectSelected)
-	left.AddSubview(connectBtn)
+	quickPanel.AddSubview(connectBtn)
+	left.AddSubview(quickPanel)
+	a.buildMonitorSidebar(left, margin, leftW)
 
 	rightPanel.SetBackgroundColor(uint(tokenColor(modernTheme.card)))
 	rightPanel.SetAutomationID("terminal.panel")
@@ -1529,6 +1552,7 @@ func (a *finalShellApp) renderActiveSession() {
 	}
 	state, ok := a.sessions.Active()
 	if !ok {
+		a.renderMonitorSidebar(terminalTabState{}, false)
 		if a.output != nil {
 			a.output.SetText(terminalWelcomeText())
 		}
@@ -1547,6 +1571,7 @@ func (a *finalShellApp) renderActiveSession() {
 	if a.sessionTabs != nil {
 		a.sessionTabs.SetTabTitle(a.sessions.ActiveIndex(), sessionTabTitle(state))
 	}
+	a.renderMonitorSidebar(state, true)
 	a.updateCommandControls()
 }
 
@@ -1572,8 +1597,11 @@ func (a *finalShellApp) openSession(profile connectionProfile) {
 	}
 	a.syncActiveSessionView()
 	index, created := a.sessions.Open(profile)
-	if a.sessionTabs != nil {
-		state, _ := a.sessions.Active()
+	state, stateOK := a.sessions.Active()
+	if created && stateOK {
+		a.startMonitorForSession(state)
+	}
+	if a.sessionTabs != nil && stateOK {
 		if created {
 			a.sessionTabs.AddTabWithID(state.ID, sessionTabTitle(state), nil)
 			a.sessionTabs.SelectTab(index)
@@ -1583,6 +1611,23 @@ func (a *finalShellApp) openSession(profile connectionProfile) {
 		}
 	}
 	a.renderActiveSession()
+}
+
+func (a *finalShellApp) ensureRuntimeSession(profile connectionProfile) (terminalTabState, bool) {
+	if a == nil || strings.TrimSpace(profile.ID) == "" {
+		return terminalTabState{}, false
+	}
+	if a.sessions != nil {
+		if state, ok := a.sessions.Active(); ok && state.ProfileID == profile.ID {
+			return state, true
+		}
+	}
+	a.openSession(profile)
+	if a.sessions == nil {
+		return terminalTabState{}, false
+	}
+	state, ok := a.sessions.Active()
+	return state, ok && state.ProfileID == profile.ID
 }
 
 func (a *finalShellApp) closeActiveSession() {
@@ -1600,6 +1645,7 @@ func (a *finalShellApp) closeActiveSession() {
 		a.showTopNotice(tr("session.close_running_title"), tr("session.close_running"), false)
 		return
 	}
+	a.stopMonitorForSession(state.ID)
 	if a.sessionTabs != nil {
 		a.sessionTabs.RemoveTab(index)
 	}
@@ -1862,8 +1908,12 @@ func (a *finalShellApp) runAsync(p connectionProfile, command string) {
 		a.showTopNotice(tr("status.save_failed"), err.Error(), true)
 		return
 	}
-	a.openSession(p)
-	sessionID := p.ID
+	state, ok := a.ensureRuntimeSession(p)
+	if !ok {
+		a.setStatus(tr("status.command_active"))
+		return
+	}
+	sessionID := state.ID
 	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout())
 	runID, ok := a.beginCommandRunForSession(cancel, sessionID)
 	if !ok {
