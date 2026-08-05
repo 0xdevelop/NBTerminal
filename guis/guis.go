@@ -1504,7 +1504,11 @@ func sessionTabTitle(state terminalTabState) string {
 	case sessionStopped:
 		prefix = "■ "
 	}
-	return prefix + state.Profile.Name
+	name := state.Profile.Name
+	if state.InstanceNumber > 1 {
+		name = fmt.Sprintf("%s · %d", name, state.InstanceNumber)
+	}
+	return prefix + name
 }
 
 func (a *finalShellApp) syncActiveSessionView() {

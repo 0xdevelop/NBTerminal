@@ -1,6 +1,9 @@
 package guis
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 type sessionStatus string
 
@@ -13,18 +16,21 @@ const (
 )
 
 type terminalTabState struct {
-	ID           string
-	Profile      connectionProfile
-	CommandDraft string
-	Output       string
-	Status       sessionStatus
-	RunID        string
+	ID             string
+	ProfileID      string
+	InstanceNumber int
+	Profile        connectionProfile
+	CommandDraft   string
+	Output         string
+	Status         sessionStatus
+	RunID          string
 }
 
 type sessionWorkspace struct {
 	tabs             []terminalTabState
 	activeIndex      int
 	profileSelection string
+	nextRuntimeID    uint64
 }
 
 func newSessionWorkspace() *sessionWorkspace {
@@ -56,18 +62,20 @@ func (w *sessionWorkspace) Open(profile connectionProfile) (int, bool) {
 	if w == nil || strings.TrimSpace(profile.ID) == "" {
 		return -1, false
 	}
+	instanceNumber := 1
 	for index := range w.tabs {
-		if w.tabs[index].Profile.ID == profile.ID {
-			w.tabs[index].Profile = profile
-			w.activeIndex = index
-			return index, false
+		if w.tabs[index].ProfileID == profile.ID && w.tabs[index].InstanceNumber >= instanceNumber {
+			instanceNumber = w.tabs[index].InstanceNumber + 1
 		}
 	}
+	w.nextRuntimeID++
 	state := terminalTabState{
-		ID:      profile.ID,
-		Profile: profile,
-		Status:  sessionIdle,
-		Output:  terminalWelcomeText(),
+		ID:             fmt.Sprintf("runtime-%d", w.nextRuntimeID),
+		ProfileID:      profile.ID,
+		InstanceNumber: instanceNumber,
+		Profile:        profile,
+		Status:         sessionIdle,
+		Output:         terminalWelcomeText(),
 	}
 	w.tabs = append(w.tabs, state)
 	w.activeIndex = len(w.tabs) - 1

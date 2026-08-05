@@ -549,13 +549,15 @@ func TestCommandRunLifecycleAllowsIndependentSessionsAndRejectsSameSessionOverla
 func TestStopCommandCancelsOnlyActiveSession(t *testing.T) {
 	app := &finalShellApp{sessions: newSessionWorkspace()}
 	app.sessions.Open(connectionProfile{ID: "first", Name: "First", Type: connectionTypeLocal})
+	first, _ := app.sessions.Active()
 	app.sessions.Open(connectionProfile{ID: "second", Name: "Second", Type: connectionTypeLocal})
+	second, _ := app.sessions.Active()
 	firstContext, firstCancel := context.WithCancel(context.Background())
 	secondContext, secondCancel := context.WithCancel(context.Background())
-	if _, ok := app.beginCommandRunForSession(firstCancel, "first"); !ok {
+	if _, ok := app.beginCommandRunForSession(firstCancel, first.ID); !ok {
 		t.Fatal("first session run did not start")
 	}
-	if _, ok := app.beginCommandRunForSession(secondCancel, "second"); !ok {
+	if _, ok := app.beginCommandRunForSession(secondCancel, second.ID); !ok {
 		t.Fatal("second session run did not start")
 	}
 

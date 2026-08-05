@@ -30,28 +30,47 @@ func TestSessionWorkspaceKeepsProfileSelectionSeparateFromActiveTab(t *testing.T
 	}
 }
 
-func TestSessionWorkspaceReusesConnectionTabAndPreservesPerTabDraftOutput(t *testing.T) {
+func TestSessionWorkspaceCreatesIndependentRuntimeSessionsAndPreservesPerTabState(t *testing.T) {
 	workspace := newSessionWorkspace()
 	local := connectionProfile{ID: "local", Name: "本地", Type: connectionTypeLocal}
 	server := connectionProfile{ID: "server", Name: "Сервер", Type: connectionTypeSSH}
 
-	workspace.Open(local)
+	firstLocalIndex, created := workspace.Open(local)
+	if !created || firstLocalIndex != 0 {
+		t.Fatalf("first local session was not created: index=%d created=%t", firstLocalIndex, created)
+	}
+	firstLocal, _ := workspace.Active()
 	workspace.SetActiveDraft("printf '简体 · 繁體 · Русский'")
 	workspace.AppendActiveOutput("本地输出\n")
 	workspace.Open(server)
 	workspace.SetActiveDraft("uname -a")
 	workspace.AppendActiveOutput("сервер\n")
 
-	index, created := workspace.Open(local)
-	if created || index != 0 {
-		t.Fatalf("existing profile should select its tab: index=%d created=%t", index, created)
+	secondLocalIndex, created := workspace.Open(local)
+	if !created || secondLocalIndex != 2 {
+		t.Fatalf("same profile must create an independent runtime session: index=%d created=%t", secondLocalIndex, created)
 	}
+	secondLocal, _ := workspace.Active()
+	if firstLocal.ID == secondLocal.ID || firstLocal.ID == local.ID || secondLocal.ID == local.ID {
+		t.Fatalf("runtime IDs must be unique and independent from profile IDs: first=%q second=%q", firstLocal.ID, secondLocal.ID)
+	}
+	if firstLocal.ProfileID != local.ID || secondLocal.ProfileID != local.ID {
+		t.Fatalf("runtime sessions lost source profile identity: first=%#v second=%#v", firstLocal, secondLocal)
+	}
+	if firstLocal.InstanceNumber != 1 || secondLocal.InstanceNumber != 2 {
+		t.Fatalf("unexpected runtime instance numbers: first=%d second=%d", firstLocal.InstanceNumber, secondLocal.InstanceNumber)
+	}
+	if secondLocal.CommandDraft != "" || strings.Contains(secondLocal.Output, "本地输出\n") {
+		t.Fatalf("new runtime session inherited mutable state: %#v", secondLocal)
+	}
+
+	workspace.Select(firstLocalIndex)
 	active, _ := workspace.Active()
 	if active.CommandDraft != "printf '简体 · 繁體 · Русский'" || !strings.Contains(active.Output, "本地输出\n") {
-		t.Fatalf("local tab state was not preserved: %#v", active)
+		t.Fatalf("first local runtime state was not preserved: %#v", active)
 	}
-	if len(workspace.Tabs()) != 2 {
-		t.Fatalf("duplicate tab was created: %#v", workspace.Tabs())
+	if len(workspace.Tabs()) != 3 {
+		t.Fatalf("expected three independent runtime sessions: %#v", workspace.Tabs())
 	}
 }
 
@@ -91,5 +110,26 @@ func TestSessionWorkspaceRejectsStaleCompletion(t *testing.T) {
 	active, _ := workspace.Active()
 	if active.Status != sessionRunning || active.RunID != "new-run" {
 		t.Fatalf("running state was corrupted: %#v", active)
+	}
+}
+
+func TestSessionWorkspaceRuntimeIdentitySurvivesEarlierTabClose(t *testing.T) {
+	workspace := newSessionWorkspace()
+	profile := connectionProfile{ID: "same-profile", Name: "Server", Type: connectionTypeSSH}
+	workspace.Open(profile)
+	workspace.Open(profile)
+	if !workspace.Close(0) {
+		t.Fatal("failed to close first runtime session")
+	}
+	workspace.Open(profile)
+	tabs := workspace.Tabs()
+	if len(tabs) != 2 || tabs[0].InstanceNumber != 2 || tabs[1].InstanceNumber != 3 {
+		t.Fatalf("runtime instance numbers were reused after close: %#v", tabs)
+	}
+	if tabs[0].ID == tabs[1].ID {
+		t.Fatalf("runtime ID was reused after close: %#v", tabs)
+	}
+	if got := sessionTabTitle(tabs[1]); got != "Server · 3" {
+		t.Fatalf("duplicate profile tab title = %q, want %q", got, "Server · 3")
 	}
 }
