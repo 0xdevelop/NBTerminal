@@ -51,6 +51,68 @@ type layoutRect struct {
 
 func (r layoutRect) Bottom() int { return r.Y + r.Height }
 
+// terminalPanelLayout is the deterministic native geometry for the terminal
+// workspace. At the minimum desktop width, secondary actions move to their own
+// row instead of letting FLTK proportionally crush localized button labels.
+type terminalPanelLayout struct {
+	Title, Subtitle, CloseTab, Tabs, Output                layoutRect
+	History, Last, Clear, CommandLabel, Command, Stop, Run layoutRect
+	Compact                                                bool
+}
+
+func terminalPanelLayoutFor(panel layoutRect, tokens controlMetricSet) terminalPanelLayout {
+	const (
+		inset          = 18
+		gap            = 8
+		groupGap       = 14
+		closeWidth     = 150
+		historyWidth   = 86
+		lastWidth      = 64
+		clearWidth     = 68
+		stopWidth      = 68
+		runWidth       = 116
+		compactAtWidth = 760
+	)
+	h := tokens.PrimaryButtonHeight
+	bottomRowY := panel.Bottom() - 74
+	run := layoutRect{X: panel.X + panel.Width - inset - runWidth, Y: bottomRowY, Width: runWidth, Height: h}
+	stop := layoutRect{X: run.X - gap - stopWidth, Y: bottomRowY, Width: stopWidth, Height: h}
+	command := layoutRect{X: panel.X + inset, Y: bottomRowY, Width: stop.X - groupGap - (panel.X + inset), Height: h}
+	historyY := bottomRowY
+	compact := panel.Width < compactAtWidth
+	if compact {
+		historyY = bottomRowY - h - 32
+	}
+	history := layoutRect{X: panel.X + inset, Y: historyY, Width: historyWidth, Height: h}
+	last := layoutRect{X: history.X + history.Width + gap, Y: historyY, Width: lastWidth, Height: h}
+	clear := layoutRect{X: last.X + last.Width + gap, Y: historyY, Width: clearWidth, Height: h}
+	if !compact {
+		command.X = clear.X + clear.Width + groupGap
+		command.Width = stop.X - groupGap - command.X
+	}
+	commandLabel := layoutRect{X: command.X, Y: bottomRowY - 20, Width: command.Width, Height: 18}
+	outputBottom := commandLabel.Y - 16
+	if compact {
+		outputBottom = history.Y - 14
+	}
+	outputY := panel.Y + 108
+	return terminalPanelLayout{
+		Title:        layoutRect{X: panel.X + inset, Y: panel.Y + 14, Width: panel.Width - inset*2 - closeWidth - 12, Height: 24},
+		Subtitle:     layoutRect{X: panel.X + inset, Y: panel.Y + 38, Width: panel.Width - inset*2, Height: 18},
+		CloseTab:     layoutRect{X: panel.X + panel.Width - inset - closeWidth, Y: panel.Y + 18, Width: closeWidth, Height: tokens.ButtonHeight},
+		Tabs:         layoutRect{X: panel.X + inset, Y: panel.Y + 62, Width: panel.Width - inset*2, Height: 40},
+		Output:       layoutRect{X: panel.X + inset, Y: outputY, Width: panel.Width - inset*2, Height: outputBottom - outputY},
+		History:      history,
+		Last:         last,
+		Clear:        clear,
+		CommandLabel: commandLabel,
+		Command:      command,
+		Stop:         stop,
+		Run:          run,
+		Compact:      compact,
+	}
+}
+
 type connectionManagerLayout struct {
 	Search, Find, Table, Status, CloseAfterConnect layoutRect
 	New, Edit, Delete, Favorite, Connect           layoutRect

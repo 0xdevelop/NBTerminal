@@ -420,30 +420,38 @@ type finalShellApp struct {
 	table      *uikit.UITableView
 	model      *tableModel
 
-	searchInput    *uikit.Input
-	selectedName   *uikit.UILabel
-	selectedDetail *uikit.UILabel
-	selectedRecent *uikit.UILabel
-	cmdInput       *uikit.UITextView
-	output         *uikit.UITextView
-	sessionTabs    *uikit.UITabView
-	status         *uikit.UILabel
-	notice         *uikit.UIWindow
-	runButton      *uikit.UIButton
-	stopButton     *uikit.UIButton
-	settings       *settingsWindow
-	editor         *connectionEditor
-	manager        *connectionManagerWindow
-	monitorPanel   *uikit.UIGroup
-	monitorTitle   *uikit.UILabel
-	monitorStatus  *uikit.UILabel
-	monitorUptime  *uikit.UILabel
-	monitorLoad    *uikit.UILabel
-	monitorCPU     *uikit.UILabel
-	monitorMemory  *uikit.UILabel
-	monitorNetwork *uikit.UILabel
-	monitorCPUBar  *progress.UIProgressView
-	monitorMemBar  *progress.UIProgressView
+	searchInput      *uikit.Input
+	selectedName     *uikit.UILabel
+	selectedDetail   *uikit.UILabel
+	selectedRecent   *uikit.UILabel
+	cmdInput         *uikit.UITextView
+	output           *uikit.UITextView
+	sessionTabs      *uikit.UITabView
+	terminalPanel    *uikit.UIGroup
+	terminalTitle    *uikit.UILabel
+	terminalSubtitle *uikit.UILabel
+	commandLabel     *uikit.UILabel
+	closeTabButton   *uikit.UIButton
+	historyButton    *uikit.UIButton
+	lastButton       *uikit.UIButton
+	clearButton      *uikit.UIButton
+	status           *uikit.UILabel
+	notice           *uikit.UIWindow
+	runButton        *uikit.UIButton
+	stopButton       *uikit.UIButton
+	settings         *settingsWindow
+	editor           *connectionEditor
+	manager          *connectionManagerWindow
+	monitorPanel     *uikit.UIGroup
+	monitorTitle     *uikit.UILabel
+	monitorStatus    *uikit.UILabel
+	monitorUptime    *uikit.UILabel
+	monitorLoad      *uikit.UILabel
+	monitorCPU       *uikit.UILabel
+	monitorMemory    *uikit.UILabel
+	monitorNetwork   *uikit.UILabel
+	monitorCPUBar    *progress.UIProgressView
+	monitorMemBar    *progress.UIProgressView
 
 	runMu     sync.Mutex
 	runID     uint64
@@ -672,7 +680,11 @@ func (a *finalShellApp) build() {
 	rightPanel := uikit.NewUIGroup(rect(rightX, 72, rightW, 786))
 	rightPanel.SetBackgroundColor(uint(tokenColor(modernTheme.card)))
 	rightPanel.SetAutomationID("terminal.panel")
-	rightPanel.Raw().Resizable(rightPanel.Raw())
+	// The terminal panel owns deterministic responsive geometry. FLTK's default
+	// proportional scaling makes localized desktop buttons unreadable at 1120×720.
+	rightPanel.Raw().Resizable(nil)
+	a.terminalPanel = rightPanel
+	terminalLayout := terminalPanelLayoutFor(layoutRect{X: rightX, Y: 72, Width: rightW, Height: 786}, nativeControls)
 	a.workspace.SetLeftView(left)
 	a.workspace.SetRightView(rightPanel)
 	// Establish the authored 1440x900 design geometry before pane controls are
@@ -767,15 +779,17 @@ func (a *finalShellApp) build() {
 
 	rightPanel.SetBackgroundColor(uint(tokenColor(modernTheme.card)))
 	rightPanel.SetAutomationID("terminal.panel")
-	rightPanel.AddSubview(sectionTitle(rightX+18, 86, 500, 24, tr("terminal.title")))
-	rightPanel.AddSubview(mutedLabel(rightX+18, 110, 560, 18, tr("terminal.subtitle")))
-	closeTabButton := button(rightX+rightW-146, 90, 128, nativeControls.ButtonHeight, tr("session.close"), "terminal.session_close", a.closeActiveSession)
-	rightPanel.AddSubview(closeTabButton)
+	a.terminalTitle = sectionTitle(terminalLayout.Title.X, terminalLayout.Title.Y, terminalLayout.Title.Width, terminalLayout.Title.Height, tr("terminal.title"))
+	rightPanel.AddSubview(a.terminalTitle)
+	a.terminalSubtitle = mutedLabel(terminalLayout.Subtitle.X, terminalLayout.Subtitle.Y, terminalLayout.Subtitle.Width, terminalLayout.Subtitle.Height, tr("terminal.subtitle"))
+	rightPanel.AddSubview(a.terminalSubtitle)
+	a.closeTabButton = button(terminalLayout.CloseTab.X, terminalLayout.CloseTab.Y, terminalLayout.CloseTab.Width, terminalLayout.CloseTab.Height, tr("session.close"), "terminal.session_close", a.closeActiveSession)
+	rightPanel.AddSubview(a.closeTabButton)
 
 	if a.sessions == nil {
 		a.sessions = newSessionWorkspace()
 	}
-	a.sessionTabs = uikit.NewUITabView(rect(rightX+18, 134, rightW-36, 40))
+	a.sessionTabs = uikit.NewUITabView(rect(terminalLayout.Tabs.X, terminalLayout.Tabs.Y, terminalLayout.Tabs.Width, terminalLayout.Tabs.Height))
 	a.sessionTabs.SetAutomationID("terminal.sessions")
 	a.sessionTabs.SetStyle(tabview.Style{
 		BarBackground:     uint(tokenColor(modernTheme.elevated)),
@@ -796,7 +810,7 @@ func (a *finalShellApp) build() {
 	}
 	a.sessionTabs.OnTabChanged(a.selectSessionTab)
 
-	a.output = uikit.NewUITextView(rect(rightX+18, 180, rightW-36, 568))
+	a.output = uikit.NewUITextView(rect(terminalLayout.Output.X, terminalLayout.Output.Y, terminalLayout.Output.Width, terminalLayout.Output.Height))
 	a.output.SetAutomationID("terminal.output").SetAutomationName(tr("terminal.output_name"))
 	a.output.SetFontSize(nativeTypography.Terminal)
 	a.output.SetTextColor(uint(tokenColor(modernTheme.foreground)))
@@ -810,18 +824,18 @@ func (a *finalShellApp) build() {
 	}
 	rightPanel.AddSubview(a.output)
 
-	bar := commandBarLayout(rightX, rightW)
-	historyBtn := button(bar.history.X, bar.history.Y, bar.history.Width, bar.history.Height, tr("terminal.history_compact"), "terminal.history", a.showSelectedHistory)
-	historyBtn.View().SetAutomationName(tr("terminal.history"))
-	rightPanel.AddSubview(historyBtn)
-	recallBtn := button(bar.last.X, bar.last.Y, bar.last.Width, bar.last.Height, tr("terminal.last_compact"), "terminal.last_command", a.recallLastCommand)
-	recallBtn.View().SetAutomationName(tr("terminal.last"))
-	rightPanel.AddSubview(recallBtn)
-	clearBtn := button(bar.clear.X, bar.clear.Y, bar.clear.Width, bar.clear.Height, tr("terminal.clear_compact"), "terminal.clear", a.clearTerminalOutput)
-	clearBtn.View().SetAutomationName(tr("terminal.clear"))
-	rightPanel.AddSubview(clearBtn)
-	rightPanel.AddSubview(mutedLabel(bar.command.X, bar.commandLabelY, 160, 18, tr("terminal.command")))
-	a.cmdInput = uikit.NewUITextView(rect(bar.command.X, bar.command.Y, bar.command.Width, bar.command.Height))
+	a.historyButton = button(terminalLayout.History.X, terminalLayout.History.Y, terminalLayout.History.Width, terminalLayout.History.Height, tr("terminal.history_compact"), "terminal.history", a.showSelectedHistory)
+	a.historyButton.View().SetAutomationName(tr("terminal.history"))
+	rightPanel.AddSubview(a.historyButton)
+	a.lastButton = button(terminalLayout.Last.X, terminalLayout.Last.Y, terminalLayout.Last.Width, terminalLayout.Last.Height, tr("terminal.last_compact"), "terminal.last_command", a.recallLastCommand)
+	a.lastButton.View().SetAutomationName(tr("terminal.last"))
+	rightPanel.AddSubview(a.lastButton)
+	a.clearButton = button(terminalLayout.Clear.X, terminalLayout.Clear.Y, terminalLayout.Clear.Width, terminalLayout.Clear.Height, tr("terminal.clear_compact"), "terminal.clear", a.clearTerminalOutput)
+	a.clearButton.View().SetAutomationName(tr("terminal.clear"))
+	rightPanel.AddSubview(a.clearButton)
+	a.commandLabel = mutedLabel(terminalLayout.CommandLabel.X, terminalLayout.CommandLabel.Y, terminalLayout.CommandLabel.Width, terminalLayout.CommandLabel.Height, tr("terminal.command"))
+	rightPanel.AddSubview(a.commandLabel)
+	a.cmdInput = uikit.NewUITextView(rect(terminalLayout.Command.X, terminalLayout.Command.Y, terminalLayout.Command.Width, terminalLayout.Command.Height))
 	a.cmdInput.SetAutomationID("terminal.command").SetAutomationName(tr("terminal.command"))
 	a.cmdInput.SetWrapNone()
 	a.cmdInput.SetFontSize(nativeTypography.Terminal)
@@ -836,10 +850,11 @@ func (a *finalShellApp) build() {
 		return true
 	})
 	rightPanel.AddSubview(a.cmdInput)
-	a.stopButton = button(bar.stop.X, bar.stop.Y, bar.stop.Width, bar.stop.Height, tr("terminal.stop"), "terminal.stop", a.stopCommand)
+	a.stopButton = button(terminalLayout.Stop.X, terminalLayout.Stop.Y, terminalLayout.Stop.Width, terminalLayout.Stop.Height, tr("terminal.stop"), "terminal.stop", a.stopCommand)
 	rightPanel.AddSubview(a.stopButton)
-	a.runButton = primaryButton(bar.run.X, bar.run.Y, bar.run.Width, bar.run.Height, tr("terminal.run"), "terminal.run", a.runCommand)
+	a.runButton = primaryButton(terminalLayout.Run.X, terminalLayout.Run.Y, terminalLayout.Run.Width, terminalLayout.Run.Height, tr("terminal.run"), "terminal.run", a.runCommand)
 	rightPanel.AddSubview(a.runButton)
+	rightPanel.Raw().SetResizeHandler(a.layoutTerminalPanel)
 	// Apply the persisted ratio only after pane controls are attached. FLTK uses
 	// absolute child coordinates, so this final native resize translates and
 	// reflows the complete pane hierarchy together (including language rebuilds).
@@ -1012,35 +1027,61 @@ type commandBarSpec struct {
 }
 
 func commandBarLayout(rightX, rightW int) commandBarSpec {
-	const (
-		y      = 784
-		gap    = 8
-		runW   = 116
-		stopW  = 68
-		leftX  = 18
-		histW  = 86
-		recW   = 64
-		clearW = 68
-	)
-	h := nativeControls.PrimaryButtonHeight
-	run := rect(rightX+rightW-runW-18, y, runW, h)
-	stop := rect(run.X-gap-stopW, y, stopW, h)
-	x := rightX + leftX
-	history := rect(x, y, histW, h)
-	x += histW + gap
-	last := rect(x, y, recW, h)
-	x += recW + gap
-	clear := rect(x, y, clearW, h)
-	cmdX := x + clearW + 14
+	layout := terminalPanelLayoutFor(layoutRect{X: rightX, Y: 72, Width: rightW, Height: 786}, nativeControls)
 	return commandBarSpec{
-		history:       history,
-		last:          last,
-		clear:         clear,
-		command:       rect(cmdX, y, stop.X-cmdX-14, h),
-		stop:          stop,
-		run:           run,
-		commandLabelY: y - 20,
+		history:       rect(layout.History.X, layout.History.Y, layout.History.Width, layout.History.Height),
+		last:          rect(layout.Last.X, layout.Last.Y, layout.Last.Width, layout.Last.Height),
+		clear:         rect(layout.Clear.X, layout.Clear.Y, layout.Clear.Width, layout.Clear.Height),
+		command:       rect(layout.Command.X, layout.Command.Y, layout.Command.Width, layout.Command.Height),
+		stop:          rect(layout.Stop.X, layout.Stop.Y, layout.Stop.Width, layout.Stop.Height),
+		run:           rect(layout.Run.X, layout.Run.Y, layout.Run.Width, layout.Run.Height),
+		commandLabelY: layout.CommandLabel.Y,
 	}
+}
+
+func (a *finalShellApp) layoutTerminalPanel() {
+	if a == nil || a.terminalPanel == nil || a.terminalPanel.Raw() == nil {
+		return
+	}
+	raw := a.terminalPanel.Raw()
+	layout := terminalPanelLayoutFor(layoutRect{X: raw.X(), Y: raw.Y(), Width: raw.W(), Height: raw.H()}, nativeControls)
+	if a.terminalTitle != nil && a.terminalTitle.Raw() != nil {
+		a.terminalTitle.Raw().Resize(layout.Title.X, layout.Title.Y, layout.Title.Width, layout.Title.Height)
+	}
+	if a.terminalSubtitle != nil && a.terminalSubtitle.Raw() != nil {
+		a.terminalSubtitle.Raw().Resize(layout.Subtitle.X, layout.Subtitle.Y, layout.Subtitle.Width, layout.Subtitle.Height)
+	}
+	if a.closeTabButton != nil && a.closeTabButton.Raw() != nil {
+		a.closeTabButton.Raw().Resize(layout.CloseTab.X, layout.CloseTab.Y, layout.CloseTab.Width, layout.CloseTab.Height)
+	}
+	if a.sessionTabs != nil && a.sessionTabs.Raw() != nil {
+		a.sessionTabs.Raw().Resize(layout.Tabs.X, layout.Tabs.Y, layout.Tabs.Width, layout.Tabs.Height)
+	}
+	if a.output != nil && a.output.Raw() != nil {
+		a.output.Raw().Resize(layout.Output.X, layout.Output.Y, layout.Output.Width, layout.Output.Height)
+	}
+	if a.historyButton != nil && a.historyButton.Raw() != nil {
+		a.historyButton.Raw().Resize(layout.History.X, layout.History.Y, layout.History.Width, layout.History.Height)
+	}
+	if a.lastButton != nil && a.lastButton.Raw() != nil {
+		a.lastButton.Raw().Resize(layout.Last.X, layout.Last.Y, layout.Last.Width, layout.Last.Height)
+	}
+	if a.clearButton != nil && a.clearButton.Raw() != nil {
+		a.clearButton.Raw().Resize(layout.Clear.X, layout.Clear.Y, layout.Clear.Width, layout.Clear.Height)
+	}
+	if a.commandLabel != nil && a.commandLabel.Raw() != nil {
+		a.commandLabel.Raw().Resize(layout.CommandLabel.X, layout.CommandLabel.Y, layout.CommandLabel.Width, layout.CommandLabel.Height)
+	}
+	if a.cmdInput != nil && a.cmdInput.Raw() != nil {
+		a.cmdInput.Raw().Resize(layout.Command.X, layout.Command.Y, layout.Command.Width, layout.Command.Height)
+	}
+	if a.stopButton != nil && a.stopButton.Raw() != nil {
+		a.stopButton.Raw().Resize(layout.Stop.X, layout.Stop.Y, layout.Stop.Width, layout.Stop.Height)
+	}
+	if a.runButton != nil && a.runButton.Raw() != nil {
+		a.runButton.Raw().Resize(layout.Run.X, layout.Run.Y, layout.Run.Width, layout.Run.Height)
+	}
+	raw.Redraw()
 }
 
 func centeredWindow(w, h int, title string) *uikit.UIWindow {

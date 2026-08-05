@@ -22,21 +22,26 @@ func (a *finalShellApp) buildMonitorSidebar(parent *uikit.UIGroup, margin, width
 	panel.Raw().Resizable(panel.Raw())
 
 	a.monitorTitle = sectionTitle(margin+18, 86, width-36, 24, tr("monitor.title"))
+	styleDynamicLabel(a.monitorTitle)
 	a.monitorTitle.View().SetAutomationID("monitor.host")
 	panel.AddSubview(a.monitorTitle)
 	a.monitorStatus = mutedLabel(margin+18, 116, width-36, 22, tr("monitor.starting"))
+	styleDynamicLabel(a.monitorStatus)
 	a.monitorStatus.View().SetAutomationID("monitor.status")
 	panel.AddSubview(a.monitorStatus)
 
 	panel.AddSubview(sectionTitle(margin+18, 158, width-36, 22, tr("monitor.overview")))
 	a.monitorUptime = mutedLabel(margin+18, 190, width-36, 20, trf("monitor.uptime", "—"))
+	styleDynamicLabel(a.monitorUptime)
 	a.monitorUptime.View().SetAutomationID("monitor.uptime")
 	panel.AddSubview(a.monitorUptime)
 	a.monitorLoad = mutedLabel(margin+18, 216, width-36, 20, trf("monitor.load", "—"))
+	styleDynamicLabel(a.monitorLoad)
 	a.monitorLoad.View().SetAutomationID("monitor.load")
 	panel.AddSubview(a.monitorLoad)
 
 	a.monitorCPU = label(margin+18, 260, width-36, 22, trf("monitor.cpu", 0.0))
+	styleDynamicLabel(a.monitorCPU)
 	a.monitorCPU.View().SetAutomationID("monitor.cpu")
 	panel.AddSubview(a.monitorCPU)
 	progressStyle := progress.DefaultProgressStyle()
@@ -47,6 +52,7 @@ func (a *finalShellApp) buildMonitorSidebar(parent *uikit.UIGroup, margin, width
 	panel.AddSubview(a.monitorCPUBar)
 
 	a.monitorMemory = label(margin+18, 320, width-36, 22, trf("monitor.memory", "—", "—", 0.0))
+	styleDynamicLabel(a.monitorMemory)
 	a.monitorMemory.View().SetAutomationID("monitor.memory")
 	panel.AddSubview(a.monitorMemory)
 	a.monitorMemBar = progress.NewUIProgressWithOptions(rect(margin+18, 348, width-36, 10), progressStyle)
@@ -55,6 +61,7 @@ func (a *finalShellApp) buildMonitorSidebar(parent *uikit.UIGroup, margin, width
 
 	panel.AddSubview(sectionTitle(margin+18, 396, width-36, 22, tr("monitor.network_title")))
 	a.monitorNetwork = mutedLabel(margin+18, 428, width-36, 52, tr("monitor.network_waiting"))
+	styleDynamicLabel(a.monitorNetwork)
 	a.monitorNetwork.View().SetAutomationID("monitor.network")
 	panel.AddSubview(a.monitorNetwork)
 
