@@ -69,3 +69,25 @@ func TestConnectionEditorDraftUsesLocalizedDefaultsForBlankFields(t *testing.T) 
 		t.Fatalf("defaults mismatch: %#v", got)
 	}
 }
+
+func TestConnectionEditorFieldPolicySeparatesLocalAndSSHFields(t *testing.T) {
+	local := connectionEditorFieldPolicy(connectionTypeLocal)
+	if local.Host || local.Port || local.Username || local.Password || local.PrivateKey || !local.WorkingDir {
+		t.Fatalf("local editor field policy = %#v", local)
+	}
+
+	ssh := connectionEditorFieldPolicy(connectionTypeSSH)
+	if !ssh.Host || !ssh.Port || !ssh.Username || !ssh.Password || !ssh.PrivateKey || !ssh.WorkingDir {
+		t.Fatalf("SSH editor field policy = %#v", ssh)
+	}
+}
+
+func TestConnectionEditorTypeOptionsStayCanonicalAcrossLocalizedLabels(t *testing.T) {
+	options := connectionEditorTypeOptions()
+	if len(options) != 2 || options[0].Type != connectionTypeLocal || options[1].Type != connectionTypeSSH {
+		t.Fatalf("connection type options = %#v", options)
+	}
+	if options[0].Label == "" || options[1].Label == "" {
+		t.Fatalf("connection type labels must be visible: %#v", options)
+	}
+}

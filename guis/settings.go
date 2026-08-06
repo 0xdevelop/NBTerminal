@@ -156,12 +156,7 @@ func (s *settingsWindow) build(draft settingsDraft) {
 	}
 	s.language.SetOptions(names)
 	s.language.SetSelectedIndex(selected)
-	if raw := s.language.Raw(); raw != nil {
-		raw.SetBox(fltk_bridge.RFLAT_BOX)
-		raw.SetColor(tokenColor(modernTheme.elevated))
-		raw.SetLabelColor(tokenColor(modernTheme.foreground))
-		raw.SetLabelSize(nativeTypography.Body)
-	}
+	styleDropdown(s.language)
 	s.language.View().SetAutomationID("settings.language").SetAutomationName(tr("settings.language"))
 	root.AddSubview(s.language)
 

@@ -149,22 +149,23 @@ func settingsLayoutFor(tokens controlMetricSet) settingsLayout {
 }
 
 type connectionEditorLayout struct {
-	Name, Group, Type, Host, Port, Username, Password layoutRect
-	WorkingDir, PrivateKey, Save, Cancel              layoutRect
+	Name, Group, Type, Host, Port, Username, Password, PasswordHint layoutRect
+	WorkingDir, PrivateKey, Save, Cancel                            layoutRect
 }
 
 func connectionEditorLayoutFor(tokens controlMetricSet) connectionEditorLayout {
 	return connectionEditorLayout{
-		Name:       layoutRect{X: 28, Y: 118, Width: 286, Height: tokens.InputHeight},
-		Group:      layoutRect{X: 334, Y: 118, Width: 298, Height: tokens.InputHeight},
-		Type:       layoutRect{X: 28, Y: 190, Width: 132, Height: tokens.InputHeight},
-		Host:       layoutRect{X: 180, Y: 190, Width: 292, Height: tokens.InputHeight},
-		Port:       layoutRect{X: 492, Y: 190, Width: 140, Height: tokens.InputHeight},
-		Username:   layoutRect{X: 28, Y: 262, Width: 286, Height: tokens.InputHeight},
-		Password:   layoutRect{X: 334, Y: 262, Width: 298, Height: tokens.InputHeight},
-		WorkingDir: layoutRect{X: 28, Y: 350, Width: 604, Height: tokens.InputHeight},
-		PrivateKey: layoutRect{X: 28, Y: 424, Width: 604, Height: tokens.InputHeight},
-		Cancel:     layoutRect{X: 420, Y: 512, Width: 96, Height: tokens.PrimaryButtonHeight},
-		Save:       layoutRect{X: 528, Y: 512, Width: 104, Height: tokens.PrimaryButtonHeight},
+		Name:         layoutRect{X: 28, Y: 118, Width: 286, Height: tokens.InputHeight},
+		Group:        layoutRect{X: 334, Y: 118, Width: 298, Height: tokens.InputHeight},
+		Type:         layoutRect{X: 28, Y: 190, Width: 132, Height: tokens.InputHeight},
+		Host:         layoutRect{X: 180, Y: 190, Width: 292, Height: tokens.InputHeight},
+		Port:         layoutRect{X: 492, Y: 190, Width: 140, Height: tokens.InputHeight},
+		Username:     layoutRect{X: 28, Y: 262, Width: 286, Height: tokens.InputHeight},
+		Password:     layoutRect{X: 334, Y: 262, Width: 298, Height: tokens.InputHeight},
+		PasswordHint: layoutRect{X: 334, Y: 300, Width: 298, Height: 30},
+		WorkingDir:   layoutRect{X: 28, Y: 350, Width: 604, Height: tokens.InputHeight},
+		PrivateKey:   layoutRect{X: 28, Y: 424, Width: 604, Height: tokens.InputHeight},
+		Cancel:       layoutRect{X: 420, Y: 512, Width: 96, Height: tokens.PrimaryButtonHeight},
+		Save:         layoutRect{X: 528, Y: 512, Width: 104, Height: tokens.PrimaryButtonHeight},
 	}
 }

@@ -110,6 +110,8 @@
   "editor.subtitle": "Connection details stay in this focused native window. Changes publish only after a durable save.",
   "editor.password_hint": "Leave blank to keep the stored password; secrets are never displayed.",
   "editor.invalid_type": "Connection type must be local or ssh",
+  "editor.type_local": "Local",
+  "editor.type_ssh": "SSH",
   "editor.invalid_port": "SSH port must be an integer from 1 to 65535",
   "editor.controls_unavailable": "Connection editor controls are unavailable",
   "terminal.title": "Terminal / Command Console",

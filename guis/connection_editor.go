@@ -7,7 +7,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/0xdevelop/fltk2go/fltk_bridge"
 	"github.com/0xdevelop/fltk2go/uikit"
+	uidropdown "github.com/0xdevelop/fltk2go/uikit/dropdown"
 )
 
 const (
@@ -27,6 +29,30 @@ type connectionEditorDraft struct {
 	Username   string
 	WorkingDir string
 	PrivateKey string
+}
+
+type connectionEditorTypeOption struct {
+	Type  connectionType
+	Label string
+}
+
+func connectionEditorTypeOptions() []connectionEditorTypeOption {
+	return []connectionEditorTypeOption{
+		{Type: connectionTypeLocal, Label: tr("editor.type_local")},
+		{Type: connectionTypeSSH, Label: tr("editor.type_ssh")},
+	}
+}
+
+type editorFieldPolicy struct {
+	Host, Port, Username, Password, WorkingDir, PrivateKey bool
+}
+
+func connectionEditorFieldPolicy(connType connectionType) editorFieldPolicy {
+	ssh := connType == connectionTypeSSH
+	return editorFieldPolicy{
+		Host: ssh, Port: ssh, Username: ssh, Password: ssh,
+		WorkingDir: true, PrivateKey: ssh,
+	}
 }
 
 func (d connectionEditorDraft) Profile(base connectionProfile, password string) (connectionProfile, error) {
@@ -75,7 +101,7 @@ type connectionEditor struct {
 
 	name       *uikit.Input
 	group      *uikit.Input
-	connType   *uikit.Input
+	connType   *uidropdown.UIDropdown
 	host       *uikit.Input
 	port       *uikit.Input
 	username   *uikit.Input
@@ -147,7 +173,27 @@ func (e *connectionEditor) build() {
 
 	e.name = editorInput(root, layout.Name, tr("field.name"), "connection_editor.name")
 	e.group = editorInput(root, layout.Group, tr("field.group"), "connection_editor.group")
-	e.connType = editorInput(root, layout.Type, tr("field.type"), "connection_editor.type")
+	root.AddSubview(mutedLabel(layout.Type.X, layout.Type.Y-nativeTypography.Supporting-nativeControls.FieldLabelGap, layout.Type.Width, 20, tr("field.type")))
+	e.connType = uidropdown.NewUIDropdown(rect(layout.Type.X, layout.Type.Y, layout.Type.Width, layout.Type.Height))
+	typeOptions := connectionEditorTypeOptions()
+	typeLabels := make([]string, 0, len(typeOptions))
+	selectedType := 0
+	for index, option := range typeOptions {
+		typeLabels = append(typeLabels, option.Label)
+		if option.Type == e.profile.Type {
+			selectedType = index
+		}
+	}
+	e.connType.SetOptions(typeLabels)
+	e.connType.SetSelectedIndex(selectedType)
+	styleDropdown(e.connType)
+	e.connType.View().SetAutomationID("connection_editor.type").SetAutomationName(tr("field.type"))
+	e.connType.OnSelectionChanged(func(index int, _ string) {
+		if index >= 0 && index < len(typeOptions) {
+			e.applyFieldPolicy(typeOptions[index].Type)
+		}
+	})
+	root.AddSubview(e.connType)
 	e.host = editorInput(root, layout.Host, tr("field.host"), "connection_editor.host")
 	e.port = editorInput(root, layout.Port, tr("field.port"), "connection_editor.port")
 	e.username = editorInput(root, layout.Username, tr("field.user"), "connection_editor.username")
@@ -156,13 +202,14 @@ func (e *connectionEditor) build() {
 	styleInput(e.password)
 	e.password.View().SetAutomationID("connection_editor.password").SetAutomationName(tr("field.password"))
 	root.AddSubview(e.password)
-	root.AddSubview(mutedLabel(layout.Password.X, layout.Password.Bottom()+4, layout.Password.Width, 20, tr("editor.password_hint")))
+	passwordHint := mutedLabel(layout.PasswordHint.X, layout.PasswordHint.Y, layout.PasswordHint.Width, layout.PasswordHint.Height, tr("editor.password_hint"))
+	passwordHint.SetAlignment(fltk_bridge.ALIGN_LEFT | fltk_bridge.ALIGN_INSIDE | fltk_bridge.ALIGN_WRAP)
+	root.AddSubview(passwordHint)
 	e.workingDir = editorInput(root, layout.WorkingDir, tr("field.workdir"), "connection_editor.working_dir")
 	e.privateKey = editorInput(root, layout.PrivateKey, tr("field.key"), "connection_editor.private_key")
 
 	e.name.SetText(e.profile.Name)
 	e.group.SetText(e.profile.Group)
-	e.connType.SetText(string(e.profile.Type))
 	e.host.SetText(e.profile.Host)
 	if e.profile.Port > 0 {
 		e.port.SetText(strconv.Itoa(e.profile.Port))
@@ -170,6 +217,7 @@ func (e *connectionEditor) build() {
 	e.username.SetText(e.profile.Username)
 	e.workingDir.SetText(e.profile.WorkingDir)
 	e.privateKey.SetText(e.profile.PrivateKey)
+	e.applyFieldPolicy(typeOptions[selectedType].Type)
 
 	root.AddSubview(button(layout.Cancel.X, layout.Cancel.Y, layout.Cancel.Width, layout.Cancel.Height, tr("button.cancel"), "connection_editor.cancel", e.close))
 	root.AddSubview(primaryButton(layout.Save.X, layout.Save.Y, layout.Save.Width, layout.Save.Height, tr("button.save"), "connection_editor.save", e.save))
@@ -188,15 +236,56 @@ func editorInput(root *uikit.UIView, frame layoutRect, fieldTitle, id string) *u
 	return in
 }
 
+func styleDropdown(dropdown *uidropdown.UIDropdown) {
+	if dropdown == nil || dropdown.Raw() == nil {
+		return
+	}
+	dropdown.Raw().SetBox(fltk_bridge.RFLAT_BOX)
+	dropdown.Raw().SetColor(tokenColor(modernTheme.elevated))
+	dropdown.Raw().SetLabelColor(tokenColor(modernTheme.foreground))
+	dropdown.Raw().SetLabelSize(nativeTypography.Body)
+}
+
+func (e *connectionEditor) selectedConnectionType() (connectionType, error) {
+	if e == nil || e.connType == nil {
+		return "", errors.New(tr("editor.controls_unavailable"))
+	}
+	options := connectionEditorTypeOptions()
+	index := e.connType.SelectedIndex()
+	if index < 0 || index >= len(options) {
+		return "", errors.New(tr("editor.invalid_type"))
+	}
+	return options[index].Type, nil
+}
+
+func (e *connectionEditor) applyFieldPolicy(connType connectionType) {
+	if e == nil {
+		return
+	}
+	policy := connectionEditorFieldPolicy(connType)
+	for input, enabled := range map[*uikit.Input]bool{
+		e.host: policy.Host, e.port: policy.Port, e.username: policy.Username,
+		e.password: policy.Password, e.workingDir: policy.WorkingDir, e.privateKey: policy.PrivateKey,
+	} {
+		if input != nil {
+			input.SetEnabled(enabled)
+		}
+	}
+}
+
 func (e *connectionEditor) draft() (connectionEditorDraft, error) {
 	if e == nil || e.name == nil || e.group == nil || e.connType == nil || e.host == nil || e.port == nil ||
 		e.username == nil || e.password == nil || e.workingDir == nil || e.privateKey == nil {
 		return connectionEditorDraft{}, errors.New(tr("editor.controls_unavailable"))
 	}
+	connType, err := e.selectedConnectionType()
+	if err != nil {
+		return connectionEditorDraft{}, err
+	}
 	return connectionEditorDraft{
 		Name:       e.name.Text(),
 		Group:      e.group.Text(),
-		Type:       e.connType.Text(),
+		Type:       string(connType),
 		Host:       e.host.Text(),
 		Port:       e.port.Text(),
 		Username:   e.username.Text(),

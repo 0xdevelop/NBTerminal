@@ -110,6 +110,8 @@
   "editor.subtitle": "連線詳情置於獨立原生視窗；只在持久化成功後發佈修改。",
   "editor.password_hint": "留空將保留已儲存密碼；憑據永不顯示。",
   "editor.invalid_type": "連線類型必須是 local 或 ssh",
+  "editor.type_local": "本機",
+  "editor.type_ssh": "SSH",
   "editor.invalid_port": "SSH 連接埠必須是 1 到 65535 的整數",
   "editor.controls_unavailable": "連線編輯控制項不可用",
   "terminal.title": "終端機 / 指令控制台",

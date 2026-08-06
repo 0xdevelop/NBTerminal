@@ -92,6 +92,9 @@ func TestSettingsEditorAndManagerLayoutsUseSemanticControlMetrics(t *testing.T) 
 	if editor.WorkingDir.Y-editor.Password.Bottom() < nativeControls.FieldGroupGap+nativeTypography.Supporting {
 		t.Fatalf("password hint/group spacing is too tight: %#v", editor)
 	}
+	if editor.PasswordHint.Y < editor.Password.Bottom() || editor.PasswordHint.Height < nativeTypography.Supporting*2 {
+		t.Fatalf("password hint cannot wrap localized text: %#v", editor)
+	}
 
 	manager := connectionManagerLayoutFor(nativeControls)
 	if manager.Search.Height != nativeControls.InputHeight || manager.Find.Height != nativeControls.ButtonHeight ||

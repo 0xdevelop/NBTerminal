@@ -110,6 +110,8 @@
   "editor.subtitle": "连接详情放在独立原生窗口中；仅在持久化成功后发布修改。",
   "editor.password_hint": "留空将保留已保存密码；凭据永不显示。",
   "editor.invalid_type": "连接类型必须是 local 或 ssh",
+  "editor.type_local": "本地",
+  "editor.type_ssh": "SSH",
   "editor.invalid_port": "SSH 端口必须是 1 到 65535 的整数",
   "editor.controls_unavailable": "连接编辑控件不可用",
   "terminal.title": "终端 / 命令控制台",
