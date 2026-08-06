@@ -425,7 +425,8 @@ type finalShellApp struct {
 	selectedDetail   *uikit.UILabel
 	selectedRecent   *uikit.UILabel
 	cmdInput         *uikit.UITextView
-	output           *uikit.UITextView
+	output           *uikit.UITerminalView
+	terminalColumns  int
 	sessionTabs      *uikit.UITabView
 	terminalPanel    *uikit.UIGroup
 	terminalTitle    *uikit.UILabel
@@ -810,13 +811,22 @@ func (a *finalShellApp) build() {
 	}
 	a.sessionTabs.OnTabChanged(a.selectSessionTab)
 
-	a.output = uikit.NewUITextView(rect(terminalLayout.Output.X, terminalLayout.Output.Y, terminalLayout.Output.Width, terminalLayout.Output.Height))
+	a.output = uikit.NewUITerminalView(rect(terminalLayout.Output.X, terminalLayout.Output.Y, terminalLayout.Output.Width, terminalLayout.Output.Height))
 	a.output.SetAutomationID("terminal.output").SetAutomationName(tr("terminal.output_name"))
+	// The current command runner is a non-PTY stream, so long lines need a
+	// discoverable horizontal scrollbar. Interactive PTY sessions will use the
+	// terminal's default fitted-column policy and receive SIGWINCH instead.
+	a.output.Raw().SetHorizontalScrollbar(fltk_bridge.TerminalScrollbarAuto)
+	a.output.SetFont(fltk_bridge.COURIER)
 	a.output.SetFontSize(nativeTypography.Terminal)
 	a.output.SetTextColor(uint(tokenColor(modernTheme.foreground)))
-	a.output.SetFallbackFont(fltk_bridge.FREE_FONT, isEmojiRune)
 	a.output.SetBackgroundColor(uint(tokenColor(modernTheme.terminal)))
-	a.output.SetText(terminalWelcomeText())
+	a.output.SetSelectionColors(uint(tokenColor(modernTheme.foreground)), uint(tokenColor(modernTheme.selected)))
+	a.output.SetMargins(nativeControls.TextInset, nativeControls.TextInset, nativeControls.TextInset, nativeControls.TextInset)
+	a.output.SetHistoryRows(4000)
+	a.output.SetRedrawRate(0.016)
+	a.output.OnResize(a.reflowTerminalOutput)
+	a.setTerminalOutput(terminalWelcomeText())
 	if _, ok := a.sessions.Active(); ok {
 		a.renderActiveSession()
 	} else {
@@ -1612,7 +1622,7 @@ func (a *finalShellApp) renderActiveSession() {
 	if !ok {
 		a.renderMonitorSidebar(terminalTabState{}, false)
 		if a.output != nil {
-			a.output.SetText(terminalWelcomeText())
+			a.setTerminalOutput(terminalWelcomeText())
 		}
 		if a.cmdInput != nil {
 			a.cmdInput.SetText("")
@@ -1621,7 +1631,7 @@ func (a *finalShellApp) renderActiveSession() {
 		return
 	}
 	if a.output != nil {
-		a.output.SetText(state.Output)
+		a.setTerminalOutput(state.Output)
 	}
 	if a.cmdInput != nil {
 		a.cmdInput.SetText(state.CommandDraft)
@@ -1849,7 +1859,7 @@ func (a *finalShellApp) clearTerminalOutput() {
 	if a.output == nil {
 		return
 	}
-	a.output.SetText(terminalWelcomeText())
+	a.setTerminalOutput(terminalWelcomeText())
 	if a.sessions != nil {
 		a.sessions.SetActiveOutput(terminalWelcomeText())
 	}
@@ -2232,6 +2242,34 @@ func formatHistoryEntries(p connectionProfile, entries []terminal.HistoryEntry) 
 	return b.String()
 }
 
+func (a *finalShellApp) setTerminalOutput(text string) {
+	if a == nil || a.output == nil {
+		return
+	}
+	// Session switches reconstruct the native ANSI/VT surface from that tab's
+	// retained stream. Clearing both display and scrollback prevents content from
+	// the previously active runtime session leaking into selection or history.
+	a.output.ClearHistory()
+	a.output.Clear()
+	if text != "" {
+		a.output.Append(text)
+	}
+}
+
+func (a *finalShellApp) reflowTerminalOutput(size uikit.TerminalSize) {
+	if a == nil || size.Columns <= 0 || size.Columns == a.terminalColumns {
+		return
+	}
+	a.terminalColumns = size.Columns
+	if a.sessions != nil {
+		if state, ok := a.sessions.Active(); ok {
+			a.setTerminalOutput(state.Output)
+			return
+		}
+	}
+	a.setTerminalOutput(terminalWelcomeText())
+}
+
 func (a *finalShellApp) appendOutput(s string) {
 	if a == nil || s == "" {
 		return
@@ -2240,7 +2278,7 @@ func (a *finalShellApp) appendOutput(s string) {
 		a.sessions.AppendActiveOutput(s)
 	}
 	if a.output != nil {
-		a.output.AppendAndScroll(s)
+		a.output.Append(s)
 	}
 }
 
@@ -2252,7 +2290,7 @@ func (a *finalShellApp) appendSessionOutput(sessionID, s string) {
 		return
 	}
 	if active, ok := a.sessions.Active(); ok && active.ID == sessionID && a.output != nil {
-		a.output.AppendAndScroll(s)
+		a.output.Append(s)
 	}
 }
 
