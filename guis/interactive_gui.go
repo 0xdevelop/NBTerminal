@@ -71,30 +71,49 @@ func (a *finalShellApp) startInteractiveSession(state terminalTabState) error {
 		return err
 	}
 
-	go func(sessionID string, session terminal.InteractiveSession) {
-		for chunk := range session.Output() {
-			data := append([]byte(nil), chunk...)
-			fltk_bridge.Awake(func() { a.appendSessionOutput(sessionID, string(data)) })
-		}
-	}(state.ID, transport)
-	go func(sessionID string, session terminal.InteractiveSession) {
-		err := session.Wait()
-		if !a.interactive.Release(sessionID, session) {
+	// PTYs may emit hundreds of chunks between FLTK frames. Coalesce them behind
+	// one pending Awake callback and publish shell completion only after the final
+	// bytes have reached the native VT parser. This preserves stream order without
+	// flooding the GUI event queue during high-volume local or SSH output.
+	outputBatcher := newGUIOutputBatcher(func(fn func()) {
+		fltk_bridge.Awake(fn)
+	}, func(text string) { a.appendSessionOutput(state.ID, text) })
+	go drainInteractiveOutput(transport, outputBatcher, func(err error) {
+		if !a.interactive.Release(state.ID, transport) {
 			return
 		}
-		fltk_bridge.Awake(func() {
-			if err != nil {
-				a.appendSessionOutput(sessionID, trf("output.session_shell_exited_error", err.Error()))
-			} else {
-				a.appendSessionOutput(sessionID, tr("output.session_shell_exited"))
-			}
-			if a.activeSessionID() == sessionID {
-				a.setStatus(tr("status.session_shell_exited"))
-				a.updateCommandControls()
-			}
-		})
-	}(state.ID, transport)
+		if err != nil {
+			a.appendSessionOutput(state.ID, trf("output.session_shell_exited_error", err.Error()))
+		} else {
+			a.appendSessionOutput(state.ID, tr("output.session_shell_exited"))
+		}
+		if a.activeSessionID() == state.ID {
+			a.setStatus(tr("status.session_shell_exited"))
+			a.updateCommandControls()
+		}
+	})
 	return nil
+}
+
+// drainInteractiveOutput keeps arbitrary PTY byte chunks ordered and waits for
+// transport completion before enqueueing the GUI-visible exit transition. The
+// batcher owns GUI-thread scheduling, so this function is transport-only and
+// directly testable without a display server.
+func drainInteractiveOutput(session terminal.InteractiveSession, batcher *guiOutputBatcher, onExit func(error)) {
+	if session == nil || batcher == nil {
+		return
+	}
+	for chunk := range session.Output() {
+		if len(chunk) > 0 {
+			batcher.Enqueue(string(chunk))
+		}
+	}
+	err := session.Wait()
+	batcher.AfterFlush(func() {
+		if onExit != nil {
+			onExit(err)
+		}
+	})
 }
 
 func (a *finalShellApp) writeActiveTerminalInput(data []byte) {

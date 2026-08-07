@@ -184,3 +184,33 @@ func TestRunInteractiveSSHCommandUsesLongLivedRuntimeAndSSHHistory(t *testing.T)
 		t.Fatalf("SSH interactive history=%#v", entries)
 	}
 }
+
+func TestDrainInteractiveOutputBatchesBurstsAndCompletesAfterFinalFlush(t *testing.T) {
+	session := newFakeInteractiveSession()
+	session.output <- []byte("\x1b[32m简体·")
+	session.output <- []byte("繁體·Русский·한국어·e\u0301 🚀\x1b[0m\r\n")
+	close(session.output)
+	close(session.done)
+
+	var scheduled []func()
+	var events []string
+	batcher := newGUIOutputBatcher(func(fn func()) {
+		scheduled = append(scheduled, fn)
+	}, func(text string) {
+		events = append(events, "output:"+text)
+	})
+	drainInteractiveOutput(session, batcher, func(err error) {
+		if err != nil {
+			t.Fatalf("unexpected wait error: %v", err)
+		}
+		events = append(events, "exit")
+	})
+
+	if len(scheduled) != 1 {
+		t.Fatalf("burst scheduled %d GUI callbacks, want 1", len(scheduled))
+	}
+	scheduled[0]()
+	if len(events) != 2 || events[0] != "output:\x1b[32m简体·繁體·Русский·한국어·e\u0301 🚀\x1b[0m\r\n" || events[1] != "exit" {
+		t.Fatalf("ordered GUI events = %#v", events)
+	}
+}
