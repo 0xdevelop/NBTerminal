@@ -1716,11 +1716,11 @@ func (a *finalShellApp) openSession(profile connectionProfile) {
 		}
 	}
 	a.renderActiveSession()
-	if created && stateOK && state.Profile.Type == connectionTypeLocal {
-		if err := a.startInteractiveLocalSession(state); err != nil {
-			a.appendSessionOutput(state.ID, trf("output.shell_start_failed", err.Error()))
-			a.setStatus(tr("status.shell_start_failed"))
-			a.showTopNotice(tr("notice.shell_start_failed.title"), err.Error(), true)
+	if created && stateOK && (state.Profile.Type == connectionTypeLocal || state.Profile.Type == connectionTypeSSH) {
+		if err := a.startInteractiveSession(state); err != nil {
+			a.appendSessionOutput(state.ID, trf("output.session_shell_start_failed", err.Error()))
+			a.setStatus(tr("status.session_shell_start_failed"))
+			a.showTopNotice(tr("notice.session_shell_start_failed.title"), err.Error(), true)
 		} else {
 			a.configureActiveTerminalMode(state, true)
 			a.updateCommandControls()
@@ -1833,7 +1833,7 @@ func (a *finalShellApp) activateProfile(p connectionProfile) bool {
 	a.openSession(p)
 	a.appendOutput(trf("output.profile_ready", p.Name))
 	a.setStatus(trf("status.connection_activated", p.Name))
-	if p.Type == connectionTypeLocal && a.output != nil && a.output.Raw() != nil {
+	if (p.Type == connectionTypeLocal || p.Type == connectionTypeSSH) && a.output != nil && a.output.Raw() != nil {
 		a.output.Raw().TakeFocus()
 	} else if a.cmdInput != nil && a.cmdInput.View() != nil {
 		if raw := a.cmdInput.View().Raw(); raw != nil {

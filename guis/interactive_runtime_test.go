@@ -152,3 +152,35 @@ func TestRunInteractiveCommandPersistsSubmittedCommandHistory(t *testing.T) {
 		t.Fatalf("interactive history=%#v", entries)
 	}
 }
+
+func TestRunInteractiveSSHCommandUsesLongLivedRuntimeAndSSHHistory(t *testing.T) {
+	profile := connectionProfile{ID: "remote", Name: "Remote", Type: connectionTypeSSH}
+	workspace := newSessionWorkspace()
+	if _, ok := workspace.Open(profile); !ok {
+		t.Fatal("open SSH runtime tab")
+	}
+	state, _ := workspace.Active()
+	registry := newInteractiveRuntimeRegistry()
+	fake := newFakeInteractiveSession()
+	if err := registry.Start(context.Background(), state.ID, fake, terminal.TerminalSize{Columns: 80, Rows: 24}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(registry.CloseAll)
+	history := terminal.NewHistoryStore(filepath.Join(t.TempDir(), "history.jsonl"))
+	app := &finalShellApp{sessions: workspace, interactive: registry, history: history}
+	if !app.runInteractiveCommand("printf remote-history") {
+		t.Fatal("SSH interactive command was not handled")
+	}
+	fake.mu.Lock()
+	if len(fake.inputs) != 1 || string(fake.inputs[0]) != "printf remote-history\r" {
+		t.Fatalf("SSH interactive input=%q", fake.inputs)
+	}
+	fake.mu.Unlock()
+	entries, err := history.LoadForConnection("remote", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].ConnectionType != terminal.ConnectionTypeSSH || !entries[0].Interactive {
+		t.Fatalf("SSH interactive history=%#v", entries)
+	}
+}

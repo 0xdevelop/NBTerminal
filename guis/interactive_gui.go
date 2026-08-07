@@ -41,11 +41,11 @@ func (a *finalShellApp) activeTerminalSize() terminal.TerminalSize {
 	return terminal.TerminalSize{Columns: defaultTerminalColumns, Rows: defaultTerminalRows}
 }
 
-// startInteractiveLocalSession joins the native terminal renderer and the local
-// PTY transport at the product boundary. The reusable widget still owns VT/input
+// startInteractiveSession joins the native terminal renderer with a long-lived
+// local or SSH PTY at the product boundary. The reusable widget owns VT/input
 // translation, while the transport remains owned by the opaque runtime tab ID.
-func (a *finalShellApp) startInteractiveLocalSession(state terminalTabState) error {
-	if a == nil || state.Profile.Type != connectionTypeLocal || strings.TrimSpace(state.ID) == "" {
+func (a *finalShellApp) startInteractiveSession(state terminalTabState) error {
+	if a == nil || strings.TrimSpace(state.ID) == "" {
 		return nil
 	}
 	if a.interactive == nil {
@@ -58,7 +58,15 @@ func (a *finalShellApp) startInteractiveLocalSession(state terminalTabState) err
 	if err != nil {
 		return err
 	}
-	transport := terminal.NewLocalPTYSession(conn)
+	var transport terminal.InteractiveSession
+	switch state.Profile.Type {
+	case connectionTypeLocal:
+		transport = terminal.NewLocalPTYSession(conn)
+	case connectionTypeSSH:
+		transport = terminal.NewSSHPTYSession(conn)
+	default:
+		return nil
+	}
 	if err := a.interactive.Start(context.Background(), state.ID, transport, a.activeTerminalSize()); err != nil {
 		return err
 	}
@@ -76,12 +84,12 @@ func (a *finalShellApp) startInteractiveLocalSession(state terminalTabState) err
 		}
 		fltk_bridge.Awake(func() {
 			if err != nil {
-				a.appendSessionOutput(sessionID, trf("output.shell_exited_error", err.Error()))
+				a.appendSessionOutput(sessionID, trf("output.session_shell_exited_error", err.Error()))
 			} else {
-				a.appendSessionOutput(sessionID, tr("output.shell_exited"))
+				a.appendSessionOutput(sessionID, tr("output.session_shell_exited"))
 			}
 			if a.activeSessionID() == sessionID {
-				a.setStatus(tr("status.shell_exited"))
+				a.setStatus(tr("status.session_shell_exited"))
 				a.updateCommandControls()
 			}
 		})
@@ -123,13 +131,13 @@ func (a *finalShellApp) runInteractiveCommand(command string) bool {
 		return false
 	}
 	state, ok := a.sessions.Active()
-	if !ok || state.Profile.Type != connectionTypeLocal {
+	if !ok || (state.Profile.Type != connectionTypeLocal && state.Profile.Type != connectionTypeSSH) {
 		return false
 	}
-	if err := a.startInteractiveLocalSession(state); err != nil {
-		a.appendSessionOutput(state.ID, trf("output.shell_start_failed", err.Error()))
-		a.setStatus(tr("status.shell_start_failed"))
-		a.showTopNotice(tr("notice.shell_start_failed.title"), err.Error(), true)
+	if err := a.startInteractiveSession(state); err != nil {
+		a.appendSessionOutput(state.ID, trf("output.session_shell_start_failed", err.Error()))
+		a.setStatus(tr("status.session_shell_start_failed"))
+		a.showTopNotice(tr("notice.session_shell_start_failed.title"), err.Error(), true)
 		return true
 	}
 	if err := a.interactive.WriteInput(state.ID, []byte(command+"\r")); err != nil {
@@ -184,6 +192,6 @@ func (a *finalShellApp) interruptInteractiveSession(sessionID string) bool {
 		a.setStatus(tr("status.shell_input_failed"))
 		return true
 	}
-	a.setStatus(tr("status.interrupt_sent"))
+	a.setStatus(tr("status.session_interrupt_sent"))
 	return true
 }
