@@ -8,7 +8,6 @@ import (
 
 	"github.com/0xdevelop/NBTerminal/config"
 	"github.com/0xdevelop/NBTerminal/locales"
-	"github.com/0xdevelop/NBTerminal/terminal"
 	"github.com/0xdevelop/fltk2go/fltk_bridge"
 	"github.com/0xdevelop/fltk2go/uikit"
 	"github.com/0xdevelop/fltk2go/uikit/checkbox"
@@ -255,11 +254,18 @@ func (a *finalShellApp) rebuildForLanguage(language locales.Language) {
 	}
 	oldWindow := a.window
 	a.syncActiveSessionView()
-	next := &finalShellApp{store: a.store, history: a.history, session: terminal.NewSession(a.history), sessions: a.sessions, idx: -1}
-	next.allRows = a.store.List()
-	next.rows = navigatorRows(next.allRows, "", quickConnectionLimit)
-	next.build()
-	next.setStatus(trf("app.language_changed", language.String()))
+	// Rebuild the native surface on the same application owner. Long-lived PTY,
+	// monitor, and command callbacks route by runtime ID back to this owner; a
+	// replacement owner would strand output in the closed window after a locale
+	// change.
+	a.settings = nil
+	a.editor = nil
+	a.manager = nil
+	a.allRows = a.store.List()
+	a.rows = navigatorRows(a.allRows, "", quickConnectionLimit)
+	a.idx = -1
+	a.build()
+	a.setStatus(trf("app.language_changed", language.String()))
 	if oldWindow != nil {
 		oldWindow.Close()
 	}

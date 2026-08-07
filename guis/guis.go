@@ -454,11 +454,12 @@ type finalShellApp struct {
 	monitorCPUBar    *progress.UIProgressView
 	monitorMemBar    *progress.UIProgressView
 
-	runMu     sync.Mutex
-	runID     uint64
-	runs      map[string]commandRun
-	monitorMu sync.RWMutex
-	monitors  map[string]*hostmonitor.Session
+	runMu       sync.Mutex
+	runID       uint64
+	runs        map[string]commandRun
+	interactive *interactiveRuntimeRegistry
+	monitorMu   sync.RWMutex
+	monitors    map[string]*hostmonitor.Session
 }
 
 type commandRun struct {
@@ -549,13 +550,15 @@ func LoadGUIWithFLTKGO(_ []byte) {
 
 	history := terminal.NewHistoryStore(filepath.Join(config.CurrentApp.DataDir, "terminal-history.jsonl"))
 	app := &finalShellApp{
-		store:    newConnectionStore(config.CurrentApp.DataDir),
-		history:  history,
-		session:  terminal.NewSession(history),
-		sessions: newSessionWorkspace(),
-		idx:      -1,
+		store:       newConnectionStore(config.CurrentApp.DataDir),
+		history:     history,
+		session:     terminal.NewSession(history),
+		sessions:    newSessionWorkspace(),
+		interactive: newInteractiveRuntimeRegistry(),
+		idx:         -1,
 	}
 	defer app.stopAllMonitors()
+	defer app.interactive.CloseAll()
 	if err := app.store.Load(); err != nil {
 		gtbox_log.LogErrorf("load connection store failed: %s", err.Error())
 	}
@@ -813,9 +816,9 @@ func (a *finalShellApp) build() {
 
 	a.output = uikit.NewUITerminalView(rect(terminalLayout.Output.X, terminalLayout.Output.Y, terminalLayout.Output.Width, terminalLayout.Output.Height))
 	a.output.SetAutomationID("terminal.output").SetAutomationName(tr("terminal.output_name"))
-	// The current command runner is a non-PTY stream, so long lines need a
-	// discoverable horizontal scrollbar. Interactive PTY sessions will use the
-	// terminal's default fitted-column policy and receive SIGWINCH instead.
+	// Non-interactive SSH command output keeps a discoverable horizontal
+	// scrollbar. Active PTY tabs switch this off and receive fitted-grid resize
+	// events through the reusable terminal view.
 	a.output.Raw().SetHorizontalScrollbar(fltk_bridge.TerminalScrollbarAuto)
 	a.output.SetFont(fltk_bridge.COURIER)
 	a.output.SetFontSize(nativeTypography.Terminal)
@@ -825,7 +828,8 @@ func (a *finalShellApp) build() {
 	a.output.SetMargins(nativeControls.TextInset, nativeControls.TextInset, nativeControls.TextInset, nativeControls.TextInset)
 	a.output.SetHistoryRows(4000)
 	a.output.SetRedrawRate(0.016)
-	a.output.OnResize(a.reflowTerminalOutput)
+	a.output.OnInput(a.writeActiveTerminalInput)
+	a.output.OnResize(a.terminalViewResized)
 	a.setTerminalOutput(terminalWelcomeText())
 	if _, ok := a.sessions.Active(); ok {
 		a.renderActiveSession()
@@ -1610,7 +1614,13 @@ func (a *finalShellApp) syncActiveSessionView() {
 		a.sessions.SetActiveDraft(a.cmdInput.Text())
 	}
 	if a.output != nil {
-		a.sessions.SetActiveOutput(a.output.Text())
+		activeID := a.activeSessionID()
+		// Interactive tabs retain the original PTY byte stream in the workspace.
+		// Fl_Terminal.Text() is a rendered-text projection and would discard VT
+		// control sequences needed to reconstruct colors and cursor state.
+		if a.interactive == nil || !a.interactive.Has(activeID) {
+			a.sessions.SetActiveOutput(a.output.Text())
+		}
 	}
 }
 
@@ -1620,6 +1630,7 @@ func (a *finalShellApp) renderActiveSession() {
 	}
 	state, ok := a.sessions.Active()
 	if !ok {
+		a.configureActiveTerminalMode(terminalTabState{}, false)
 		a.renderMonitorSidebar(terminalTabState{}, false)
 		if a.output != nil {
 			a.setTerminalOutput(terminalWelcomeText())
@@ -1630,6 +1641,7 @@ func (a *finalShellApp) renderActiveSession() {
 		a.updateCommandControls()
 		return
 	}
+	a.configureActiveTerminalMode(state, true)
 	if a.output != nil {
 		a.setTerminalOutput(state.Output)
 	}
@@ -1679,6 +1691,16 @@ func (a *finalShellApp) openSession(profile connectionProfile) {
 		}
 	}
 	a.renderActiveSession()
+	if created && stateOK && state.Profile.Type == connectionTypeLocal {
+		if err := a.startInteractiveLocalSession(state); err != nil {
+			a.appendSessionOutput(state.ID, trf("output.shell_start_failed", err.Error()))
+			a.setStatus(tr("status.shell_start_failed"))
+			a.showTopNotice(tr("notice.shell_start_failed.title"), err.Error(), true)
+		} else {
+			a.configureActiveTerminalMode(state, true)
+			a.updateCommandControls()
+		}
+	}
 }
 
 func (a *finalShellApp) ensureRuntimeSession(profile connectionProfile) (terminalTabState, bool) {
@@ -1712,6 +1734,9 @@ func (a *finalShellApp) closeActiveSession() {
 		a.setStatus(tr("session.close_running"))
 		a.showTopNotice(tr("session.close_running_title"), tr("session.close_running"), false)
 		return
+	}
+	if a.interactive != nil {
+		a.interactive.Close(state.ID)
 	}
 	a.stopMonitorForSession(state.ID)
 	if a.sessionTabs != nil {
@@ -1783,7 +1808,9 @@ func (a *finalShellApp) activateProfile(p connectionProfile) bool {
 	a.openSession(p)
 	a.appendOutput(trf("output.profile_ready", p.Name))
 	a.setStatus(trf("status.connection_activated", p.Name))
-	if a.cmdInput != nil && a.cmdInput.View() != nil {
+	if p.Type == connectionTypeLocal && a.output != nil && a.output.Raw() != nil {
+		a.output.Raw().TakeFocus()
+	} else if a.cmdInput != nil && a.cmdInput.View() != nil {
 		if raw := a.cmdInput.View().Raw(); raw != nil {
 			if focusable, ok := raw.(interface{ TakeFocus() int }); ok {
 				focusable.TakeFocus()
@@ -1814,6 +1841,9 @@ func (a *finalShellApp) runCommand() {
 	cmd := strings.TrimSpace(a.cmdInput.Text())
 	if cmd == "" {
 		cmd = "pwd"
+	}
+	if a.runInteractiveCommand(cmd) {
+		return
 	}
 	a.runAsync(p, cmd)
 }
@@ -1936,6 +1966,9 @@ func (a *finalShellApp) activeSessionID() string {
 
 func (a *finalShellApp) stopCommand() {
 	sessionID := a.activeSessionID()
+	if a.interruptInteractiveSession(sessionID) {
+		return
+	}
 	if sessionID == "" || !a.cancelCommandRun(sessionID) {
 		a.setStatus(tr("status.no_command"))
 		return
@@ -1946,6 +1979,7 @@ func (a *finalShellApp) stopCommand() {
 
 func (a *finalShellApp) updateCommandControls() {
 	running := a.commandRunningForSession(a.activeSessionID())
+	interactive := a.interactive != nil && a.interactive.Has(a.activeSessionID())
 	if a.runButton != nil && a.runButton.Raw() != nil {
 		if running {
 			a.runButton.Raw().Deactivate()
@@ -1955,7 +1989,7 @@ func (a *finalShellApp) updateCommandControls() {
 		a.runButton.Raw().Redraw()
 	}
 	if a.stopButton != nil && a.stopButton.Raw() != nil {
-		if running {
+		if running || interactive {
 			a.stopButton.Raw().Activate()
 			a.stopButton.SetBackgroundColor(uint(tokenColor(modernTheme.destructive)))
 			a.stopButton.SetTitleColor(uint(tokenColor(modernTheme.foreground)))
@@ -2247,10 +2281,11 @@ func (a *finalShellApp) setTerminalOutput(text string) {
 		return
 	}
 	// Session switches reconstruct the native ANSI/VT surface from that tab's
-	// retained stream. Clearing both display and scrollback prevents content from
-	// the previously active runtime session leaking into selection or history.
+	// retained stream. Reset clears both FLTK display state and the reusable
+	// stream filter's partial escape state, preventing one tab's split OSC/CSI
+	// sequence from consuming bytes in the next tab.
+	a.output.Reset()
 	a.output.ClearHistory()
-	a.output.Clear()
 	if text != "" {
 		a.output.Append(text)
 	}
