@@ -15,7 +15,9 @@ import (
 
 	"github.com/0xdevelop/NBTerminal/config"
 	"github.com/0xdevelop/NBTerminal/hostmonitor"
+	"github.com/0xdevelop/NBTerminal/internal/database"
 	"github.com/0xdevelop/NBTerminal/internal/persistence"
+	"github.com/0xdevelop/NBTerminal/internal/security"
 	"github.com/0xdevelop/NBTerminal/locales"
 	"github.com/0xdevelop/NBTerminal/terminal"
 	"github.com/0xdevelop/fltk2go"
@@ -143,18 +145,27 @@ func formatLastUsed(value string) string {
 }
 
 type connectionStore struct {
-	path string
-	mu   sync.Mutex
-	list []connectionProfile
+	path          string
+	db            *database.DB
+	encryptionKey string
+	mu            sync.Mutex
+	list          []connectionProfile
 }
 
 func newConnectionStore(dataDir string) *connectionStore {
 	return &connectionStore{path: filepath.Join(dataDir, connectionStoreFile)}
 }
 
+func newSQLiteConnectionStore(dataDir string, db *database.DB, encryptionKey string) *connectionStore {
+	return &connectionStore{path: filepath.Join(dataDir, connectionStoreFile), db: db, encryptionKey: encryptionKey}
+}
+
 func (s *connectionStore) Load() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.db != nil {
+		return s.loadSQLiteLocked()
+	}
 
 	if err := os.MkdirAll(filepath.Dir(s.path), 0755); err != nil {
 		return err
@@ -201,6 +212,9 @@ func (s *connectionStore) Save(list []connectionProfile) error {
 func (s *connectionStore) SaveActive(list []connectionProfile, activeID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.db != nil {
+		return s.saveActiveSQLiteLocked(list, activeID)
+	}
 	previous := append([]connectionProfile(nil), s.list...)
 	s.list = append([]connectionProfile(nil), list...)
 	if err := s.saveLocked(); err != nil {
@@ -224,6 +238,9 @@ func (s *connectionStore) SaveActive(list []connectionProfile, activeID string) 
 func (s *connectionStore) SetActive(activeID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.db != nil {
+		return s.setActiveSQLiteLocked(activeID)
+	}
 	return syncConfigConnections(s.list, activeID)
 }
 
@@ -343,31 +360,8 @@ func syncConfigConnections(profiles []connectionProfile, activeID string) error 
 	}
 	previousConnections := append([]terminal.Connection(nil), config.GlobalConfig.Connections...)
 	previousActiveID := config.GlobalConfig.ActiveConnectionID
-	connections := make([]terminal.Connection, 0, len(profiles))
-	for _, profile := range profiles {
-		conn := profileToConfigConnection(profile)
-		connections = append(connections, conn)
-	}
-	if len(connections) == 0 {
-		config.GlobalConfig.Connections = nil
-		config.GlobalConfig.ActiveConnectionID = ""
-	} else {
-		config.GlobalConfig.Connections = terminal.NormalizeConnections(connections)
-		if activeID != "" {
-			config.GlobalConfig.ActiveConnectionID = activeID
-		}
-		active := config.GlobalConfig.ActiveConnectionID
-		found := active == ""
-		for _, conn := range config.GlobalConfig.Connections {
-			if conn.ID == active {
-				found = true
-				break
-			}
-		}
-		if !found || active == "" {
-			config.GlobalConfig.ActiveConnectionID = config.GlobalConfig.Connections[0].ID
-		}
-	}
+	config.GlobalConfig.Connections = nil
+	config.GlobalConfig.ActiveConnectionID = normalizedActiveProfileID(profiles, activeID)
 	if config.CurrentApp == nil || config.CurrentApp.AppConfigFilePath == "" {
 		return nil
 	}
@@ -406,6 +400,7 @@ func (m *tableModel) CellForColumn(_ *tableview.TableView, row, col int) *tablev
 }
 
 type finalShellApp struct {
+	database *database.DB
 	store    *connectionStore
 	history  *terminal.HistoryStore
 	session  *terminal.Session
@@ -548,9 +543,38 @@ func LoadGUIWithFLTKGO(_ []byte) {
 	}
 	configureNativeFonts(runtime.GOOS)
 
-	history := terminal.NewHistoryStore(filepath.Join(config.CurrentApp.DataDir, "terminal-history.jsonl"))
+	masterKey, err := security.LoadOrCreateMasterKey(
+		filepath.Dir(config.CurrentApp.AppConfigFilePath),
+		filepath.Join(config.CurrentApp.DataDir, database.FileName),
+	)
+	if err != nil {
+		gtbox_log.LogErrorf("load local encryption key failed: %s", err.Error())
+		return
+	}
+	profileEncryptionKey, err := security.PurposeKey(masterKey, "sqlite-profile-v1")
+	if err != nil {
+		gtbox_log.LogErrorf("derive profile encryption key failed: %s", err.Error())
+		return
+	}
+	historyEncryptionKey, err := security.PurposeKey(masterKey, "sqlite-history-v1")
+	if err != nil {
+		gtbox_log.LogErrorf("derive history encryption key failed: %s", err.Error())
+		return
+	}
+	db, err := database.Open(config.CurrentApp.DataDir)
+	if err != nil {
+		gtbox_log.LogErrorf("open embedded database failed: %s", err.Error())
+		return
+	}
+	defer db.Close()
+	history := terminal.NewSQLiteHistoryStore(db, filepath.Join(config.CurrentApp.DataDir, "terminal-history.jsonl"), historyEncryptionKey)
+	if _, err := history.MigrateLegacy(); err != nil {
+		gtbox_log.LogErrorf("migrate command history failed: %s", err.Error())
+		return
+	}
 	app := &finalShellApp{
-		store:       newConnectionStore(config.CurrentApp.DataDir),
+		database:    db,
+		store:       newSQLiteConnectionStore(config.CurrentApp.DataDir, db, profileEncryptionKey),
 		history:     history,
 		session:     terminal.NewSession(history),
 		sessions:    newSessionWorkspace(),
@@ -561,6 +585,7 @@ func LoadGUIWithFLTKGO(_ []byte) {
 	defer app.interactive.CloseAll()
 	if err := app.store.Load(); err != nil {
 		gtbox_log.LogErrorf("load connection store failed: %s", err.Error())
+		return
 	}
 	app.allRows = app.store.List()
 	app.rows = navigatorRows(app.allRows, "", quickConnectionLimit)
@@ -2271,6 +2296,10 @@ func formatHistoryEntries(p connectionProfile, entries []terminal.HistoryEntry) 
 	}
 	for _, entry := range entries {
 		when := entry.Time.Local().Format("2006-01-02 15:04:05")
+		if entry.Interactive {
+			b.WriteString(fmt.Sprintf("\n%s  interactive  %s", when, entry.Command))
+			continue
+		}
 		b.WriteString(trf("history.entry", when, entry.ExitCode, entry.Command))
 	}
 	return b.String()

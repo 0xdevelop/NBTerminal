@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/0xdevelop/NBTerminal/terminal"
 	"github.com/0xdevelop/fltk2go/fltk_bridge"
@@ -135,6 +136,22 @@ func (a *finalShellApp) runInteractiveCommand(command string) bool {
 		a.appendSessionOutput(state.ID, trf("output.shell_input_failed", err.Error()))
 		a.setStatus(tr("status.shell_input_failed"))
 		return true
+	}
+	if a.history != nil {
+		connectionType := terminal.ConnectionTypeSSH
+		if state.Profile.Type == connectionTypeLocal {
+			connectionType = terminal.ConnectionTypeLocal
+		}
+		if err := a.history.Append(terminal.HistoryEntry{
+			Time:           time.Now().UTC(),
+			ConnectionID:   state.Profile.ID,
+			ConnectionName: state.Profile.Name,
+			ConnectionType: connectionType,
+			Command:        command,
+			Interactive:    true,
+		}); err != nil {
+			gtbox_log.LogErrorf("persist interactive command history failed: %s", err.Error())
+		}
 	}
 	if a.cmdInput != nil {
 		a.cmdInput.SetText("")

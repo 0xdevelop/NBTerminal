@@ -3,6 +3,7 @@ package guis
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"sync"
 	"testing"
 
@@ -114,5 +115,40 @@ func TestInteractiveRuntimeRegistryOwnsCloseAndRejectsDuplicates(t *testing.T) {
 	session.mu.Unlock()
 	if err := registry.WriteInput("runtime-1", []byte("lost")); !errors.Is(err, errInteractiveRuntimeNotFound) {
 		t.Fatalf("write after close error = %v", err)
+	}
+}
+
+func TestRunInteractiveCommandPersistsSubmittedCommandHistory(t *testing.T) {
+	profile := connectionProfile{ID: "local", Name: "Local", Type: connectionTypeLocal}
+	workspace := newSessionWorkspace()
+	if _, ok := workspace.Open(profile); !ok {
+		t.Fatal("open runtime tab")
+	}
+	state, ok := workspace.Active()
+	if !ok {
+		t.Fatal("active runtime tab missing")
+	}
+	registry := newInteractiveRuntimeRegistry()
+	fake := newFakeInteractiveSession()
+	if err := registry.Start(context.Background(), state.ID, fake, terminal.TerminalSize{Columns: 80, Rows: 24}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { registry.CloseAll() })
+	history := terminal.NewHistoryStore(filepath.Join(t.TempDir(), "history.jsonl"))
+	app := &finalShellApp{sessions: workspace, interactive: registry, history: history}
+	if !app.runInteractiveCommand("printf history-smoke") {
+		t.Fatal("interactive command was not handled")
+	}
+	fake.mu.Lock()
+	if len(fake.inputs) != 1 || string(fake.inputs[0]) != "printf history-smoke\r" {
+		t.Fatalf("interactive input=%q", fake.inputs)
+	}
+	fake.mu.Unlock()
+	entries, err := history.LoadForConnection("local", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Command != "printf history-smoke" || !entries[0].Interactive {
+		t.Fatalf("interactive history=%#v", entries)
 	}
 }

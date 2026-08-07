@@ -152,7 +152,7 @@ func TestConnectionStoreSeedsFromGlobalConfig(t *testing.T) {
 	}
 }
 
-func TestConnectionStoreSaveSyncsGlobalConfigWithoutSecrets(t *testing.T) {
+func TestConnectionStoreSaveKeepsProfilesOutOfGlobalConfig(t *testing.T) {
 	oldGlobal := config.GlobalConfig
 	oldApp := config.CurrentApp
 	t.Cleanup(func() { config.GlobalConfig, config.CurrentApp = oldGlobal, oldApp })
@@ -165,18 +165,15 @@ func TestConnectionStoreSaveSyncsGlobalConfigWithoutSecrets(t *testing.T) {
 	if err := store.Save([]connectionProfile{profile}); err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}
-	if len(config.GlobalConfig.Connections) != 1 {
-		t.Fatalf("expected one synced config connection, got %#v", config.GlobalConfig.Connections)
-	}
-	conn := config.GlobalConfig.Connections[0]
-	if conn.ID != "dev" || conn.Type != terminal.ConnectionTypeSSH || conn.Host != "example.com" || conn.Port != 2200 {
-		t.Fatalf("unexpected synced connection: %#v", conn)
-	}
-	if conn.Password != "" || conn.PrivateKey != "" {
-		t.Fatalf("secrets should remain only in GUI store, got password=%q private_key=%q", conn.Password, conn.PrivateKey)
+	if len(config.GlobalConfig.Connections) != 0 {
+		t.Fatalf("profiles must not be duplicated into config: %#v", config.GlobalConfig.Connections)
 	}
 	if config.GlobalConfig.ActiveConnectionID != "dev" {
 		t.Fatalf("expected active id dev, got %q", config.GlobalConfig.ActiveConnectionID)
+	}
+	stored := store.List()
+	if len(stored) != 1 || stored[0].Host != profile.Host || stored[0].PrivateKey != profile.PrivateKey || stored[0].Password() != "secret" {
+		t.Fatalf("connection store did not preserve encrypted profile: %#v", stored)
 	}
 }
 
@@ -193,8 +190,12 @@ func TestConnectionStoreSaveAllowsUnresolvedPrivateKeyPath(t *testing.T) {
 	if err := store.Save([]connectionProfile{profile}); err != nil {
 		t.Fatalf("Save should not require private key file to exist until execution, got: %v", err)
 	}
-	if got := config.GlobalConfig.Connections[0].PrivateKey; got != missingKeyPath {
-		t.Fatalf("expected non-secret key path to sync for defaults, got %q", got)
+	stored := store.List()
+	if len(stored) != 1 || stored[0].PrivateKey != missingKeyPath {
+		t.Fatalf("expected unresolved key path to remain in connection store, got %#v", stored)
+	}
+	if len(config.GlobalConfig.Connections) != 0 {
+		t.Fatalf("profile details must not be duplicated into config: %#v", config.GlobalConfig.Connections)
 	}
 }
 
@@ -414,8 +415,8 @@ func TestPersistRuntimeProfileUpdatesStoreBeforeRun(t *testing.T) {
 	if len(profiles) != 1 || profiles[0].Name != "Edited Local" || profiles[0].WorkingDir != dir {
 		t.Fatalf("persisted profile mismatch: %#v", profiles)
 	}
-	if len(config.GlobalConfig.Connections) != 1 || config.GlobalConfig.Connections[0].WorkingDir != dir {
-		t.Fatalf("global config was not synced: %#v", config.GlobalConfig.Connections)
+	if len(config.GlobalConfig.Connections) != 0 || config.GlobalConfig.ActiveConnectionID != "local" {
+		t.Fatalf("config should retain only active id, got %#v", config.GlobalConfig)
 	}
 }
 
@@ -466,8 +467,9 @@ func TestFormatHistoryEntries(t *testing.T) {
 	text := formatHistoryEntries(connectionProfile{ID: "local", Name: "Local Shell"}, []terminal.HistoryEntry{
 		{Time: when, ConnectionID: "local", Command: "pwd", ExitCode: 0},
 		{Time: when.Add(time.Minute), ConnectionID: "local", Command: "false", ExitCode: 1},
+		{Time: when.Add(2 * time.Minute), ConnectionID: "local", Command: "printf smoke", Interactive: true},
 	})
-	if !strings.Contains(text, "Recent history for Local Shell") || !strings.Contains(text, "exit=0 pwd") || !strings.Contains(text, "exit=1 false") {
+	if !strings.Contains(text, "Recent history for Local Shell") || !strings.Contains(text, "exit=0 pwd") || !strings.Contains(text, "exit=1 false") || !strings.Contains(text, "interactive  printf smoke") {
 		t.Fatalf("unexpected formatted history: %q", text)
 	}
 	empty := formatHistoryEntries(connectionProfile{Name: "Local Shell"}, nil)

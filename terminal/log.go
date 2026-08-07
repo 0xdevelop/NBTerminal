@@ -2,15 +2,23 @@ package terminal
 
 import (
 	"bytes"
+	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"github.com/0xdevelop/NBTerminal/internal/database"
+	"github.com/0xdevelop/NBTerminal/internal/security"
 )
 
 const historyOutputMaxBytes = 64 * 1024
@@ -25,6 +33,7 @@ type HistoryEntry struct {
 	Command        string         `json:"command"`
 	ExitCode       int            `json:"exit_code"`
 	DurationMS     int64          `json:"duration_ms"`
+	Interactive    bool           `json:"interactive,omitempty"`
 	Stdout         string         `json:"stdout,omitempty"`
 	Stderr         string         `json:"stderr,omitempty"`
 }
@@ -71,18 +80,27 @@ func truncateHistoryOutput(s string) string {
 // HistoryStore appends and reads JSONL command history. The append-only format
 // keeps GUI command logging simple and robust across crashes.
 type HistoryStore struct {
-	path string
-	mu   sync.Mutex
+	path          string
+	db            *database.DB
+	encryptionKey string
+	mu            sync.Mutex
 }
 
 func NewHistoryStore(path string) *HistoryStore { return &HistoryStore{path: path} }
 
+func NewSQLiteHistoryStore(db *database.DB, legacyPath, encryptionKey string) *HistoryStore {
+	return &HistoryStore{path: legacyPath, db: db, encryptionKey: encryptionKey}
+}
+
 func (s *HistoryStore) Append(entry HistoryEntry) error {
-	if s == nil || s.path == "" {
+	if s == nil || (s.path == "" && s.db == nil) {
 		return errors.New("history store path is required")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.db != nil {
+		return s.appendSQLiteLocked(entry)
+	}
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
 		return err
 	}
@@ -159,11 +177,14 @@ func prepareHistoryAppend(f *os.File) error {
 }
 
 func (s *HistoryStore) Load(limit int) ([]HistoryEntry, error) {
-	if s == nil || s.path == "" {
+	if s == nil || (s.path == "" && s.db == nil) {
 		return nil, errors.New("history store path is required")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.db != nil {
+		return s.loadSQLiteLocked("", limit)
+	}
 	f, err := os.Open(s.path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -233,6 +254,11 @@ func (s *HistoryStore) Load(limit int) ([]HistoryEntry, error) {
 // Load so GUI code can ask for per-connection history without learning the JSONL
 // storage details.
 func (s *HistoryStore) LoadForConnection(connectionID string, limit int) ([]HistoryEntry, error) {
+	if s != nil && s.db != nil {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return s.loadSQLiteLocked(connectionID, limit)
+	}
 	entries, err := s.Load(0)
 	if err != nil {
 		return nil, err
@@ -255,6 +281,144 @@ func (s *HistoryStore) LoadForConnection(connectionID string, limit int) ([]Hist
 		}
 	}
 	return filtered, nil
+}
+
+func (s *HistoryStore) MigrateLegacy() (bool, error) {
+	if s == nil || s.db == nil {
+		return false, nil
+	}
+	legacySource, err := historyLegacySource(s.path, s.encryptionKey)
+	if err != nil {
+		return false, err
+	}
+	legacy := NewHistoryStore(s.path)
+	entries, err := legacy.Load(0)
+	if err != nil {
+		return false, fmt.Errorf("load legacy command history: %w", err)
+	}
+	rows := make([]database.HistoryRow, 0, len(entries))
+	for index, entry := range entries {
+		row, err := encryptedHistoryRow(entry, s.encryptionKey)
+		if err != nil {
+			return false, err
+		}
+		row.LegacySource = legacySource
+		row.LegacyOrdinal = int64(index + 1)
+		rows = append(rows, row)
+	}
+	appliedNow, err := s.db.MigrateHistory(context.Background(), rows)
+	if err != nil {
+		return false, err
+	}
+	migrationComplete, err := s.db.HistoryMigrationComplete(context.Background())
+	if err != nil {
+		return false, err
+	}
+	if legacySource != "" && migrationComplete {
+		if err := os.Remove(s.path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return false, fmt.Errorf("remove migrated legacy command history: %w", err)
+		}
+	}
+	return appliedNow, nil
+}
+
+func historyLegacySource(path, encryptionKey string) (string, error) {
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("inspect legacy command history: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", errors.New("legacy command history is not a regular file")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("open legacy command history fingerprint: %w", err)
+	}
+	defer file.Close()
+	mac := hmac.New(sha256.New, []byte(encryptionKey))
+	if _, err := io.Copy(mac, file); err != nil {
+		return "", fmt.Errorf("fingerprint legacy command history: %w", err)
+	}
+	return hex.EncodeToString(mac.Sum(nil)), nil
+}
+
+func (s *HistoryStore) appendSQLiteLocked(entry HistoryEntry) error {
+	row, err := encryptedHistoryRow(entry, s.encryptionKey)
+	if err != nil {
+		return err
+	}
+	return s.db.AppendHistory(context.Background(), row)
+}
+
+func encryptedHistoryRow(entry HistoryEntry, encryptionKey string) (database.HistoryRow, error) {
+	if strings.TrimSpace(encryptionKey) == "" {
+		return database.HistoryRow{}, errors.New("history encryption key is required")
+	}
+	entry.Time = entry.Time.UTC()
+	if entry.Time.IsZero() {
+		entry.Time = time.Now().UTC()
+	}
+	payload, err := json.Marshal(entry)
+	if err != nil {
+		return database.HistoryRow{}, fmt.Errorf("encode command history: %w", err)
+	}
+	ciphertext, err := security.EncryptPayloadGT(string(payload), encryptionKey)
+	if err != nil {
+		return database.HistoryRow{}, fmt.Errorf("encrypt command history: %w", err)
+	}
+	storageConnectionID, err := encryptedHistoryConnectionID(entry.ConnectionID, encryptionKey)
+	if err != nil {
+		return database.HistoryRow{}, err
+	}
+	return database.HistoryRow{RecordedAtNS: entry.Time.UnixNano(), ConnectionID: storageConnectionID, PayloadEnc: ciphertext}, nil
+}
+
+func (s *HistoryStore) loadSQLiteLocked(connectionID string, limit int) ([]HistoryEntry, error) {
+	if strings.TrimSpace(s.encryptionKey) == "" {
+		return nil, errors.New("history encryption key is required")
+	}
+	storageConnectionID, err := encryptedHistoryConnectionID(connectionID, s.encryptionKey)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.LoadHistory(context.Background(), storageConnectionID, limit)
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]HistoryEntry, 0, len(rows))
+	for _, row := range rows {
+		plaintext, err := security.DecryptPayloadGT(row.PayloadEnc, s.encryptionKey)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt command history: %w", err)
+		}
+		var entry HistoryEntry
+		if err := json.Unmarshal([]byte(plaintext), &entry); err != nil {
+			return nil, fmt.Errorf("decode command history: %w", err)
+		}
+		expectedStorageID, err := encryptedHistoryConnectionID(entry.ConnectionID, s.encryptionKey)
+		if err != nil || expectedStorageID != row.ConnectionID {
+			return nil, errors.New("decrypted command history connection id does not match its encrypted storage id")
+		}
+		if entry.Time.UTC().UnixNano() != row.RecordedAtNS {
+			return nil, errors.New("decrypted command history timestamp does not match its storage index")
+		}
+		entries = append(entries, entry)
+	}
+	return entries, nil
+}
+
+func encryptedHistoryConnectionID(connectionID, encryptionKey string) (string, error) {
+	if connectionID == "" {
+		return "", nil
+	}
+	storageID, err := security.EncryptPayloadGT(connectionID, encryptionKey)
+	if err != nil {
+		return "", fmt.Errorf("encrypt history connection id: %w", err)
+	}
+	return storageID, nil
 }
 
 // LastCommand returns the most recent non-empty command for a connection. An
