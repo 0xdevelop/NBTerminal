@@ -356,6 +356,9 @@ func shellQuote(s string) string {
 }
 
 func sshClientConfig(conn Connection) (*ssh.ClientConfig, error) {
+	if conn.HostKeyCallback == nil {
+		return nil, ErrSSHHostKeyVerifierRequired
+	}
 	auth := make([]ssh.AuthMethod, 0, 2)
 	if conn.Password != "" {
 		auth = append(auth, ssh.Password(conn.Password))
@@ -371,7 +374,7 @@ func sshClientConfig(conn Connection) (*ssh.ClientConfig, error) {
 		}
 		auth = append(auth, ssh.PublicKeys(signer))
 	}
-	return &ssh.ClientConfig{User: conn.Username, Auth: auth, HostKeyCallback: ssh.InsecureIgnoreHostKey(), Timeout: 15 * time.Second}, nil
+	return &ssh.ClientConfig{User: conn.Username, Auth: auth, HostKeyCallback: conn.HostKeyCallback, Timeout: 15 * time.Second}, nil
 }
 
 // privateKeyMaterial accepts either raw PEM content or a filesystem path. The

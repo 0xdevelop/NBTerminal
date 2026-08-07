@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"golang.org/x/crypto/ssh"
 )
 
 var connectionIDUnsafe = regexp.MustCompile(`[^a-z0-9._-]+`)
@@ -32,6 +34,10 @@ type Connection struct {
 	PrivateKey  string         `yaml:"private_key,omitempty" json:"private_key,omitempty"`
 	WorkingDir  string         `yaml:"working_dir,omitempty" json:"working_dir,omitempty"`
 	Description string         `yaml:"description,omitempty" json:"description,omitempty"`
+	// HostKeyCallback is runtime-only security policy. It is deliberately kept
+	// out of persisted profiles so host trust remains in the private known_hosts
+	// store instead of connection JSON/SQLite payloads.
+	HostKeyCallback ssh.HostKeyCallback `yaml:"-" json:"-"`
 }
 
 // DefaultLocalConnection returns a safe built-in local shell entry.

@@ -63,12 +63,33 @@ func (a *finalShellApp) startInteractiveSession(state terminalTabState) error {
 	case connectionTypeLocal:
 		transport = terminal.NewLocalPTYSession(conn)
 	case connectionTypeSSH:
+		if a.sshHostKeys == nil {
+			return terminal.ErrSSHHostKeyVerifierRequired
+		}
+		conn.HostKeyCallback = a.sshHostKeys.Callback()
 		transport = terminal.NewSSHPTYSession(conn)
 	default:
 		return nil
 	}
 	if err := a.interactive.Start(context.Background(), state.ID, transport, a.activeTerminalSize()); err != nil {
-		return err
+		var hostKeyErr *terminal.SSHHostKeyError
+		if !errors.As(err, &hostKeyErr) {
+			return err
+		}
+		if hostKeyErr.Kind() == terminal.SSHHostKeyChanged {
+			uikit.Alert(tr("ssh.host_key.changed_title"), tr("ssh.host_key.changed_message"))
+			return err
+		}
+		message := trf("ssh.host_key.unknown_message", hostKeyErr.Fingerprint())
+		if uikit.Choice(message, tr("button.cancel"), tr("ssh.host_key.trust")) != 1 {
+			return err
+		}
+		if err := a.sshHostKeys.Trust(hostKeyErr); err != nil {
+			return err
+		}
+		if err := a.interactive.Start(context.Background(), state.ID, transport, a.activeTerminalSize()); err != nil {
+			return err
+		}
 	}
 
 	// PTYs may emit hundreds of chunks between FLTK frames. Coalesce them behind

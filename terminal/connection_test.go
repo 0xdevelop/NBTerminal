@@ -247,7 +247,7 @@ func TestSSHExecutorUsesInjectableDialer(t *testing.T) {
 	session := &fakeSSHSession{}
 	client := &fakeSSHClient{session: session}
 	dialer := &fakeSSHDialer{client: client}
-	conn := Connection{ID: "dev", Name: "Dev", Type: ConnectionTypeSSH, Host: "example.com", Port: 2200, Username: "root", Password: "secret"}
+	conn := withTestHostKeyVerifier(Connection{ID: "dev", Name: "Dev", Type: ConnectionTypeSSH, Host: "example.com", Port: 2200, Username: "root", Password: "secret"})
 	result, err := (SSHExecutor{Dialer: dialer}).Run(context.Background(), conn, "uname -a")
 	if err != nil {
 		t.Fatalf("ssh run failed: %v", err)
@@ -269,7 +269,7 @@ func TestSSHExecutorUsesInjectableDialer(t *testing.T) {
 func TestSSHExecutorStreamsUTF8EventsBeforeCommandCompletes(t *testing.T) {
 	session := &streamingSSHSession{written: make(chan struct{}), release: make(chan struct{})}
 	client := &fakeSSHClient{session: session}
-	conn := Connection{ID: "stream", Name: "流式 🚀", Type: ConnectionTypeSSH, Host: "example.com", Port: 22, Username: "root", Password: "secret"}
+	conn := withTestHostKeyVerifier(Connection{ID: "stream", Name: "流式 🚀", Type: ConnectionTypeSSH, Host: "example.com", Port: 22, Username: "root", Password: "secret"})
 	events := make(chan Event, 4)
 	done := make(chan CommandResult, 1)
 	go func() {
@@ -318,7 +318,7 @@ func TestSSHExecutorStreamsUTF8EventsBeforeCommandCompletes(t *testing.T) {
 func TestSSHExecutorNormalizesInvalidUTF8(t *testing.T) {
 	session := &fakeSSHSession{out: "中文 " + string([]byte{0xff}) + "\n", errOut: "ошибка\n"}
 	client := &fakeSSHClient{session: session}
-	conn := Connection{ID: "utf8", Name: "日本語 🚀", Type: ConnectionTypeSSH, Host: "example.com", Port: 22, Username: "root", Password: "secret"}
+	conn := withTestHostKeyVerifier(Connection{ID: "utf8", Name: "日本語 🚀", Type: ConnectionTypeSSH, Host: "example.com", Port: 22, Username: "root", Password: "secret"})
 	result, err := (SSHExecutor{Dialer: &fakeSSHDialer{client: client}}).Run(context.Background(), conn, "printf utf8")
 	if err != nil {
 		t.Fatalf("ssh UTF-8 run failed: %v", err)
@@ -335,7 +335,7 @@ func TestSSHExecutorRunHonorsCancellation(t *testing.T) {
 	session := &blockingSSHSession{started: make(chan struct{}), closed: make(chan struct{})}
 	client := &fakeSSHClient{session: session}
 	dialer := &fakeSSHDialer{client: client}
-	conn := Connection{ID: "dev", Name: "Dev", Type: ConnectionTypeSSH, Host: "example.com", Port: 22, Username: "root", Password: "secret"}
+	conn := withTestHostKeyVerifier(Connection{ID: "dev", Name: "Dev", Type: ConnectionTypeSSH, Host: "example.com", Port: 22, Username: "root", Password: "secret"})
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
@@ -383,7 +383,7 @@ func TestNetDialerCancelsDuringSSHHandshake(t *testing.T) {
 		_, dialErr := (&netDialer{}).Dial(ctx, "tcp", listener.Addr().String(), &ssh.ClientConfig{
 			User:            "tester",
 			Auth:            []ssh.AuthMethod{ssh.Password("secret")},
-			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+			HostKeyCallback: func(string, net.Addr, ssh.PublicKey) error { return nil },
 			Timeout:         15 * time.Second,
 		})
 		done <- dialErr
@@ -422,7 +422,7 @@ func TestSSHExecutorUsesWorkingDir(t *testing.T) {
 	session := &fakeSSHSession{}
 	client := &fakeSSHClient{session: session}
 	dialer := &fakeSSHDialer{client: client}
-	conn := Connection{ID: "dev", Name: "Dev", Type: ConnectionTypeSSH, Host: "example.com", Port: 22, Username: "root", Password: "secret", WorkingDir: "/srv/my app's/current"}
+	conn := withTestHostKeyVerifier(Connection{ID: "dev", Name: "Dev", Type: ConnectionTypeSSH, Host: "example.com", Port: 22, Username: "root", Password: "secret", WorkingDir: "/srv/my app's/current"})
 	_, err := (SSHExecutor{Dialer: dialer}).Run(context.Background(), conn, "pwd && printf ok")
 	if err != nil {
 		t.Fatalf("ssh run failed: %v", err)
@@ -438,7 +438,7 @@ func TestSSHExecutorAcceptsPrivateKeyPath(t *testing.T) {
 	session := &fakeSSHSession{}
 	client := &fakeSSHClient{session: session}
 	dialer := &fakeSSHDialer{client: client}
-	conn := Connection{ID: "dev", Name: "Dev", Type: ConnectionTypeSSH, Host: "example.com", Port: 22, Username: "root", PrivateKey: keyPath}
+	conn := withTestHostKeyVerifier(Connection{ID: "dev", Name: "Dev", Type: ConnectionTypeSSH, Host: "example.com", Port: 22, Username: "root", PrivateKey: keyPath})
 	result, err := (SSHExecutor{Dialer: dialer}).Run(context.Background(), conn, "true")
 	if err != nil {
 		t.Fatalf("ssh run with private key path failed: %v", err)
@@ -469,7 +469,7 @@ func TestPrivateKeyMaterialReadsPathAndPreservesPEM(t *testing.T) {
 
 func TestSSHExecutorReportsMissingPrivateKeyPath(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing_id_rsa")
-	conn := Connection{ID: "dev", Name: "Dev", Type: ConnectionTypeSSH, Host: "example.com", Port: 22, Username: "root", PrivateKey: missing}
+	conn := withTestHostKeyVerifier(Connection{ID: "dev", Name: "Dev", Type: ConnectionTypeSSH, Host: "example.com", Port: 22, Username: "root", PrivateKey: missing})
 	result, err := (SSHExecutor{Dialer: &fakeSSHDialer{client: &fakeSSHClient{session: &fakeSSHSession{}}}}).Run(context.Background(), conn, "true")
 	if err == nil || !strings.Contains(err.Error(), "read private key") {
 		t.Fatalf("expected missing private key path error, got result=%#v err=%v", result, err)
@@ -502,7 +502,7 @@ func TestSSHExecutorValidatesDirectCalls(t *testing.T) {
 
 func TestSSHExecutorReportsDialError(t *testing.T) {
 	want := errors.New("dial blocked")
-	conn := Connection{ID: "dev", Name: "Dev", Type: ConnectionTypeSSH, Host: "example.com", Port: 22, Username: "root", Password: "secret"}
+	conn := withTestHostKeyVerifier(Connection{ID: "dev", Name: "Dev", Type: ConnectionTypeSSH, Host: "example.com", Port: 22, Username: "root", Password: "secret"})
 	result, err := (SSHExecutor{Dialer: &fakeSSHDialer{err: want}}).Run(context.Background(), conn, "true")
 	if !errors.Is(err, want) {
 		t.Fatalf("expected dial error, got %v", err)

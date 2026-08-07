@@ -453,6 +453,7 @@ type finalShellApp struct {
 	runID       uint64
 	runs        map[string]commandRun
 	interactive *interactiveRuntimeRegistry
+	sshHostKeys *terminal.SSHHostKeyStore
 	monitorMu   sync.RWMutex
 	monitors    map[string]*hostmonitor.Session
 }
@@ -579,6 +580,7 @@ func LoadGUIWithFLTKGO(_ []byte) {
 		session:     terminal.NewSession(history),
 		sessions:    newSessionWorkspace(),
 		interactive: newInteractiveRuntimeRegistry(),
+		sshHostKeys: terminal.NewSSHHostKeyStore(filepath.Join(config.CurrentApp.DataDir, "known_hosts")),
 		idx:         -1,
 	}
 	defer app.stopAllMonitors()

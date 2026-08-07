@@ -108,7 +108,7 @@ func TestSSHPTYSessionRoutesRawStreamInputResizeInterruptAndCleanup(t *testing.T
 	remote := newFakeInteractiveSSHSession()
 	client := &fakeInteractiveSSHClient{session: remote}
 	dialer := &fakeInteractiveSSHDialer{client: client}
-	conn := Connection{ID: "remote", Name: "Remote", Type: ConnectionTypeSSH, Host: "example.com", Port: 2200, Username: "tester", Password: "secret"}
+	conn := withTestHostKeyVerifier(Connection{ID: "remote", Name: "Remote", Type: ConnectionTypeSSH, Host: "example.com", Port: 2200, Username: "tester", Password: "secret"})
 	session := newSSHPTYSessionWithDialer(conn, dialer)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -170,7 +170,7 @@ func TestSSHPTYSessionRejectsWrongConnectionAndInvalidLifecycle(t *testing.T) {
 	if err := local.Start(context.Background(), TerminalSize{Columns: 80, Rows: 24}); err == nil {
 		t.Fatal("SSH PTY accepted a local connection")
 	}
-	conn := Connection{ID: "remote", Name: "Remote", Type: ConnectionTypeSSH, Host: "example.com", Port: 22, Username: "tester", Password: "secret"}
+	conn := withTestHostKeyVerifier(Connection{ID: "remote", Name: "Remote", Type: ConnectionTypeSSH, Host: "example.com", Port: 22, Username: "tester", Password: "secret"})
 	remote := newFakeInteractiveSSHSession()
 	session := newSSHPTYSessionWithDialer(conn, &fakeInteractiveSSHDialer{client: &fakeInteractiveSSHClient{session: remote}})
 	if err := session.WriteInput([]byte("lost")); err == nil {
