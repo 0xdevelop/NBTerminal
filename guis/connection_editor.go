@@ -58,7 +58,7 @@ func connectionEditorFieldPolicy(connType connectionType) editorFieldPolicy {
 func (d connectionEditorDraft) Profile(base connectionProfile, password string) (connectionProfile, error) {
 	p := base
 	p.Name = strings.TrimSpace(d.Name)
-	p.Group = strings.TrimSpace(d.Group)
+	p.Group = normalizeConnectionGroup(d.Group)
 	p.Type = connectionType(strings.ToLower(strings.TrimSpace(d.Type)))
 	p.Host = strings.TrimSpace(d.Host)
 	p.Username = strings.TrimSpace(d.Username)

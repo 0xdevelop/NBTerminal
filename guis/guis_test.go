@@ -452,6 +452,9 @@ func TestProductDefaultsAndFallbacksFollowCurrentLocale(t *testing.T) {
 	if got := formatLastUsed(""); got != "从未使用" {
 		t.Fatalf("localized empty last-used = %q", got)
 	}
+	if got := formatLastUsedCompact("2026-08-08T21:17:50Z"); got != "08-08" {
+		t.Fatalf("compact last-used = %q, want date-only value", got)
+	}
 	defaults := defaultConnections()
 	if len(defaults) != 2 || defaults[0].Name != "本地终端" || defaults[0].Group != "本地" || defaults[1].Name != "SSH 示例" || defaults[1].Group != "示例" {
 		t.Fatalf("localized seed profiles = %#v", defaults)

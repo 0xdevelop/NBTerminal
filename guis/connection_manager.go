@@ -32,8 +32,13 @@ type connectionManagerWindow struct {
 	idx               int
 	status            *uikit.UILabel
 	closeAfterConnect *checkbox.UICheckbox
-	groupOptions      []string
+	groupOptions      []connectionGroupOption
 	selectedGroup     string
+}
+
+type connectionGroupOption struct {
+	Path  string
+	Label string
 }
 
 func (a *finalShellApp) openConnectionManager() {
@@ -110,7 +115,7 @@ func (m *connectionManagerWindow) build() {
 		if index < 0 || index >= len(m.groupOptions) {
 			return
 		}
-		m.selectedGroup = m.groupOptions[index]
+		m.selectedGroup = m.groupOptions[index].Path
 		m.reload("")
 	})
 
@@ -120,12 +125,12 @@ func (m *connectionManagerWindow) build() {
 		m.table.SetHeaderHeight(nativeControls.TableHeaderHeight)
 		m.table.SetDefaultRowHeight(nativeControls.TableRowHeight)
 		m.table.View().SetAutomationID("connection_manager.table").SetAutomationName(tr("manager.title"))
-		m.table.AddColumn(tableview.TableColumn{Identifier: "favorite", Title: tr("manager.favorite_compact"), Width: 70})
-		m.table.AddColumn(tableview.TableColumn{Identifier: "group", Title: tr("connections.group"), Width: 145})
-		m.table.AddColumn(tableview.TableColumn{Identifier: "name", Title: tr("connections.name"), Width: 205})
-		m.table.AddColumn(tableview.TableColumn{Identifier: "type", Title: tr("connections.type"), Width: 75})
-		m.table.AddColumn(tableview.TableColumn{Identifier: "endpoint", Title: tr("connections.endpoint"), Width: 215})
-		m.table.AddColumn(tableview.TableColumn{Identifier: "last", Title: tr("connections.last_used"), Width: 130})
+		m.table.AddColumn(tableview.TableColumn{Identifier: "favorite", Title: tr("manager.favorite_compact"), Width: 60})
+		m.table.AddColumn(tableview.TableColumn{Identifier: "group", Title: tr("connections.group"), Width: 250})
+		m.table.AddColumn(tableview.TableColumn{Identifier: "name", Title: tr("connections.name"), Width: 180})
+		m.table.AddColumn(tableview.TableColumn{Identifier: "type", Title: tr("connections.type"), Width: 65})
+		m.table.AddColumn(tableview.TableColumn{Identifier: "endpoint", Title: tr("connections.endpoint"), Width: 185})
+		m.table.AddColumn(tableview.TableColumn{Identifier: "last", Title: tr("connections.last_used"), Width: 100})
 		m.model = &tableModel{}
 		m.table.SetDataSource(m.model)
 		m.table.SetDelegate(tableDelegate{onSelect: m.selectRow})
@@ -198,12 +203,12 @@ func (m *connectionManagerWindow) syncGroupOptions() {
 	m.groupOptions = connectionManagerGroupOptions(m.owner.allRows)
 	labels := make([]string, len(m.groupOptions))
 	selected := 0
-	for index, group := range m.groupOptions {
-		labels[index] = group
-		if group == "" {
+	for index, option := range m.groupOptions {
+		labels[index] = option.Label
+		if option.Path == "" {
 			labels[index] = tr("manager.all_groups")
 		}
-		if group == m.selectedGroup {
+		if option.Path == m.selectedGroup {
 			selected = index
 		}
 	}
@@ -214,27 +219,55 @@ func (m *connectionManagerWindow) syncGroupOptions() {
 	m.group.SetSelectedIndex(selected)
 }
 
-func connectionManagerGroupOptions(rows []connectionProfile) []string {
+func connectionManagerGroupOptions(rows []connectionProfile) []connectionGroupOption {
 	unique := make(map[string]struct{})
 	for _, row := range rows {
-		group := strings.TrimSpace(row.Group)
-		if group != "" {
-			unique[group] = struct{}{}
+		parts := strings.Split(normalizeConnectionGroup(row.Group), "/")
+		for depth := 1; depth <= len(parts) && parts[0] != ""; depth++ {
+			unique[strings.Join(parts[:depth], "/")] = struct{}{}
 		}
 	}
-	groups := make([]string, 1, len(unique)+1)
+	paths := make([]string, 0, len(unique))
 	for group := range unique {
-		groups = append(groups, group)
+		paths = append(paths, group)
 	}
-	sort.Strings(groups[1:])
-	return groups
+	sort.Strings(paths)
+	options := make([]connectionGroupOption, 1, len(paths)+1)
+	for _, path := range paths {
+		parts := strings.Split(path, "/")
+		options = append(options, connectionGroupOption{
+			Path:  path,
+			Label: strings.Repeat("  ", len(parts)-1) + parts[len(parts)-1],
+		})
+	}
+	return options
+}
+
+func normalizeConnectionGroup(group string) string {
+	parts := strings.Split(group, "/")
+	normalized := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part = strings.TrimSpace(part); part != "" {
+			normalized = append(normalized, part)
+		}
+	}
+	return strings.Join(normalized, "/")
+}
+
+func compactConnectionGroup(group string) string {
+	group = normalizeConnectionGroup(group)
+	if index := strings.LastIndex(group, "/"); index >= 0 {
+		return group[index+1:]
+	}
+	return group
 }
 
 func connectionManagerRows(rows []connectionProfile, group, query string) []connectionProfile {
-	group = strings.TrimSpace(group)
+	group = normalizeConnectionGroup(group)
 	out := make([]connectionProfile, 0, len(rows))
 	for _, row := range rows {
-		if group != "" && strings.TrimSpace(row.Group) != group {
+		rowGroup := normalizeConnectionGroup(row.Group)
+		if group != "" && rowGroup != group && !strings.HasPrefix(rowGroup, group+"/") {
 			continue
 		}
 		if connectionMatchesQuery(row, query) {

@@ -144,6 +144,20 @@ func formatLastUsed(value string) string {
 	return value
 }
 
+func formatLastUsedCompact(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return tr("profile.never")
+	}
+	if t, err := time.Parse(time.RFC3339, value); err == nil {
+		return t.Local().Format("01-02")
+	}
+	if len(value) > len("01-02") {
+		return value[:len("01-02")]
+	}
+	return value
+}
+
 type connectionStore struct {
 	path          string
 	db            *database.DB
@@ -758,11 +772,11 @@ func (a *finalShellApp) build() {
 		a.table.SetHeaderHeight(nativeControls.TableHeaderHeight)
 		a.table.SetDefaultRowHeight(nativeControls.TableRowHeight)
 		a.table.View().SetAutomationID("connections.table").SetAutomationName(tr("app.connections"))
-		a.table.AddColumn(tableview.TableColumn{Identifier: "group", Title: tr("connections.group"), Width: 70})
-		a.table.AddColumn(tableview.TableColumn{Identifier: "name", Title: tr("connections.name"), Width: 132})
-		a.table.AddColumn(tableview.TableColumn{Identifier: "type", Title: tr("connections.type"), Width: 48})
-		a.table.AddColumn(tableview.TableColumn{Identifier: "endpoint", Title: tr("connections.endpoint"), Width: 108})
-		a.table.AddColumn(tableview.TableColumn{Identifier: "last", Title: tr("connections.last_used"), Width: 92})
+		a.table.AddColumn(tableview.TableColumn{Identifier: "group", Title: tr("connections.group"), Width: 105})
+		a.table.AddColumn(tableview.TableColumn{Identifier: "name", Title: tr("connections.name"), Width: 150})
+		a.table.AddColumn(tableview.TableColumn{Identifier: "type", Title: tr("connections.type"), Width: 45})
+		a.table.AddColumn(tableview.TableColumn{Identifier: "endpoint", Title: tr("connections.endpoint"), Width: 80})
+		a.table.AddColumn(tableview.TableColumn{Identifier: "last", Title: tr("connections.last_used"), Width: 70})
 		a.model = &tableModel{rows: a.rows}
 		a.table.SetDataSource(a.model)
 		a.table.SetDelegate(tableDelegate{onSelect: func(row int) {
@@ -1041,7 +1055,7 @@ func (a *finalShellApp) connectionCellText(row, col int) string {
 	p := a.rows[row]
 	switch col {
 	case 0:
-		return p.Group
+		return compactConnectionGroup(p.Group)
 	case 1:
 		return p.Name
 	case 2:
@@ -1049,7 +1063,7 @@ func (a *finalShellApp) connectionCellText(row, col int) string {
 	case 3:
 		return p.tableEndpoint()
 	case 4:
-		return formatLastUsed(p.LastUsed)
+		return formatLastUsedCompact(p.LastUsed)
 	default:
 		return ""
 	}

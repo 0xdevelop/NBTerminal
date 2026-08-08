@@ -12,16 +12,23 @@ import (
 	"github.com/george012/gtbox"
 )
 
-func TestConnectionManagerGroupOptionsAreCanonicalAndDeterministic(t *testing.T) {
+func TestConnectionManagerGroupOptionsIncludeHierarchicalParents(t *testing.T) {
 	rows := []connectionProfile{
-		{ID: "prod-2", Group: "Production"},
+		{ID: "prod-2", Group: " Infrastructure / Production / Web "},
 		{ID: "local", Group: ""},
-		{ID: "dev", Group: "Development"},
-		{ID: "prod-1", Group: "Production"},
+		{ID: "dev", Group: "Infrastructure/Development"},
+		{ID: "prod-1", Group: "Infrastructure/Production/Database"},
 	}
 
 	got := connectionManagerGroupOptions(rows)
-	want := []string{"", "Development", "Production"}
+	want := []connectionGroupOption{
+		{},
+		{Path: "Infrastructure", Label: "Infrastructure"},
+		{Path: "Infrastructure/Development", Label: "  Development"},
+		{Path: "Infrastructure/Production", Label: "  Production"},
+		{Path: "Infrastructure/Production/Database", Label: "    Database"},
+		{Path: "Infrastructure/Production/Web", Label: "    Web"},
+	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("group options = %#v, want %#v", got, want)
 	}
@@ -43,6 +50,40 @@ func TestConnectionManagerRowsCombineGroupAndSearchWithoutMutatingSource(t *test
 	}
 	if got := connectionManagerRows(rows, "", "database"); len(got) != 2 {
 		t.Fatalf("all-groups search returned %d rows, want 2", len(got))
+	}
+}
+
+func TestConnectionManagerParentGroupIncludesDescendantsOnly(t *testing.T) {
+	rows := []connectionProfile{
+		{ID: "prod", Group: "Infrastructure/Production"},
+		{ID: "prod-db", Group: "Infrastructure / Production / Database"},
+		{ID: "production-like", Group: "Infrastructure/Production-Lab"},
+		{ID: "dev", Group: "Infrastructure/Development"},
+	}
+
+	got := connectionManagerRows(rows, "Infrastructure/Production", "")
+	if len(got) != 2 || got[0].ID != "prod" || got[1].ID != "prod-db" {
+		t.Fatalf("parent group filter = %#v, want exact group plus descendants", got)
+	}
+}
+
+func TestConnectionEditorNormalizesHierarchicalGroupPath(t *testing.T) {
+	draft := connectionEditorDraft{Name: "DB", Group: " Infrastructure // Production / Database ", Type: "local"}
+	profile, err := draft.Profile(connectionProfile{ID: "db"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.Group != "Infrastructure/Production/Database" {
+		t.Fatalf("normalized group = %q", profile.Group)
+	}
+}
+
+func TestCompactNavigatorUsesLeafGroupName(t *testing.T) {
+	if got := compactConnectionGroup("Infrastructure/Production/Database"); got != "Database" {
+		t.Fatalf("compact group = %q, want leaf name", got)
+	}
+	if got := compactConnectionGroup(" Local "); got != "Local" {
+		t.Fatalf("flat compact group = %q", got)
 	}
 }
 
