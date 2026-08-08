@@ -33,6 +33,7 @@ type SSHHostKeyError struct {
 	kind        SSHHostKeyErrorKind
 	fingerprint string
 	hostname    string
+	remote      net.Addr
 	key         ssh.PublicKey
 }
 
@@ -108,6 +109,7 @@ func (s *SSHHostKeyStore) Callback() ssh.HostKeyCallback {
 				kind:        kind,
 				fingerprint: ssh.FingerprintSHA256(key),
 				hostname:    hostname,
+				remote:      remote,
 				key:         key,
 			}
 		}
@@ -118,7 +120,7 @@ func (s *SSHHostKeyStore) Trust(hostErr *SSHHostKeyError) error {
 	if s == nil || strings.TrimSpace(s.path) == "" {
 		return ErrSSHHostKeyVerifierRequired
 	}
-	if hostErr == nil || hostErr.key == nil || strings.TrimSpace(hostErr.hostname) == "" {
+	if hostErr == nil || hostErr.key == nil || hostErr.remote == nil || strings.TrimSpace(hostErr.hostname) == "" {
 		return errors.New("SSH host key trust request is incomplete")
 	}
 	if hostErr.kind == SSHHostKeyChanged {
@@ -132,6 +134,26 @@ func (s *SSHHostKeyStore) Trust(hostErr *SSHHostKeyError) error {
 	defer s.mu.Unlock()
 	if err := s.ensureFileLocked(); err != nil {
 		return err
+	}
+	// Re-check under the same lock used by verification and persistence. Two
+	// sessions can observe an empty store before either confirmation is handled;
+	// once one key wins, a stale prompt for a different key must become a changed
+	// key rejection rather than appending a second trusted identity. Reconfirming
+	// the winning key is intentionally idempotent.
+	callback, err := knownhosts.New(s.path)
+	if err != nil {
+		return fmt.Errorf("open SSH host key store: %w", err)
+	}
+	if err := callback(hostErr.hostname, hostErr.remote, hostErr.key); err == nil {
+		return nil
+	} else {
+		var keyErr *knownhosts.KeyError
+		if !errors.As(err, &keyErr) {
+			return errors.New("SSH host key verification failed")
+		}
+		if len(keyErr.Want) > 0 {
+			return ErrSSHHostKeyChanged
+		}
 	}
 	data, err := os.ReadFile(s.path)
 	if err != nil {

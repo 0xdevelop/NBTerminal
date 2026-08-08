@@ -94,6 +94,69 @@ func TestSSHHostKeyStoreRejectsChangedKeyAndRefusesReplacement(t *testing.T) {
 	}
 }
 
+func TestSSHHostKeyStoreRejectsStaleUnknownTrustAfterAnotherKeyWins(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "known_hosts")
+	store := NewSSHHostKeyStore(path)
+	callback := store.Callback()
+	remote := &net.TCPAddr{IP: net.ParseIP("192.0.2.21"), Port: 22}
+	first := testSSHHostKey(t)
+	second := testSSHHostKey(t)
+
+	var firstUnknown, secondUnknown *SSHHostKeyError
+	if !errors.As(callback("synthetic.example:22", remote, first), &firstUnknown) {
+		t.Fatal("first unknown key did not produce a typed trust request")
+	}
+	if !errors.As(callback("synthetic.example:22", remote, second), &secondUnknown) {
+		t.Fatal("second unknown key did not produce a typed trust request")
+	}
+	if err := store.Trust(firstUnknown); err != nil {
+		t.Fatalf("trust first key: %v", err)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.Trust(secondUnknown); !errors.Is(err, ErrSSHHostKeyChanged) {
+		t.Fatalf("stale trust error = %v, want ErrSSHHostKeyChanged", err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatal("stale trust request modified the host-key store")
+	}
+}
+
+func TestSSHHostKeyStoreTreatsRepeatedTrustOfSameKeyAsIdempotent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "known_hosts")
+	store := NewSSHHostKeyStore(path)
+	remote := &net.TCPAddr{IP: net.ParseIP("192.0.2.22"), Port: 22}
+	key := testSSHHostKey(t)
+	var unknown *SSHHostKeyError
+	if !errors.As(store.Callback()("synthetic.example:22", remote, key), &unknown) {
+		t.Fatal("unknown key did not produce a typed trust request")
+	}
+	if err := store.Trust(unknown); err != nil {
+		t.Fatalf("first trust: %v", err)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Trust(unknown); err != nil {
+		t.Fatalf("repeated trust should be idempotent: %v", err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatal("repeated trust duplicated the known-host entry")
+	}
+}
+
 func TestSSHHostKeyStoreRefusesSymlinkTrustFile(t *testing.T) {
 	temp := t.TempDir()
 	legitimate := NewSSHHostKeyStore(filepath.Join(temp, "legitimate_known_hosts"))
