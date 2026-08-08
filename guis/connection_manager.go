@@ -1,12 +1,14 @@
 package guis
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/0xdevelop/NBTerminal/config"
 	"github.com/0xdevelop/fltk2go/fltk_bridge"
 	"github.com/0xdevelop/fltk2go/uikit"
 	"github.com/0xdevelop/fltk2go/uikit/checkbox"
+	uidropdown "github.com/0xdevelop/fltk2go/uikit/dropdown"
 	"github.com/0xdevelop/fltk2go/uikit/tableview"
 	"github.com/george012/gtbox/gtbox_log"
 )
@@ -22,6 +24,7 @@ const (
 type connectionManagerWindow struct {
 	owner             *finalShellApp
 	window            *uikit.UIWindow
+	group             *uidropdown.UIDropdown
 	search            *uikit.Input
 	table             *uikit.UITableView
 	model             *tableModel
@@ -29,6 +32,8 @@ type connectionManagerWindow struct {
 	idx               int
 	status            *uikit.UILabel
 	closeAfterConnect *checkbox.UICheckbox
+	groupOptions      []string
+	selectedGroup     string
 }
 
 func (a *finalShellApp) openConnectionManager() {
@@ -72,7 +77,12 @@ func (m *connectionManagerWindow) build() {
 
 	root.AddSubview(titleLabel(28, 20, 500, 30, tr("manager.title")))
 	root.AddSubview(mutedLabel(30, 52, 850, 22, tr("manager.subtitle")))
-	root.AddSubview(mutedLabel(30, 99, 72, 20, tr("connections.search")))
+	root.AddSubview(mutedLabel(30, 99, 72, 20, tr("connections.group")))
+	m.group = uidropdown.NewUIDropdown(rect(layout.Group.X, layout.Group.Y, layout.Group.Width, layout.Group.Height))
+	styleDropdown(m.group)
+	m.group.View().SetAutomationID("connection_manager.group").SetAutomationName(tr("manager.group_filter"))
+	root.AddSubview(m.group)
+	root.AddSubview(mutedLabel(312, 99, 76, 20, tr("connections.search")))
 	m.search = inputNoLabel(layout.Search.X, layout.Search.Y, layout.Search.Width, layout.Search.Height, "connection_manager.search", tr("connections.search_placeholder"))
 	m.search.OnChange(m.applySearch)
 	m.search.View().On(fltk_bridge.KEYDOWN, func(fltk_bridge.Event) bool {
@@ -95,6 +105,14 @@ func (m *connectionManagerWindow) build() {
 	})
 	root.AddSubview(m.search)
 	root.AddSubview(button(layout.Find.X, layout.Find.Y, layout.Find.Width, layout.Find.Height, tr("connections.find"), "connection_manager.find", m.applySearch))
+	m.syncGroupOptions()
+	m.group.OnSelectionChanged(func(index int, _ string) {
+		if index < 0 || index >= len(m.groupOptions) {
+			return
+		}
+		m.selectedGroup = m.groupOptions[index]
+		m.reload("")
+	})
 
 	table, err := uikit.NewUITableView(layout.Table.X, layout.Table.Y, layout.Table.Width, layout.Table.Height)
 	if err == nil {
@@ -155,7 +173,8 @@ func (m *connectionManagerWindow) reload(preferredID string) {
 	if m.search != nil {
 		query = m.search.Text()
 	}
-	m.rows = filterConnections(m.owner.allRows, query)
+	m.syncGroupOptions()
+	m.rows = connectionManagerRows(m.owner.allRows, m.selectedGroup, query)
 	m.idx = indexProfileByID(m.rows, preferredID)
 	if m.idx < 0 && len(m.rows) > 0 {
 		m.idx = 0
@@ -170,6 +189,59 @@ func (m *connectionManagerWindow) reload(preferredID string) {
 		}
 	}
 	m.updateStatus()
+}
+
+func (m *connectionManagerWindow) syncGroupOptions() {
+	if m == nil || m.owner == nil || m.group == nil {
+		return
+	}
+	m.groupOptions = connectionManagerGroupOptions(m.owner.allRows)
+	labels := make([]string, len(m.groupOptions))
+	selected := 0
+	for index, group := range m.groupOptions {
+		labels[index] = group
+		if group == "" {
+			labels[index] = tr("manager.all_groups")
+		}
+		if group == m.selectedGroup {
+			selected = index
+		}
+	}
+	if selected == 0 && m.selectedGroup != "" {
+		m.selectedGroup = ""
+	}
+	m.group.SetOptions(labels)
+	m.group.SetSelectedIndex(selected)
+}
+
+func connectionManagerGroupOptions(rows []connectionProfile) []string {
+	unique := make(map[string]struct{})
+	for _, row := range rows {
+		group := strings.TrimSpace(row.Group)
+		if group != "" {
+			unique[group] = struct{}{}
+		}
+	}
+	groups := make([]string, 1, len(unique)+1)
+	for group := range unique {
+		groups = append(groups, group)
+	}
+	sort.Strings(groups[1:])
+	return groups
+}
+
+func connectionManagerRows(rows []connectionProfile, group, query string) []connectionProfile {
+	group = strings.TrimSpace(group)
+	out := make([]connectionProfile, 0, len(rows))
+	for _, row := range rows {
+		if group != "" && strings.TrimSpace(row.Group) != group {
+			continue
+		}
+		if connectionMatchesQuery(row, query) {
+			out = append(out, row)
+		}
+	}
+	return out
 }
 
 func (m *connectionManagerWindow) applySearch() {

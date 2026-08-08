@@ -62,6 +62,8 @@
   "manager.selected_format": "%s · %s · %s",
   "manager.favorite_updated": "Избранное обновлено: %s",
   "manager.close_after_connect": "Закрывать менеджер после подключения",
+  "manager.group_filter": "Фильтр подключений по группе",
+  "manager.all_groups": "Все группы",
   "monitor.title": "Текущий хост",
   "monitor.starting": "Сбор метрик хоста…",
   "monitor.ssh_pending": "Мониторинг SSH запустится вместе с постоянным сеансом SSH.",

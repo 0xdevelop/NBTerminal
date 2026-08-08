@@ -12,6 +12,40 @@ import (
 	"github.com/george012/gtbox"
 )
 
+func TestConnectionManagerGroupOptionsAreCanonicalAndDeterministic(t *testing.T) {
+	rows := []connectionProfile{
+		{ID: "prod-2", Group: "Production"},
+		{ID: "local", Group: ""},
+		{ID: "dev", Group: "Development"},
+		{ID: "prod-1", Group: "Production"},
+	}
+
+	got := connectionManagerGroupOptions(rows)
+	want := []string{"", "Development", "Production"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("group options = %#v, want %#v", got, want)
+	}
+}
+
+func TestConnectionManagerRowsCombineGroupAndSearchWithoutMutatingSource(t *testing.T) {
+	rows := []connectionProfile{
+		{ID: "prod-db", Name: "Database", Group: "Production", Host: "db.internal"},
+		{ID: "prod-web", Name: "Web", Group: "Production", Host: "web.internal"},
+		{ID: "dev-db", Name: "Database", Group: "Development", Host: "db.dev"},
+	}
+
+	got := connectionManagerRows(rows, "Production", "database")
+	if len(got) != 1 || got[0].ID != "prod-db" {
+		t.Fatalf("combined group/search filter = %#v", got)
+	}
+	if rows[0].ID != "prod-db" || len(rows) != 3 {
+		t.Fatalf("manager filter mutated source rows: %#v", rows)
+	}
+	if got := connectionManagerRows(rows, "", "database"); len(got) != 2 {
+		t.Fatalf("all-groups search returned %d rows, want 2", len(got))
+	}
+}
+
 func TestQuickConnectionProjectionPrioritizesFavoritesThenRecent(t *testing.T) {
 	rows := []connectionProfile{
 		{ID: "old-favorite", Name: "Old favorite", Favorite: true, LastUsed: "2026-08-01T10:00:00Z"},

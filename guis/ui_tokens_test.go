@@ -97,11 +97,14 @@ func TestSettingsEditorAndManagerLayoutsUseSemanticControlMetrics(t *testing.T) 
 	}
 
 	manager := connectionManagerLayoutFor(nativeControls)
-	if manager.Search.Height != nativeControls.InputHeight || manager.Find.Height != nativeControls.ButtonHeight ||
+	if manager.Group.Height != nativeControls.InputHeight || manager.Search.Height != nativeControls.InputHeight || manager.Find.Height != nativeControls.ButtonHeight ||
 		manager.CloseAfterConnect.Height != nativeControls.InputHeight || manager.New.Height != nativeControls.ButtonHeight ||
 		manager.Edit.Height != nativeControls.ButtonHeight || manager.Delete.Height != nativeControls.ButtonHeight ||
 		manager.Favorite.Height != nativeControls.ButtonHeight || manager.Connect.Height != nativeControls.PrimaryButtonHeight {
 		t.Fatalf("manager controls do not use semantic heights: %#v", manager)
+	}
+	if manager.Group.X+manager.Group.Width > manager.Search.X-nativeControls.FieldLabelGap {
+		t.Fatalf("manager group and search filters overlap: %#v", manager)
 	}
 	if manager.CloseAfterConnect.Y-manager.Status.Bottom() < nativeControls.FieldLabelGap ||
 		manager.New.Y-manager.CloseAfterConnect.Bottom() < nativeControls.FieldLabelGap {

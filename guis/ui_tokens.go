@@ -114,13 +114,14 @@ func terminalPanelLayoutFor(panel layoutRect, tokens controlMetricSet) terminalP
 }
 
 type connectionManagerLayout struct {
-	Search, Find, Table, Status, CloseAfterConnect layoutRect
-	New, Edit, Delete, Favorite, Connect           layoutRect
+	Group, Search, Find, Table, Status, CloseAfterConnect layoutRect
+	New, Edit, Delete, Favorite, Connect                  layoutRect
 }
 
 func connectionManagerLayoutFor(tokens controlMetricSet) connectionManagerLayout {
 	return connectionManagerLayout{
-		Search:            layoutRect{X: 102, Y: 91, Width: 650, Height: tokens.InputHeight},
+		Group:             layoutRect{X: 102, Y: 91, Width: 190, Height: tokens.InputHeight},
+		Search:            layoutRect{X: 390, Y: 91, Width: 362, Height: tokens.InputHeight},
 		Find:              layoutRect{X: 764, Y: 91, Width: 128, Height: tokens.ButtonHeight},
 		Table:             layoutRect{X: 28, Y: 143, Width: 864, Height: 382},
 		Status:            layoutRect{X: 30, Y: 530, Width: 862, Height: 18},

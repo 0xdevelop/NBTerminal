@@ -62,6 +62,8 @@
   "manager.selected_format": "%s · %s · %s",
   "manager.favorite_updated": "收藏狀態已更新：%s",
   "manager.close_after_connect": "連線後關閉管理器",
+  "manager.group_filter": "按群組篩選連線",
+  "manager.all_groups": "所有群組",
   "monitor.title": "目前主機",
   "monitor.starting": "正在收集主機指標…",
   "monitor.ssh_pending": "SSH 監控會隨持續 SSH 工作階段啟動。",
