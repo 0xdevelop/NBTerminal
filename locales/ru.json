@@ -14,6 +14,7 @@
   "settings.behavior_hint": "Параметры влияют только на запуск; выбор и SplitView остаются доступными.",
   "settings.saved": "Настройки сохранены",
   "settings.save_failed": "Не удалось сохранить настройки",
+  "ssh.host_key.unknown_title": "Подтверждение ключа SSH-хоста",
   "ssh.host_key.unknown_message": "Этот SSH-сервер ещё не является доверенным. Перед продолжением проверьте отпечаток открытого ключа:\n\n%s\n\nДоверять этому ключу и подключиться?",
   "ssh.host_key.trust": "Доверять и подключиться",
   "ssh.host_key.changed_title": "Ключ SSH-хоста изменён",

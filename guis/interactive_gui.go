@@ -17,6 +17,19 @@ const (
 	defaultTerminalRows    = 24
 )
 
+type sshHostKeyPrompt struct {
+	Title, Message, Cancel, Trust string
+}
+
+func unknownSSHHostKeyPrompt(fingerprint string) sshHostKeyPrompt {
+	return sshHostKeyPrompt{
+		Title:   tr("ssh.host_key.unknown_title"),
+		Message: trf("ssh.host_key.unknown_message", fingerprint),
+		Cancel:  tr("button.cancel"),
+		Trust:   tr("ssh.host_key.trust"),
+	}
+}
+
 func transportTerminalSize(size uikit.TerminalSize) terminal.TerminalSize {
 	columns, rows := size.Columns, size.Rows
 	if columns <= 0 {
@@ -80,8 +93,8 @@ func (a *finalShellApp) startInteractiveSession(state terminalTabState) error {
 			uikit.Alert(tr("ssh.host_key.changed_title"), tr("ssh.host_key.changed_message"))
 			return err
 		}
-		message := trf("ssh.host_key.unknown_message", hostKeyErr.Fingerprint())
-		if uikit.Choice(message, tr("button.cancel"), tr("ssh.host_key.trust")) != 1 {
+		prompt := unknownSSHHostKeyPrompt(hostKeyErr.Fingerprint())
+		if uikit.TitledChoice(prompt.Title, prompt.Message, prompt.Cancel, prompt.Trust) != 1 {
 			return err
 		}
 		if err := a.sshHostKeys.Trust(hostKeyErr); err != nil {

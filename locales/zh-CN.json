@@ -14,6 +14,7 @@
   "settings.behavior_hint": "这些选项仅影响启动；仍可随时选择连接并拖动 SplitView。",
   "settings.saved": "设置已保存",
   "settings.save_failed": "设置保存失败",
+  "ssh.host_key.unknown_title": "确认 SSH 主机密钥",
   "ssh.host_key.unknown_message": "此 SSH 服务器尚未受信任。继续前请核对公钥指纹：\n\n%s\n\n是否信任此密钥并连接？",
   "ssh.host_key.trust": "信任并连接",
   "ssh.host_key.changed_title": "SSH 主机密钥已变更",

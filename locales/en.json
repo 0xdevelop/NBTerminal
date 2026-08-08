@@ -14,6 +14,7 @@
   "settings.behavior_hint": "These options affect startup only; manual selection and SplitView dragging remain available.",
   "settings.saved": "Settings saved",
   "settings.save_failed": "Settings save failed",
+  "ssh.host_key.unknown_title": "Confirm SSH host key",
   "ssh.host_key.unknown_message": "This SSH server has not been trusted yet. Verify the public-key fingerprint before continuing:\n\n%s\n\nTrust this key and connect?",
   "ssh.host_key.trust": "Trust & Connect",
   "ssh.host_key.changed_title": "SSH host key changed",
