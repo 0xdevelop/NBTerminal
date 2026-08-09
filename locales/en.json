@@ -110,6 +110,8 @@
   "action.edit": "Edit",
   "action.save": "Save",
   "action.delete": "Delete",
+  "delete.title": "Delete connection?",
+  "delete.message": "Delete “%s” from saved connections? Active terminal sessions keep their current snapshot. This cannot be undone.",
   "action.test": "Test",
   "action.connect": "Connect",
   "editor.title_new": "New Connection",

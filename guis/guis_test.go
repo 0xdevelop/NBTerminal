@@ -923,3 +923,41 @@ func TestRemoveSelectedProfileCommitsOnlyAfterPersistenceSucceeds(t *testing.T) 
 		t.Fatalf("unexpected committed delete: removed=%#v rows=%#v idx=%d", removed, app.rows, app.idx)
 	}
 }
+
+func TestConfirmedDeleteClearsSelectionSummaryWhenLastProfileIsRemoved(t *testing.T) {
+	oldGlobal := config.GlobalConfig
+	oldApp := config.CurrentApp
+	t.Cleanup(func() { config.GlobalConfig, config.CurrentApp = oldGlobal, oldApp })
+	config.GlobalConfig = nil
+	config.CurrentApp = nil
+
+	profile := connectionProfile{ID: "only", Name: "Only profile", Type: connectionTypeLocal}
+	app := &finalShellApp{
+		store:          newConnectionStore(t.TempDir()),
+		allRows:        []connectionProfile{profile},
+		rows:           []connectionProfile{profile},
+		idx:            0,
+		selectedName:   label(0, 0, 200, 24, profile.Name),
+		selectedDetail: mutedLabel(0, 0, 200, 22, "stale detail"),
+		selectedRecent: mutedLabel(0, 0, 200, 22, "stale recent"),
+	}
+
+	app.deleteProfileConfirmed(connectionProfile{ID: "different-selection"})
+	if len(app.allRows) != 1 || app.idx != 0 {
+		t.Fatal("confirmation deleted a profile other than the one shown in the prompt")
+	}
+	app.deleteProfileConfirmed(profile)
+
+	if len(app.allRows) != 0 || len(app.rows) != 0 || app.idx != -1 {
+		t.Fatalf("last profile was not removed cleanly: all=%#v rows=%#v idx=%d", app.allRows, app.rows, app.idx)
+	}
+	if got := app.selectedName.View().AutomationSnapshot().Name; got != tr("connections.none") {
+		t.Fatalf("empty selection summary = %q, want %q", got, tr("connections.none"))
+	}
+	if got := app.selectedDetail.View().AutomationSnapshot().Name; got != "" {
+		t.Fatalf("stale selected detail remained after delete: %q", got)
+	}
+	if got := app.selectedRecent.View().AutomationSnapshot().Name; got != "" {
+		t.Fatalf("stale recent detail remained after delete: %q", got)
+	}
+}

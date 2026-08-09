@@ -6,11 +6,43 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/0xdevelop/NBTerminal/config"
+	"github.com/0xdevelop/NBTerminal/locales"
 	"github.com/george012/gtbox"
 )
+
+func TestConnectionDeleteConfirmationIsLocalizedAndDefaultsToCancel(t *testing.T) {
+	previous := locales.CurrentLanguage()
+	t.Cleanup(func() { locales.ResetLocaleLanguage(previous.LanguageTag()) })
+
+	profile := connectionProfile{ID: "prod", Name: "Production 数据库"}
+	for _, language := range locales.SupportedLanguages() {
+		locales.ResetLocaleLanguage(language.LanguageTag())
+		prompt := connectionDeletePromptFor(profile)
+		if strings.TrimSpace(prompt.Title) == "" || !strings.Contains(prompt.Message, profile.Name) ||
+			strings.TrimSpace(prompt.Cancel) == "" || strings.TrimSpace(prompt.Delete) == "" {
+			t.Fatalf("%s delete prompt is incomplete: %#v", language.LanguageTag(), prompt)
+		}
+
+		var gotOptions []string
+		cancelled := confirmConnectionDelete(profile, func(_, _ string, options ...string) int {
+			gotOptions = append([]string(nil), options...)
+			return 1
+		})
+		if cancelled || len(gotOptions) != 2 || gotOptions[0] != prompt.Delete || gotOptions[1] != prompt.Cancel {
+			t.Fatalf("%s confirmation did not default to cancel: confirmed=%v options=%#v", language.LanguageTag(), cancelled, gotOptions)
+		}
+		if !confirmConnectionDelete(profile, func(_, _ string, _ ...string) int { return 0 }) {
+			t.Fatalf("%s explicit delete action was not accepted", language.LanguageTag())
+		}
+		if confirmConnectionDelete(profile, nil) {
+			t.Fatalf("%s unavailable dialog must fail closed", language.LanguageTag())
+		}
+	}
+}
 
 func TestConnectionManagerGroupOptionsIncludeHierarchicalParents(t *testing.T) {
 	rows := []connectionProfile{

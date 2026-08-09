@@ -1563,6 +1563,26 @@ func newConnectionProfile(username string) connectionProfile {
 }
 
 func (a *finalShellApp) deleteProfile() {
+	profile, ok := a.selectedProfile()
+	if !ok {
+		return
+	}
+	// FLTK choice dialogs run their own native event loop. Opening one inside the
+	// button-release callback can consume that same release as a dialog choice.
+	// Defer to the next GUI turn so deletion always requires a second, explicit
+	// action in the confirmation window.
+	fltk_bridge.AddTimeout(0, func() {
+		if showConnectionDeleteConfirmation(profile) {
+			a.deleteProfileConfirmed(profile)
+		}
+	})
+}
+
+func (a *finalShellApp) deleteProfileConfirmed(expected connectionProfile) {
+	selected, ok := a.selectedProfile()
+	if !ok || selected.ID != expected.ID {
+		return
+	}
 	removed, err := a.removeSelectedProfile()
 	if err != nil {
 		gtbox_log.LogErrorf("delete connection failed: %s", err.Error())
@@ -1577,6 +1597,8 @@ func (a *finalShellApp) deleteProfile() {
 	a.refreshTable()
 	if a.idx >= 0 {
 		a.selectRow(a.idx)
+	} else {
+		a.updateSelectedSummary()
 	}
 	a.setStatus(trf("status.deleted", removed.Name))
 }

@@ -398,6 +398,17 @@ func (m *connectionManagerWindow) deleteSelected() {
 	if !ok || m.owner == nil || m.owner.store == nil {
 		return
 	}
+	fltk_bridge.AddTimeout(0, func() {
+		if showConnectionDeleteConfirmation(profile) {
+			m.deleteProfileConfirmed(profile)
+		}
+	})
+}
+
+func (m *connectionManagerWindow) deleteProfileConfirmed(profile connectionProfile) {
+	if m == nil || m.owner == nil || m.owner.store == nil {
+		return
+	}
 	nextAll := removeProfileByID(append([]connectionProfile(nil), m.owner.allRows...), profile.ID)
 	activeID := ""
 	if len(nextAll) > 0 {

@@ -110,6 +110,8 @@
   "action.edit": "編輯",
   "action.save": "儲存",
   "action.delete": "刪除",
+  "delete.title": "刪除連線？",
+  "delete.message": "要從已儲存連線中刪除「%s」嗎？執行中的終端工作階段會保留目前快照。此操作無法復原。",
   "action.test": "測試",
   "action.connect": "連線",
   "editor.title_new": "新增連線",
