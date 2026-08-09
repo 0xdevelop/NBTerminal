@@ -91,6 +91,8 @@ func persistSettingsDraft(draft settingsDraft) error {
 type settingsWindow struct {
 	owner          *finalShellApp
 	window         *uikit.UIWindow
+	initial        settingsDraft
+	closing        unsavedCloseController
 	language       *uidropdown.UIDropdown
 	timeout        *uikit.Input
 	resetWorkspace *checkbox.UICheckbox
@@ -116,6 +118,7 @@ func (a *finalShellApp) openSettings() {
 
 func (s *settingsWindow) build(draft settingsDraft) {
 	owner := s.owner
+	s.initial = draft
 	layout := settingsLayoutFor(nativeControls)
 	windowRect := centeredScreenRect(settingsWindowWidth, settingsWindowHeight)
 	if owner != nil && owner.window != nil && owner.window.Raw() != nil {
@@ -136,6 +139,7 @@ func (s *settingsWindow) build(draft settingsDraft) {
 			owner.settings = nil
 		}
 	})
+	s.window.OnCloseRequest(s.shouldClose)
 
 	root := s.window.RootView()
 	root.AddSubview(titleLabel(26, 22, 420, 30, tr("settings.window_title")))
@@ -183,7 +187,7 @@ func (s *settingsWindow) build(draft settingsDraft) {
 	root.AddSubview(s.startFirst)
 	root.AddSubview(mutedLabel(50, 348, 518, 38, tr("settings.behavior_hint")))
 
-	root.AddSubview(button(layout.Cancel.X, layout.Cancel.Y, layout.Cancel.Width, layout.Cancel.Height, tr("button.cancel"), "settings.cancel", s.close))
+	root.AddSubview(button(layout.Cancel.X, layout.Cancel.Y, layout.Cancel.Width, layout.Cancel.Height, tr("button.cancel"), "settings.cancel", s.requestClose))
 	root.AddSubview(primaryButton(layout.Save.X, layout.Save.Y, layout.Save.Width, layout.Save.Height, tr("button.save"), "settings.save", s.save))
 	s.window.Show()
 }
@@ -211,6 +215,15 @@ func (s *settingsWindow) draft() (settingsDraft, error) {
 
 func (s *settingsWindow) save() {
 	draft, err := s.draft()
+	oldLanguage := locales.CurrentLanguage().LanguageTag()
+	if err == nil && oldLanguage != draft.Language && s.owner != nil && s.owner.editor != nil && s.owner.editor.window != nil {
+		// A locale change reconstructs native windows. Never let that owner-driven
+		// teardown bypass an unsaved connection draft: require the editor's normal
+		// close policy first, then let the user press Save again after resolving it.
+		if !s.owner.editor.window.RequestClose() {
+			return
+		}
+	}
 	if err == nil {
 		err = persistSettingsDraft(draft)
 	}
@@ -222,7 +235,6 @@ func (s *settingsWindow) save() {
 		return
 	}
 
-	oldLanguage := locales.CurrentLanguage().LanguageTag()
 	s.close()
 	if s.owner == nil {
 		return
@@ -240,6 +252,25 @@ func (s *settingsWindow) close() {
 		return
 	}
 	s.window.Close()
+}
+
+func (s *settingsWindow) shouldClose() bool {
+	if s == nil || s.window == nil {
+		return true
+	}
+	draft, err := s.draft()
+	dirty := err != nil
+	if err == nil {
+		dirty = settingsDraftChanged(s.initial, draft)
+	}
+	return s.closing.handle(s.window, "settings", dirty)
+}
+
+func (s *settingsWindow) requestClose() {
+	if s == nil || s.window == nil {
+		return
+	}
+	s.window.RequestClose()
 }
 
 func (a *finalShellApp) rebuildForLanguage(language locales.Language) {

@@ -98,6 +98,8 @@ type connectionEditor struct {
 	owner   *finalShellApp
 	window  *uikit.UIWindow
 	profile connectionProfile
+	initial connectionEditorDraft
+	closing unsavedCloseController
 
 	name       *uikit.Input
 	group      *uikit.Input
@@ -166,6 +168,7 @@ func (e *connectionEditor) build() {
 			e.owner.editor = nil
 		}
 	})
+	e.window.OnCloseRequest(e.shouldClose)
 
 	root := e.window.RootView()
 	root.AddSubview(titleLabel(28, 22, 500, 30, title))
@@ -218,8 +221,9 @@ func (e *connectionEditor) build() {
 	e.workingDir.SetText(e.profile.WorkingDir)
 	e.privateKey.SetText(e.profile.PrivateKey)
 	e.applyFieldPolicy(typeOptions[selectedType].Type)
+	e.initial = connectionEditorDraftForProfile(e.profile)
 
-	root.AddSubview(button(layout.Cancel.X, layout.Cancel.Y, layout.Cancel.Width, layout.Cancel.Height, tr("button.cancel"), "connection_editor.cancel", e.close))
+	root.AddSubview(button(layout.Cancel.X, layout.Cancel.Y, layout.Cancel.Width, layout.Cancel.Height, tr("button.cancel"), "connection_editor.cancel", e.requestClose))
 	root.AddSubview(primaryButton(layout.Save.X, layout.Save.Y, layout.Save.Width, layout.Save.Height, tr("button.save"), "connection_editor.save", e.save))
 	e.window.Show()
 	if raw := e.name.View().Raw(); raw != nil {
@@ -334,4 +338,35 @@ func (e *connectionEditor) close() {
 		return
 	}
 	e.window.Close()
+}
+
+func connectionEditorDraftForProfile(profile connectionProfile) connectionEditorDraft {
+	port := ""
+	if profile.Port > 0 {
+		port = strconv.Itoa(profile.Port)
+	}
+	return connectionEditorDraft{
+		Name: profile.Name, Group: profile.Group, Type: string(profile.Type),
+		Host: profile.Host, Port: port, Username: profile.Username,
+		WorkingDir: profile.WorkingDir, PrivateKey: profile.PrivateKey,
+	}
+}
+
+func (e *connectionEditor) shouldClose() bool {
+	if e == nil || e.window == nil {
+		return true
+	}
+	draft, err := e.draft()
+	dirty := err != nil
+	if err == nil {
+		dirty = connectionEditorDraftChanged(e.initial, draft, e.password.Text())
+	}
+	return e.closing.handle(e.window, "connection", dirty)
+}
+
+func (e *connectionEditor) requestClose() {
+	if e == nil || e.window == nil {
+		return
+	}
+	e.window.RequestClose()
 }
