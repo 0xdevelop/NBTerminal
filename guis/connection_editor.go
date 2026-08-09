@@ -95,11 +95,12 @@ func (d connectionEditorDraft) Profile(base connectionProfile, password string) 
 }
 
 type connectionEditor struct {
-	owner   *finalShellApp
-	window  *uikit.UIWindow
-	profile connectionProfile
-	initial connectionEditorDraft
-	closing unsavedCloseController
+	owner              *finalShellApp
+	window             *uikit.UIWindow
+	profile            connectionProfile
+	initial            connectionEditorDraft
+	closing            unsavedCloseController
+	pendingReplacement *connectionProfile
 
 	name       *uikit.Input
 	group      *uikit.Input
@@ -117,6 +118,10 @@ func (a *finalShellApp) openConnectionEditor(profile connectionProfile) {
 		return
 	}
 	if a.editor != nil && a.editor.window != nil && !a.editor.window.IsClosed() {
+		if a.editor.queueReplacement(profile) {
+			a.editor.window.RequestClose()
+			return
+		}
 		a.editor.window.Show()
 		if raw := a.editor.window.Raw(); raw != nil {
 			raw.TakeFocus()
@@ -163,9 +168,15 @@ func (e *connectionEditor) build() {
 	}
 	e.window.RootView().SetAutomationID("connection_editor.window").SetAutomationRole("window").SetAutomationName(title)
 	e.window.OnClose(func() {
+		replacement, replace := e.takePendingReplacement()
 		e.window.RootView().SetAutomationID("")
 		if e.owner != nil && e.owner.editor == e {
 			e.owner.editor = nil
+		}
+		if replace && e.owner != nil {
+			// Build the replacement on the next native event-loop turn rather
+			// than constructing a top-level window inside FLTK's close callback.
+			fltk_bridge.AddTimeout(0, func() { e.owner.openConnectionEditor(replacement) })
 		}
 	})
 	e.window.OnCloseRequest(e.shouldClose)
@@ -361,7 +372,7 @@ func (e *connectionEditor) shouldClose() bool {
 	if err == nil {
 		dirty = connectionEditorDraftChanged(e.initial, draft, e.password.Text())
 	}
-	return e.closing.handle(e.window, "connection", dirty)
+	return e.closing.handle(e.window, "connection", dirty, e.cancelPendingReplacement)
 }
 
 func (e *connectionEditor) requestClose() {
@@ -369,4 +380,31 @@ func (e *connectionEditor) requestClose() {
 		return
 	}
 	e.window.RequestClose()
+}
+
+// queueReplacement keeps one native editor window authoritative. Reopening the
+// same profile only focuses its current draft; choosing another row first runs
+// the normal close policy, then reconstructs the editor for the new target.
+func (e *connectionEditor) queueReplacement(profile connectionProfile) bool {
+	if e == nil || profile.ID == e.profile.ID {
+		return false
+	}
+	copy := profile
+	e.pendingReplacement = &copy
+	return true
+}
+
+func (e *connectionEditor) cancelPendingReplacement() {
+	if e != nil {
+		e.pendingReplacement = nil
+	}
+}
+
+func (e *connectionEditor) takePendingReplacement() (connectionProfile, bool) {
+	if e == nil || e.pendingReplacement == nil {
+		return connectionProfile{}, false
+	}
+	profile := *e.pendingReplacement
+	e.pendingReplacement = nil
+	return profile, true
 }

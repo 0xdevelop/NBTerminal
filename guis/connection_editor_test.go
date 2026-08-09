@@ -91,3 +91,36 @@ func TestConnectionEditorTypeOptionsStayCanonicalAcrossLocalizedLabels(t *testin
 		t.Fatalf("connection type labels must be visible: %#v", options)
 	}
 }
+
+func TestConnectionEditorReplacementSeparatesFocusFromTargetSwitch(t *testing.T) {
+	current := &connectionEditor{profile: connectionProfile{ID: "alpha"}}
+	if current.queueReplacement(connectionProfile{ID: "alpha", Name: "refreshed copy"}) {
+		t.Fatal("opening the current profile should focus the existing editor, not replace its draft")
+	}
+	if current.pendingReplacement != nil {
+		t.Fatalf("same-target focus queued a replacement: %#v", current.pendingReplacement)
+	}
+
+	next := connectionProfile{ID: "beta", Name: "Beta"}
+	if !current.queueReplacement(next) {
+		t.Fatal("opening another profile should request an explicit editor target switch")
+	}
+	got, ok := current.takePendingReplacement()
+	if !ok || got.ID != next.ID || got.Name != next.Name {
+		t.Fatalf("pending replacement = (%#v, %v), want %#v", got, ok, next)
+	}
+	if _, ok := current.takePendingReplacement(); ok {
+		t.Fatal("replacement must be consumed exactly once")
+	}
+}
+
+func TestConnectionEditorReplacementCanBeCancelledWhenDraftIsKept(t *testing.T) {
+	editor := &connectionEditor{profile: connectionProfile{ID: "alpha"}}
+	if !editor.queueReplacement(connectionProfile{ID: "beta"}) {
+		t.Fatal("different target was not queued")
+	}
+	editor.cancelPendingReplacement()
+	if _, ok := editor.takePendingReplacement(); ok {
+		t.Fatal("Keep Editing must cancel the queued target switch")
+	}
+}

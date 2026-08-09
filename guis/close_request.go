@@ -40,7 +40,7 @@ type unsavedCloseController struct {
 // handle defers the native prompt out of the triggering release/close callback.
 // It always vetoes the original request while a dirty draft is being reviewed;
 // an explicit Discard then uses owner Close to bypass the request policy.
-func (c *unsavedCloseController) handle(window *uikit.UIWindow, context string, dirty bool) bool {
+func (c *unsavedCloseController) handle(window *uikit.UIWindow, context string, dirty bool, onKeepEditing func()) bool {
 	if window == nil || window.IsClosed() || !dirty {
 		return true
 	}
@@ -55,6 +55,8 @@ func (c *unsavedCloseController) handle(window *uikit.UIWindow, context string, 
 		}
 		if confirmDiscardUnsaved(unsavedChangesPromptFor(context), uikit.TitledChoice) {
 			window.Close()
+		} else if onKeepEditing != nil {
+			onKeepEditing()
 		}
 	})
 	return false

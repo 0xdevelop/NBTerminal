@@ -263,7 +263,7 @@ func (s *settingsWindow) shouldClose() bool {
 	if err == nil {
 		dirty = settingsDraftChanged(s.initial, draft)
 	}
-	return s.closing.handle(s.window, "settings", dirty)
+	return s.closing.handle(s.window, "settings", dirty, nil)
 }
 
 func (s *settingsWindow) requestClose() {
