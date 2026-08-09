@@ -1572,15 +1572,32 @@ func (a *finalShellApp) deleteProfile() {
 	// Defer to the next GUI turn so deletion always requires a second, explicit
 	// action in the confirmation window.
 	fltk_bridge.AddTimeout(0, func() {
-		if showConnectionDeleteConfirmation(profile) {
-			a.deleteProfileConfirmed(profile)
-		}
+		a.prepareProfileDeletion(profile, func() {
+			if showConnectionDeleteConfirmation(profile) {
+				a.deleteProfileConfirmed(profile)
+			}
+		})
 	})
 }
 
+// prepareProfileDeletion prevents a non-modal editor from resurrecting the
+// profile after deletion. The editor's own unsaved-draft policy remains
+// authoritative: Keep Editing cancels deletion, while a clean close or explicit
+// Discard advances to the destructive confirmation on a later GUI turn.
+func (a *finalShellApp) prepareProfileDeletion(profile connectionProfile, confirm func()) {
+	if a == nil || confirm == nil {
+		return
+	}
+	if a.editor != nil && a.editor.window != nil && !a.editor.window.IsClosed() &&
+		a.editor.queueAfterCloseForProfile(profile.ID, confirm) {
+		a.editor.window.RequestClose()
+		return
+	}
+	confirm()
+}
+
 func (a *finalShellApp) deleteProfileConfirmed(expected connectionProfile) {
-	selected, ok := a.selectedProfile()
-	if !ok || selected.ID != expected.ID {
+	if !canDeleteSelectedProfile(a.rows, a.idx, expected.ID) {
 		return
 	}
 	removed, err := a.removeSelectedProfile()

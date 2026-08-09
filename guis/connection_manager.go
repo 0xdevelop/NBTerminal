@@ -141,6 +141,7 @@ func (m *connectionManagerWindow) build() {
 	}
 
 	m.status = mutedLabel(layout.Status.X, layout.Status.Y, layout.Status.Width, layout.Status.Height, tr("manager.selection_hint"))
+	styleDynamicLabel(m.status)
 	m.status.View().SetAutomationID("connection_manager.status")
 	root.AddSubview(m.status)
 	checkStyle := checkbox.DefaultCheckboxStyle()
@@ -399,14 +400,19 @@ func (m *connectionManagerWindow) deleteSelected() {
 		return
 	}
 	fltk_bridge.AddTimeout(0, func() {
-		if showConnectionDeleteConfirmation(profile) {
-			m.deleteProfileConfirmed(profile)
-		}
+		m.owner.prepareProfileDeletion(profile, func() {
+			if showConnectionDeleteConfirmation(profile) {
+				m.deleteProfileConfirmed(profile)
+			}
+		})
 	})
 }
 
 func (m *connectionManagerWindow) deleteProfileConfirmed(profile connectionProfile) {
 	if m == nil || m.owner == nil || m.owner.store == nil {
+		return
+	}
+	if !canDeleteSelectedProfile(m.rows, m.idx, profile.ID) {
 		return
 	}
 	nextAll := removeProfileByID(append([]connectionProfile(nil), m.owner.allRows...), profile.ID)
@@ -434,6 +440,10 @@ func (m *connectionManagerWindow) deleteProfileConfirmed(profile connectionProfi
 	}
 	m.owner.setStatus(trf("status.deleted", profile.Name))
 	m.reload(activeID)
+}
+
+func canDeleteSelectedProfile(rows []connectionProfile, selected int, expectedID string) bool {
+	return strings.TrimSpace(expectedID) != "" && selected >= 0 && selected < len(rows) && rows[selected].ID == expectedID
 }
 
 func (m *connectionManagerWindow) drawCell(ctx fltk_bridge.TableContext, row, col, x, y, w, h int) {

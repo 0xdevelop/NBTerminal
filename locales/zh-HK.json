@@ -128,6 +128,7 @@
   "editor.type_ssh": "SSH",
   "editor.invalid_port": "SSH 連接埠必須是 1 到 65535 的整數",
   "editor.controls_unavailable": "連線編輯控制項不可用",
+  "editor.profile_deleted": "此已儲存連線在編輯器開啟期間被刪除。請重新開啟連線管理器，以免恢復過時資料。",
   "terminal.title": "終端機 / 指令控制台",
   "terminal.subtitle": "執行診斷並查看指令歷史。",
   "terminal.output_name": "終端機輸出",

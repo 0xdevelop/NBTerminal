@@ -128,6 +128,7 @@
   "editor.type_ssh": "SSH",
   "editor.invalid_port": "SSH port must be an integer from 1 to 65535",
   "editor.controls_unavailable": "Connection editor controls are unavailable",
+  "editor.profile_deleted": "This saved connection was deleted while the editor was open. Reopen the connection manager instead of recreating stale data.",
   "terminal.title": "Terminal / Command Console",
   "terminal.subtitle": "Run diagnostics and review command history.",
   "terminal.output_name": "Terminal output",

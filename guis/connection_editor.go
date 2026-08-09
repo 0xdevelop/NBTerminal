@@ -98,9 +98,11 @@ type connectionEditor struct {
 	owner              *finalShellApp
 	window             *uikit.UIWindow
 	profile            connectionProfile
+	creating           bool
 	initial            connectionEditorDraft
 	closing            unsavedCloseController
 	pendingReplacement *connectionProfile
+	pendingAfterClose  func()
 
 	name       *uikit.Input
 	group      *uikit.Input
@@ -128,7 +130,7 @@ func (a *finalShellApp) openConnectionEditor(profile connectionProfile) {
 		}
 		return
 	}
-	e := &connectionEditor{owner: a, profile: profile}
+	e := &connectionEditor{owner: a, profile: profile, creating: indexProfileByID(a.allRows, profile.ID) < 0}
 	a.editor = e
 	e.build()
 }
@@ -156,7 +158,7 @@ func (e *connectionEditor) build() {
 		windowRect = rect(raw.XRoot()+(raw.W()-connectionEditorWidth)/2, raw.YRoot()+(raw.H()-connectionEditorHeight)/2, connectionEditorWidth, connectionEditorHeight)
 	}
 	title := tr("editor.title_edit")
-	if indexProfileByID(e.owner.allRows, e.profile.ID) < 0 {
+	if e.creating {
 		title = tr("editor.title_new")
 	}
 	e.window = uikit.NewWindowWithRect(windowRect, title)
@@ -169,11 +171,14 @@ func (e *connectionEditor) build() {
 	e.window.RootView().SetAutomationID("connection_editor.window").SetAutomationRole("window").SetAutomationName(title)
 	e.window.OnClose(func() {
 		replacement, replace := e.takePendingReplacement()
+		afterClose := e.takePendingAfterClose()
 		e.window.RootView().SetAutomationID("")
 		if e.owner != nil && e.owner.editor == e {
 			e.owner.editor = nil
 		}
-		if replace && e.owner != nil {
+		if afterClose != nil {
+			fltk_bridge.AddTimeout(0, afterClose)
+		} else if replace && e.owner != nil {
 			// Build the replacement on the next native event-loop turn rather
 			// than constructing a top-level window inside FLTK's close callback.
 			fltk_bridge.AddTimeout(0, func() { e.owner.openConnectionEditor(replacement) })
@@ -316,7 +321,11 @@ func (e *connectionEditor) save() {
 		profile, err = draft.Profile(e.profile, e.password.Text())
 	}
 	if err == nil && e.owner != nil {
-		err = e.owner.persistProfile(profile)
+		if !canPersistEditorProfile(e.owner.allRows, profile.ID, e.creating) {
+			err = errors.New(tr("editor.profile_deleted"))
+		} else {
+			err = e.owner.persistProfile(profile)
+		}
 	}
 	if err != nil {
 		if e.owner != nil {
@@ -372,7 +381,7 @@ func (e *connectionEditor) shouldClose() bool {
 	if err == nil {
 		dirty = connectionEditorDraftChanged(e.initial, draft, e.password.Text())
 	}
-	return e.closing.handle(e.window, "connection", dirty, e.cancelPendingReplacement)
+	return e.closing.handle(e.window, "connection", dirty, e.cancelPendingCloseWork)
 }
 
 func (e *connectionEditor) requestClose() {
@@ -398,6 +407,39 @@ func (e *connectionEditor) cancelPendingReplacement() {
 	if e != nil {
 		e.pendingReplacement = nil
 	}
+}
+
+func (e *connectionEditor) cancelPendingCloseWork() {
+	if e == nil {
+		return
+	}
+	e.cancelPendingReplacement()
+	e.pendingAfterClose = nil
+}
+
+// queueAfterCloseForProfile serializes a mutation that would invalidate the
+// editor's saved target. A dirty draft gets the normal Keep Editing/Discard
+// policy first; only an accepted close may continue to the destructive prompt.
+func (e *connectionEditor) queueAfterCloseForProfile(profileID string, action func()) bool {
+	if e == nil || action == nil || strings.TrimSpace(profileID) == "" || e.profile.ID != profileID {
+		return false
+	}
+	e.pendingReplacement = nil
+	e.pendingAfterClose = action
+	return true
+}
+
+func (e *connectionEditor) takePendingAfterClose() func() {
+	if e == nil {
+		return nil
+	}
+	action := e.pendingAfterClose
+	e.pendingAfterClose = nil
+	return action
+}
+
+func canPersistEditorProfile(rows []connectionProfile, profileID string, creating bool) bool {
+	return creating || indexProfileByID(rows, profileID) >= 0
 }
 
 func (e *connectionEditor) takePendingReplacement() (connectionProfile, bool) {

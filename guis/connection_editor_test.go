@@ -124,3 +124,47 @@ func TestConnectionEditorReplacementCanBeCancelledWhenDraftIsKept(t *testing.T) 
 		t.Fatal("Keep Editing must cancel the queued target switch")
 	}
 }
+
+func TestConnectionEditorCannotResurrectDeletedExistingProfile(t *testing.T) {
+	rows := []connectionProfile{{ID: "remaining"}}
+	if canPersistEditorProfile(rows, "deleted", false) {
+		t.Fatal("an editor for a deleted saved profile must not recreate it")
+	}
+	if !canPersistEditorProfile(rows, "remaining", false) {
+		t.Fatal("an editor for an existing saved profile should remain saveable")
+	}
+	if !canPersistEditorProfile(rows, "new-profile", true) {
+		t.Fatal("a new-profile editor should be allowed to create its profile")
+	}
+}
+
+func TestConnectionEditorSerializesTargetDeletionAfterAcceptedClose(t *testing.T) {
+	editor := &connectionEditor{profile: connectionProfile{ID: "alpha"}}
+	if !editor.queueReplacement(connectionProfile{ID: "beta"}) {
+		t.Fatal("test setup did not queue replacement")
+	}
+	called := false
+	if !editor.queueAfterCloseForProfile("alpha", func() { called = true }) {
+		t.Fatal("matching deletion target was not queued")
+	}
+	if editor.pendingReplacement != nil {
+		t.Fatal("destructive target action must supersede a stale editor replacement")
+	}
+	action := editor.takePendingAfterClose()
+	if action == nil {
+		t.Fatal("accepted close lost its pending deletion action")
+	}
+	action()
+	if !called || editor.takePendingAfterClose() != nil {
+		t.Fatal("pending deletion action must run and be consumed exactly once")
+	}
+	if editor.queueAfterCloseForProfile("beta", func() {}) {
+		t.Fatal("another profile must not close this editor")
+	}
+
+	editor.queueAfterCloseForProfile("alpha", func() {})
+	editor.cancelPendingCloseWork()
+	if editor.takePendingAfterClose() != nil {
+		t.Fatal("Keep Editing must cancel pending deletion")
+	}
+}

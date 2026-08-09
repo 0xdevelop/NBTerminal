@@ -44,6 +44,19 @@ func TestConnectionDeleteConfirmationIsLocalizedAndDefaultsToCancel(t *testing.T
 	}
 }
 
+func TestConnectionDeletionRevalidatesStableSelection(t *testing.T) {
+	rows := []connectionProfile{{ID: "alpha"}, {ID: "beta"}}
+	if !canDeleteSelectedProfile(rows, 0, "alpha") {
+		t.Fatal("unchanged selected profile should remain deletable")
+	}
+	if canDeleteSelectedProfile(rows, 1, "alpha") {
+		t.Fatal("selection changed while confirmation was open; deletion must fail closed")
+	}
+	if canDeleteSelectedProfile(rows, -1, "alpha") || canDeleteSelectedProfile(rows, 0, "") {
+		t.Fatal("missing selection or target ID must fail closed")
+	}
+}
+
 func TestConnectionManagerGroupOptionsIncludeHierarchicalParents(t *testing.T) {
 	rows := []connectionProfile{
 		{ID: "prod-2", Group: " Infrastructure / Production / Web "},

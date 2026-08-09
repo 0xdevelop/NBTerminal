@@ -128,6 +128,7 @@
   "editor.type_ssh": "SSH",
   "editor.invalid_port": "SSH 端口必须是 1 到 65535 的整数",
   "editor.controls_unavailable": "连接编辑控件不可用",
+  "editor.profile_deleted": "此已保存连接在编辑器打开期间被删除。请重新打开连接管理器，以免恢复过时数据。",
   "terminal.title": "终端 / 命令控制台",
   "terminal.subtitle": "运行诊断并查看命令历史。",
   "terminal.output_name": "终端输出",
