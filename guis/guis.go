@@ -893,10 +893,8 @@ func (a *finalShellApp) build() {
 	a.cmdInput = uikit.NewUITextView(rect(terminalLayout.Command.X, terminalLayout.Command.Y, terminalLayout.Command.Width, terminalLayout.Command.Height))
 	a.cmdInput.SetAutomationID("terminal.command").SetAutomationName(tr("terminal.command"))
 	a.cmdInput.SetWrapNone()
-	a.cmdInput.SetFontSize(nativeTypography.Terminal)
-	a.cmdInput.SetTextColor(uint(themeColor(51, 65, 85)))
+	styleCommandInput(a.cmdInput)
 	a.cmdInput.SetFallbackFont(fltk_bridge.FREE_FONT, isEmojiRune)
-	a.cmdInput.SetBackgroundColor(uint(themeColor(248, 250, 252)))
 	a.cmdInput.OnKey(func(event uikit.KeyEvent) bool {
 		if event.Key != fltk_bridge.ENTER_KEY {
 			return false
@@ -1284,13 +1282,25 @@ func styleInput(in *uikit.Input) {
 	if in == nil {
 		return
 	}
-	// fltk2go v0.0.42 styles the editable glyphs and native caret rather than
+	// fltk2go styles the editable glyphs and native caret rather than
 	// only the external FLTK label. Inputs can therefore share the semantic dark
 	// surface without sacrificing UTF-8 text or keyboard-focus visibility.
 	in.SetFont(fltk_bridge.HELVETICA)
 	in.SetFontSize(nativeTypography.Body)
 	in.SetTextColor(uint(tokenColor(modernTheme.foreground)))
 	in.SetCursorColor(uint(tokenColor(modernTheme.primary)))
+	in.SetBackgroundColor(uint(tokenColor(modernTheme.elevated)))
+}
+
+func styleCommandInput(in *uikit.UITextView) {
+	if in == nil {
+		return
+	}
+	in.SetFont(fltk_bridge.COURIER)
+	in.SetFontSize(nativeTypography.Terminal)
+	in.SetTextColor(uint(tokenColor(modernTheme.foreground)))
+	in.SetCursorColor(uint(tokenColor(modernTheme.primary)))
+	in.SetSelectionColor(uint(tokenColor(modernTheme.selected)))
 	in.SetBackgroundColor(uint(tokenColor(modernTheme.elevated)))
 }
 

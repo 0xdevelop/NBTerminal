@@ -22,6 +22,21 @@ func TestStyleInputUsesNativeDarkTextAndVisibleCaret(t *testing.T) {
 	}
 }
 
+func TestStyleCommandInputUsesNativeDarkTextCaretAndSelection(t *testing.T) {
+	input := uikit.NewUITextView(rect(0, 0, 240, nativeControls.InputHeight))
+	styleCommandInput(input)
+	raw := input.Raw()
+	if raw.TextSize() != nativeTypography.Terminal || raw.TextColor() != tokenColor(modernTheme.foreground) {
+		t.Fatalf("command input text style = size:%d color:%v", raw.TextSize(), raw.TextColor())
+	}
+	if raw.Color() != tokenColor(modernTheme.elevated) || raw.CursorColor() != tokenColor(modernTheme.primary) {
+		t.Fatalf("command input surface/caret = background:%v cursor:%v", raw.Color(), raw.CursorColor())
+	}
+	if raw.SelectionColor() != tokenColor(modernTheme.selected) {
+		t.Fatalf("command input selection = %v, want %v", raw.SelectionColor(), tokenColor(modernTheme.selected))
+	}
+}
+
 func TestNativeDesktopDesignTokensMatchProductBaseline(t *testing.T) {
 	if nativeTypography.WindowTitle != 20 || nativeTypography.SectionTitle != 15 ||
 		nativeTypography.Body != 13 || nativeTypography.Supporting != 12 || nativeTypography.Terminal != 14 {
