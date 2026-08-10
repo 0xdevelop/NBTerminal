@@ -1284,11 +1284,14 @@ func styleInput(in *uikit.Input) {
 	if in == nil {
 		return
 	}
+	// fltk2go v0.0.42 styles the editable glyphs and native caret rather than
+	// only the external FLTK label. Inputs can therefore share the semantic dark
+	// surface without sacrificing UTF-8 text or keyboard-focus visibility.
+	in.SetFont(fltk_bridge.HELVETICA)
 	in.SetFontSize(nativeTypography.Body)
-	in.SetTextColor(uint(tokenColor(modernTheme.muted)))
-	// FLTK input text color is not exposed by the current uikit bridge; keep a
-	// high-contrast light input surface so typed UTF-8 text remains readable.
-	in.SetBackgroundColor(uint(themeColor(248, 250, 252)))
+	in.SetTextColor(uint(tokenColor(modernTheme.foreground)))
+	in.SetCursorColor(uint(tokenColor(modernTheme.primary)))
+	in.SetBackgroundColor(uint(tokenColor(modernTheme.elevated)))
 }
 
 func button(x, y, w, h int, title, id string, cb func()) *uikit.UIButton {

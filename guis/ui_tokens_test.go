@@ -1,6 +1,26 @@
 package guis
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/0xdevelop/fltk2go/fltk_bridge"
+	"github.com/0xdevelop/fltk2go/uikit"
+)
+
+func TestStyleInputUsesNativeDarkTextAndVisibleCaret(t *testing.T) {
+	in := uikit.NewInput(0, 0, 240, nativeControls.InputHeight, "")
+	styleInput(in)
+	raw, ok := in.Raw().(*fltk_bridge.Input)
+	if !ok {
+		t.Fatalf("raw input type = %T", in.Raw())
+	}
+	if raw.TextSize() != nativeTypography.Body || raw.TextColor() != tokenColor(modernTheme.foreground) {
+		t.Fatalf("input text style = size:%d color:%v", raw.TextSize(), raw.TextColor())
+	}
+	if raw.Color() != tokenColor(modernTheme.elevated) || raw.CursorColor() != tokenColor(modernTheme.primary) {
+		t.Fatalf("input surface/caret = background:%v cursor:%v", raw.Color(), raw.CursorColor())
+	}
+}
 
 func TestNativeDesktopDesignTokensMatchProductBaseline(t *testing.T) {
 	if nativeTypography.WindowTitle != 20 || nativeTypography.SectionTitle != 15 ||
