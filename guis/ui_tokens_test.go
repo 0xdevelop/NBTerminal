@@ -99,6 +99,62 @@ func TestTerminalPanelLayoutKeepsWideCommandBarOnOneRow(t *testing.T) {
 	}
 }
 
+func TestQuickPanelLayoutPreservesLocalizedDesktopControlsAtMinimumWindow(t *testing.T) {
+	panel := layoutRect{X: 22, Y: 72, Width: 500, Height: 606}
+	layout := quickPanelLayoutFor(panel, nativeControls)
+	if layout.Table.Height < 270 {
+		t.Fatalf("minimum quick-launch table is not usable: %#v", layout.Table)
+	}
+	if layout.Table.Bottom() > layout.SummaryTitle.Y-nativeControls.FieldLabelGap {
+		t.Fatalf("table overlaps selected-connection summary: %#v", layout)
+	}
+	for name, control := range map[string]layoutRect{
+		"search": layout.Search, "find": layout.Find,
+		"new": layout.New, "edit": layout.Edit, "delete": layout.Delete, "test": layout.Test,
+		"connect": layout.Connect,
+	} {
+		if control.X < panel.X || control.X+control.Width > panel.X+panel.Width {
+			t.Fatalf("%s escapes minimum quick panel: control=%#v panel=%#v", name, control, panel)
+		}
+	}
+	if layout.Search.Height != nativeControls.InputHeight || layout.Find.Height != nativeControls.ButtonHeight {
+		t.Fatalf("search row does not preserve semantic heights: %#v", layout)
+	}
+	for name, control := range map[string]layoutRect{
+		"new": layout.New, "edit": layout.Edit, "delete": layout.Delete, "test": layout.Test,
+	} {
+		if control.Height != nativeControls.ButtonHeight || control.Width < 104 {
+			t.Fatalf("%s cannot carry localized desktop text: %#v", name, control)
+		}
+	}
+	if layout.Connect.Height != nativeControls.PrimaryButtonHeight || layout.Connect.Width < 180 {
+		t.Fatalf("primary connect action is undersized: %#v", layout.Connect)
+	}
+	if layout.New.Y == layout.Connect.Y {
+		t.Fatal("minimum quick panel should use separate secondary and primary action rows")
+	}
+}
+
+func TestMainWindowLayoutPreservesHeaderAndWorkspaceAtMinimumSize(t *testing.T) {
+	layout := mainWindowLayoutFor(layoutRect{Width: 1120, Height: 720}, nativeControls)
+	for name, control := range map[string]layoutRect{
+		"manager": layout.Manager, "settings": layout.Settings, "status": layout.Status,
+	} {
+		if control.Height != nativeControls.ButtonHeight {
+			t.Fatalf("%s header control was proportionally crushed: %#v", name, control)
+		}
+		if control.X < 0 || control.X+control.Width > 1120 {
+			t.Fatalf("%s header control escapes minimum window: %#v", name, control)
+		}
+	}
+	if layout.Title.Width < 360 || layout.Status.Width < 300 {
+		t.Fatalf("minimum header text regions are unusable: %#v", layout)
+	}
+	if layout.Workspace != (layoutRect{X: 22, Y: 72, Width: 1076, Height: 606}) {
+		t.Fatalf("minimum workspace = %#v", layout.Workspace)
+	}
+}
+
 func TestSettingsEditorAndManagerLayoutsUseSemanticControlMetrics(t *testing.T) {
 	settings := settingsLayoutFor(nativeControls)
 	if settings.Language.Height != nativeControls.InputHeight || settings.Timeout.Height != nativeControls.InputHeight {

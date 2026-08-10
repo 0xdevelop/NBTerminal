@@ -429,10 +429,24 @@ type finalShellApp struct {
 	table      *uikit.UITableView
 	model      *tableModel
 
+	mainTitle        *uikit.UILabel
+	mainSubtitle     *uikit.UILabel
+	managerButton    *uikit.UIButton
+	settingsButton   *uikit.UIButton
+	quickTitle       *uikit.UILabel
+	quickSubtitle    *uikit.UILabel
+	searchLabel      *uikit.UILabel
 	searchInput      *uikit.Input
+	findButton       *uikit.UIButton
+	summaryTitle     *uikit.UILabel
 	selectedName     *uikit.UILabel
 	selectedDetail   *uikit.UILabel
 	selectedRecent   *uikit.UILabel
+	newButton        *uikit.UIButton
+	editButton       *uikit.UIButton
+	deleteButton     *uikit.UIButton
+	testButton       *uikit.UIButton
+	connectButton    *uikit.UIButton
 	cmdInput         *uikit.UITextView
 	output           *uikit.UITerminalView
 	terminalColumns  int
@@ -692,15 +706,18 @@ func (a *finalShellApp) build() {
 		raw.SetSizeRange(1120, 720, 0, 0, 20, 20, false)
 	}
 	root := a.window.RootView()
+	mainLayout := mainWindowLayoutFor(layoutRect{Width: winW, Height: winH}, nativeControls)
 
-	root.AddSubview(titleLabel(margin, 14, 440, 28, tr("app.title")))
-	root.AddSubview(mutedLabel(margin+2, 38, 520, 22, tr("app.subtitle")))
-	managerButton := button(rightX+18, 16, 174, nativeControls.ButtonHeight, tr("manager.open_compact"), "app.connection_manager", a.openConnectionManager)
-	managerButton.View().SetAutomationName(tr("manager.open"))
-	root.AddSubview(managerButton)
-	settingsButton := button(rightX+204, 16, 124, nativeControls.ButtonHeight, tr("setting.title"), "app.settings", a.openSettings)
-	root.AddSubview(settingsButton)
-	a.status = pillLabel(rightX+342, 16, rightW-342, nativeControls.ButtonHeight, tr("app.ready"))
+	a.mainTitle = titleLabel(mainLayout.Title.X, mainLayout.Title.Y, mainLayout.Title.Width, mainLayout.Title.Height, tr("app.title"))
+	root.AddSubview(a.mainTitle)
+	a.mainSubtitle = mutedLabel(mainLayout.Subtitle.X, mainLayout.Subtitle.Y, mainLayout.Subtitle.Width, mainLayout.Subtitle.Height, tr("app.subtitle"))
+	root.AddSubview(a.mainSubtitle)
+	a.managerButton = button(mainLayout.Manager.X, mainLayout.Manager.Y, mainLayout.Manager.Width, mainLayout.Manager.Height, tr("manager.open_compact"), "app.connection_manager", a.openConnectionManager)
+	a.managerButton.View().SetAutomationName(tr("manager.open"))
+	root.AddSubview(a.managerButton)
+	a.settingsButton = button(mainLayout.Settings.X, mainLayout.Settings.Y, mainLayout.Settings.Width, mainLayout.Settings.Height, tr("setting.title"), "app.settings", a.openSettings)
+	root.AddSubview(a.settingsButton)
+	a.status = pillLabel(mainLayout.Status.X, mainLayout.Status.Y, mainLayout.Status.Width, mainLayout.Status.Height, tr("app.ready"))
 	a.status.View().SetAutomationID("app.status")
 	root.AddSubview(a.status)
 
@@ -720,7 +737,7 @@ func (a *finalShellApp) build() {
 	quickPanel := uikit.NewUIGroup(rect(margin, 72, leftW, 786))
 	quickPanel.SetBackgroundColor(uint(tokenColor(modernTheme.card)))
 	quickPanel.SetAutomationID("connections.quick_panel")
-	quickPanel.Raw().Resizable(quickPanel.Raw())
+	quickPanel.Raw().Resizable(nil)
 	a.quickPanel = quickPanel
 	rightPanel := uikit.NewUIGroup(rect(rightX, 72, rightW, 786))
 	rightPanel.SetBackgroundColor(uint(tokenColor(modernTheme.card)))
@@ -729,6 +746,7 @@ func (a *finalShellApp) build() {
 	// proportional scaling makes localized desktop buttons unreadable at 1120×720.
 	rightPanel.Raw().Resizable(nil)
 	a.terminalPanel = rightPanel
+	quickLayout := quickPanelLayoutFor(layoutRect{X: margin, Y: 72, Width: leftW, Height: 786}, nativeControls)
 	terminalLayout := terminalPanelLayoutFor(layoutRect{X: rightX, Y: 72, Width: rightW, Height: 786}, nativeControls)
 	a.workspace.SetLeftView(left)
 	a.workspace.SetRightView(rightPanel)
@@ -739,10 +757,13 @@ func (a *finalShellApp) build() {
 	left.Raw().Resize(margin, 72, leftW, 786)
 	rightPanel.Raw().Resize(rightX, 72, rightW, 786)
 	root.AddSubview(a.workspace)
-	quickPanel.AddSubview(sectionTitle(margin+18, 86, 260, 24, tr("quick.title")))
-	quickPanel.AddSubview(mutedLabel(margin+18, 110, 430, 18, tr("quick.subtitle")))
-	quickPanel.AddSubview(mutedLabel(margin+18, 132, 70, 18, tr("connections.search")))
-	a.searchInput = inputNoLabel(margin+82, 124, leftW-194, nativeControls.InputHeight, "connections.search", tr("connections.search_placeholder"))
+	a.quickTitle = sectionTitle(quickLayout.Title.X, quickLayout.Title.Y, quickLayout.Title.Width, quickLayout.Title.Height, tr("quick.title"))
+	quickPanel.AddSubview(a.quickTitle)
+	a.quickSubtitle = mutedLabel(quickLayout.Subtitle.X, quickLayout.Subtitle.Y, quickLayout.Subtitle.Width, quickLayout.Subtitle.Height, tr("quick.subtitle"))
+	quickPanel.AddSubview(a.quickSubtitle)
+	a.searchLabel = mutedLabel(quickLayout.SearchLabel.X, quickLayout.SearchLabel.Y, quickLayout.SearchLabel.Width, quickLayout.SearchLabel.Height, tr("connections.search"))
+	quickPanel.AddSubview(a.searchLabel)
+	a.searchInput = inputNoLabel(quickLayout.Search.X, quickLayout.Search.Y, quickLayout.Search.Width, quickLayout.Search.Height, "connections.search", tr("connections.search_placeholder"))
 	a.searchInput.OnChange(a.jumpToSearchMatch)
 	a.searchInput.View().On(fltk_bridge.KEYDOWN, func(fltk_bridge.Event) bool {
 		switch fltk_bridge.EventKey() {
@@ -763,10 +784,10 @@ func (a *finalShellApp) build() {
 		return false
 	})
 	quickPanel.AddSubview(a.searchInput)
-	findBtn := button(margin+390, 124, 86, nativeControls.ButtonHeight, tr("connections.find"), "connections.find", a.jumpToSearchMatch)
-	quickPanel.AddSubview(findBtn)
+	a.findButton = button(quickLayout.Find.X, quickLayout.Find.Y, quickLayout.Find.Width, quickLayout.Find.Height, tr("connections.find"), "connections.find", a.jumpToSearchMatch)
+	quickPanel.AddSubview(a.findButton)
 
-	tv, err := uikit.NewUITableView(margin+14, 166, leftW-28, 478)
+	tv, err := uikit.NewUITableView(quickLayout.Table.X, quickLayout.Table.Y, quickLayout.Table.Width, quickLayout.Table.Height)
 	if err == nil {
 		a.table = tv
 		a.table.SetHeaderHeight(nativeControls.TableHeaderHeight)
@@ -794,31 +815,33 @@ func (a *finalShellApp) build() {
 		quickPanel.AddSubview(a.table)
 	}
 
-	quickPanel.AddSubview(sectionTitle(margin+18, 666, 260, 22, tr("connections.selected_summary")))
-	a.selectedName = label(margin+18, 694, leftW-36, 24, "")
+	a.summaryTitle = sectionTitle(quickLayout.SummaryTitle.X, quickLayout.SummaryTitle.Y, quickLayout.SummaryTitle.Width, quickLayout.SummaryTitle.Height, tr("connections.selected_summary"))
+	quickPanel.AddSubview(a.summaryTitle)
+	a.selectedName = label(quickLayout.SelectedName.X, quickLayout.SelectedName.Y, quickLayout.SelectedName.Width, quickLayout.SelectedName.Height, "")
 	a.selectedName.SetFontSize(nativeTypography.SectionTitle)
 	styleDynamicLabel(a.selectedName)
 	a.selectedName.View().SetAutomationID("connections.selected_name")
 	quickPanel.AddSubview(a.selectedName)
-	a.selectedDetail = mutedLabel(margin+18, 722, leftW-36, 22, "")
+	a.selectedDetail = mutedLabel(quickLayout.SelectedDetail.X, quickLayout.SelectedDetail.Y, quickLayout.SelectedDetail.Width, quickLayout.SelectedDetail.Height, "")
 	styleDynamicLabel(a.selectedDetail)
 	a.selectedDetail.View().SetAutomationID("connections.selected_detail")
 	quickPanel.AddSubview(a.selectedDetail)
-	a.selectedRecent = mutedLabel(margin+18, 748, leftW-36, 22, "")
+	a.selectedRecent = mutedLabel(quickLayout.SelectedRecent.X, quickLayout.SelectedRecent.Y, quickLayout.SelectedRecent.Width, quickLayout.SelectedRecent.Height, "")
 	styleDynamicLabel(a.selectedRecent)
 	a.selectedRecent.View().SetAutomationID("connections.selected_recent")
 	quickPanel.AddSubview(a.selectedRecent)
 
-	addBtn := button(margin+14, 816, 82, nativeControls.ButtonHeight, tr("action.new"), "action.new", a.newProfile)
-	quickPanel.AddSubview(addBtn)
-	editBtn := button(margin+106, 816, 82, nativeControls.ButtonHeight, tr("action.edit"), "action.edit", a.editSelectedProfile)
-	quickPanel.AddSubview(editBtn)
-	deleteBtn := button(margin+198, 816, 82, nativeControls.ButtonHeight, tr("action.delete"), "action.delete", a.deleteProfile)
-	quickPanel.AddSubview(deleteBtn)
-	testBtn := button(margin+290, 816, 82, nativeControls.ButtonHeight, tr("action.test"), "action.test", a.testConnection)
-	quickPanel.AddSubview(testBtn)
-	connectBtn := primaryButton(margin+382, 814, 118, nativeControls.PrimaryButtonHeight, tr("action.connect"), "action.connect", a.connectSelected)
-	quickPanel.AddSubview(connectBtn)
+	a.newButton = button(quickLayout.New.X, quickLayout.New.Y, quickLayout.New.Width, quickLayout.New.Height, tr("action.new"), "action.new", a.newProfile)
+	quickPanel.AddSubview(a.newButton)
+	a.editButton = button(quickLayout.Edit.X, quickLayout.Edit.Y, quickLayout.Edit.Width, quickLayout.Edit.Height, tr("action.edit"), "action.edit", a.editSelectedProfile)
+	quickPanel.AddSubview(a.editButton)
+	a.deleteButton = button(quickLayout.Delete.X, quickLayout.Delete.Y, quickLayout.Delete.Width, quickLayout.Delete.Height, tr("action.delete"), "action.delete", a.deleteProfile)
+	quickPanel.AddSubview(a.deleteButton)
+	a.testButton = button(quickLayout.Test.X, quickLayout.Test.Y, quickLayout.Test.Width, quickLayout.Test.Height, tr("action.test"), "action.test", a.testConnection)
+	quickPanel.AddSubview(a.testButton)
+	a.connectButton = primaryButton(quickLayout.Connect.X, quickLayout.Connect.Y, quickLayout.Connect.Width, quickLayout.Connect.Height, tr("action.connect"), "action.connect", a.connectSelected)
+	quickPanel.AddSubview(a.connectButton)
+	quickPanel.Raw().SetResizeHandler(a.layoutQuickPanel)
 	left.AddSubview(quickPanel)
 	a.buildMonitorSidebar(left, margin, leftW)
 
@@ -918,6 +941,7 @@ func (a *finalShellApp) build() {
 	}
 	a.workspace.OnPositionChanged(a.workspacePositionChanged)
 	a.updateCommandControls()
+	a.window.Raw().SetResizeHandler(a.layoutMainWindow)
 
 	a.window.Show()
 	if len(a.rows) > 0 {
@@ -1089,6 +1113,93 @@ func commandBarLayout(rightX, rightW int) commandBarSpec {
 		stop:          rect(layout.Stop.X, layout.Stop.Y, layout.Stop.Width, layout.Stop.Height),
 		run:           rect(layout.Run.X, layout.Run.Y, layout.Run.Width, layout.Run.Height),
 		commandLabelY: layout.CommandLabel.Y,
+	}
+}
+
+func (a *finalShellApp) layoutMainWindow() {
+	if a == nil || a.window == nil || a.window.Raw() == nil {
+		return
+	}
+	raw := a.window.Raw()
+	layout := mainWindowLayoutFor(layoutRect{Width: raw.W(), Height: raw.H()}, nativeControls)
+	if a.mainTitle != nil && a.mainTitle.Raw() != nil {
+		a.mainTitle.Raw().Resize(layout.Title.X, layout.Title.Y, layout.Title.Width, layout.Title.Height)
+	}
+	if a.mainSubtitle != nil && a.mainSubtitle.Raw() != nil {
+		a.mainSubtitle.Raw().Resize(layout.Subtitle.X, layout.Subtitle.Y, layout.Subtitle.Width, layout.Subtitle.Height)
+	}
+	if a.managerButton != nil && a.managerButton.Raw() != nil {
+		a.managerButton.Raw().Resize(layout.Manager.X, layout.Manager.Y, layout.Manager.Width, layout.Manager.Height)
+	}
+	if a.settingsButton != nil && a.settingsButton.Raw() != nil {
+		a.settingsButton.Raw().Resize(layout.Settings.X, layout.Settings.Y, layout.Settings.Width, layout.Settings.Height)
+	}
+	if a.status != nil && a.status.Raw() != nil {
+		a.status.Raw().Resize(layout.Status.X, layout.Status.Y, layout.Status.Width, layout.Status.Height)
+	}
+	if a.workspace != nil && a.workspace.View() != nil {
+		resizeNativeWidget(a.workspace.View().Raw(), layout.Workspace)
+	}
+	raw.Redraw()
+}
+
+func (a *finalShellApp) layoutQuickPanel() {
+	if a == nil || a.quickPanel == nil || a.quickPanel.Raw() == nil {
+		return
+	}
+	raw := a.quickPanel.Raw()
+	layout := quickPanelLayoutFor(layoutRect{X: raw.X(), Y: raw.Y(), Width: raw.W(), Height: raw.H()}, nativeControls)
+	if a.quickTitle != nil && a.quickTitle.Raw() != nil {
+		a.quickTitle.Raw().Resize(layout.Title.X, layout.Title.Y, layout.Title.Width, layout.Title.Height)
+	}
+	if a.quickSubtitle != nil && a.quickSubtitle.Raw() != nil {
+		a.quickSubtitle.Raw().Resize(layout.Subtitle.X, layout.Subtitle.Y, layout.Subtitle.Width, layout.Subtitle.Height)
+	}
+	if a.searchLabel != nil && a.searchLabel.Raw() != nil {
+		a.searchLabel.Raw().Resize(layout.SearchLabel.X, layout.SearchLabel.Y, layout.SearchLabel.Width, layout.SearchLabel.Height)
+	}
+	if a.searchInput != nil && a.searchInput.Raw() != nil {
+		resizeNativeWidget(a.searchInput.Raw(), layout.Search)
+	}
+	if a.findButton != nil && a.findButton.Raw() != nil {
+		a.findButton.Raw().Resize(layout.Find.X, layout.Find.Y, layout.Find.Width, layout.Find.Height)
+	}
+	if a.table != nil && a.table.Raw() != nil {
+		resizeNativeWidget(a.table.Raw(), layout.Table)
+	}
+	if a.summaryTitle != nil && a.summaryTitle.Raw() != nil {
+		a.summaryTitle.Raw().Resize(layout.SummaryTitle.X, layout.SummaryTitle.Y, layout.SummaryTitle.Width, layout.SummaryTitle.Height)
+	}
+	if a.selectedName != nil && a.selectedName.Raw() != nil {
+		a.selectedName.Raw().Resize(layout.SelectedName.X, layout.SelectedName.Y, layout.SelectedName.Width, layout.SelectedName.Height)
+	}
+	if a.selectedDetail != nil && a.selectedDetail.Raw() != nil {
+		a.selectedDetail.Raw().Resize(layout.SelectedDetail.X, layout.SelectedDetail.Y, layout.SelectedDetail.Width, layout.SelectedDetail.Height)
+	}
+	if a.selectedRecent != nil && a.selectedRecent.Raw() != nil {
+		a.selectedRecent.Raw().Resize(layout.SelectedRecent.X, layout.SelectedRecent.Y, layout.SelectedRecent.Width, layout.SelectedRecent.Height)
+	}
+	if a.newButton != nil && a.newButton.Raw() != nil {
+		a.newButton.Raw().Resize(layout.New.X, layout.New.Y, layout.New.Width, layout.New.Height)
+	}
+	if a.editButton != nil && a.editButton.Raw() != nil {
+		a.editButton.Raw().Resize(layout.Edit.X, layout.Edit.Y, layout.Edit.Width, layout.Edit.Height)
+	}
+	if a.deleteButton != nil && a.deleteButton.Raw() != nil {
+		a.deleteButton.Raw().Resize(layout.Delete.X, layout.Delete.Y, layout.Delete.Width, layout.Delete.Height)
+	}
+	if a.testButton != nil && a.testButton.Raw() != nil {
+		a.testButton.Raw().Resize(layout.Test.X, layout.Test.Y, layout.Test.Width, layout.Test.Height)
+	}
+	if a.connectButton != nil && a.connectButton.Raw() != nil {
+		a.connectButton.Raw().Resize(layout.Connect.X, layout.Connect.Y, layout.Connect.Width, layout.Connect.Height)
+	}
+	raw.Redraw()
+}
+
+func resizeNativeWidget(raw any, frame layoutRect) {
+	if widget, ok := raw.(interface{ Resize(int, int, int, int) }); ok {
+		widget.Resize(frame.X, frame.Y, frame.Width, frame.Height)
 	}
 }
 

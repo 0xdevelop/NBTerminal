@@ -51,6 +51,36 @@ type layoutRect struct {
 
 func (r layoutRect) Bottom() int { return r.Y + r.Height }
 
+type mainWindowLayout struct {
+	Title, Subtitle, Manager, Settings, Status, Workspace layoutRect
+}
+
+func mainWindowLayoutFor(bounds layoutRect, tokens controlMetricSet) mainWindowLayout {
+	const (
+		margin          = 22
+		workspaceTop    = 72
+		workspaceBottom = 42
+		managerWidth    = 174
+		settingsWidth   = 124
+		controlGap      = 12
+		statusGap       = 14
+	)
+	managerX := bounds.X + bounds.Width - 900
+	if minimum := bounds.X + 420; managerX < minimum {
+		managerX = minimum
+	}
+	settingsX := managerX + managerWidth + controlGap
+	statusX := settingsX + settingsWidth + statusGap
+	return mainWindowLayout{
+		Title:     layoutRect{X: bounds.X + margin, Y: bounds.Y + 14, Width: managerX - (bounds.X + margin) - 18, Height: 28},
+		Subtitle:  layoutRect{X: bounds.X + margin + 2, Y: bounds.Y + 38, Width: managerX - (bounds.X + margin) - 22, Height: 22},
+		Manager:   layoutRect{X: managerX, Y: bounds.Y + 16, Width: managerWidth, Height: tokens.ButtonHeight},
+		Settings:  layoutRect{X: settingsX, Y: bounds.Y + 16, Width: settingsWidth, Height: tokens.ButtonHeight},
+		Status:    layoutRect{X: statusX, Y: bounds.Y + 16, Width: bounds.X + bounds.Width - margin - statusX, Height: tokens.ButtonHeight},
+		Workspace: layoutRect{X: bounds.X + margin, Y: bounds.Y + workspaceTop, Width: bounds.Width - margin*2, Height: bounds.Height - workspaceTop - workspaceBottom},
+	}
+}
+
 // terminalPanelLayout is the deterministic native geometry for the terminal
 // workspace. At the minimum desktop width, secondary actions move to their own
 // row instead of letting FLTK proportionally crush localized button labels.
@@ -110,6 +140,65 @@ func terminalPanelLayoutFor(panel layoutRect, tokens controlMetricSet) terminalP
 		Stop:         stop,
 		Run:          run,
 		Compact:      compact,
+	}
+}
+
+type quickPanelLayout struct {
+	Title, Subtitle, SearchLabel, Search, Find, Table          layoutRect
+	SummaryTitle, SelectedName, SelectedDetail, SelectedRecent layoutRect
+	New, Edit, Delete, Test, Connect                           layoutRect
+}
+
+// quickPanelLayoutFor keeps the favorites/recent surface usable when the main
+// window reaches its 1120×720 minimum. Actions use two stable desktop rows so
+// Russian labels retain their semantic height and horizontal insets rather than
+// being proportionally crushed by FLTK.
+func quickPanelLayoutFor(panel layoutRect, tokens controlMetricSet) quickPanelLayout {
+	const (
+		inset            = 14
+		titleInset       = 18
+		gap              = 8
+		searchLabelW     = 64
+		findWidth        = 104
+		connectWidth     = 180
+		summaryToActions = 126
+	)
+	innerWidth := panel.Width - inset*2
+	searchY := panel.Y + 52
+	find := layoutRect{
+		X: panel.X + panel.Width - inset - findWidth, Y: searchY,
+		Width: findWidth, Height: tokens.ButtonHeight,
+	}
+	search := layoutRect{
+		X: panel.X + titleInset + searchLabelW, Y: searchY,
+		Width: find.X - gap - (panel.X + titleInset + searchLabelW), Height: tokens.InputHeight,
+	}
+	connectY := panel.Bottom() - tokens.PrimaryButtonHeight - 8
+	secondaryY := connectY - tokens.ButtonHeight - gap
+	secondaryWidth := (innerWidth - gap*3) / 4
+	newAction := layoutRect{X: panel.X + inset, Y: secondaryY, Width: secondaryWidth, Height: tokens.ButtonHeight}
+	editAction := layoutRect{X: newAction.X + secondaryWidth + gap, Y: secondaryY, Width: secondaryWidth, Height: tokens.ButtonHeight}
+	deleteAction := layoutRect{X: editAction.X + secondaryWidth + gap, Y: secondaryY, Width: secondaryWidth, Height: tokens.ButtonHeight}
+	testAction := layoutRect{X: deleteAction.X + secondaryWidth + gap, Y: secondaryY, Width: panel.X + panel.Width - inset - (deleteAction.X + secondaryWidth + gap), Height: tokens.ButtonHeight}
+	summaryY := secondaryY - summaryToActions
+	tableY := panel.Y + 94
+	tableBottom := summaryY - 22
+	return quickPanelLayout{
+		Title:          layoutRect{X: panel.X + titleInset, Y: panel.Y + 14, Width: panel.Width - titleInset*2, Height: 24},
+		Subtitle:       layoutRect{X: panel.X + titleInset, Y: panel.Y + 38, Width: panel.Width - titleInset*2, Height: 18},
+		SearchLabel:    layoutRect{X: panel.X + titleInset, Y: searchY, Width: searchLabelW, Height: tokens.InputHeight},
+		Search:         search,
+		Find:           find,
+		Table:          layoutRect{X: panel.X + inset, Y: tableY, Width: innerWidth, Height: tableBottom - tableY},
+		SummaryTitle:   layoutRect{X: panel.X + titleInset, Y: summaryY, Width: panel.Width - titleInset*2, Height: 22},
+		SelectedName:   layoutRect{X: panel.X + titleInset, Y: summaryY + 28, Width: panel.Width - titleInset*2, Height: 24},
+		SelectedDetail: layoutRect{X: panel.X + titleInset, Y: summaryY + 56, Width: panel.Width - titleInset*2, Height: 22},
+		SelectedRecent: layoutRect{X: panel.X + titleInset, Y: summaryY + 82, Width: panel.Width - titleInset*2, Height: 22},
+		New:            newAction,
+		Edit:           editAction,
+		Delete:         deleteAction,
+		Test:           testAction,
+		Connect:        layoutRect{X: panel.X + panel.Width - inset - connectWidth, Y: connectY, Width: connectWidth, Height: tokens.PrimaryButtonHeight},
 	}
 }
 
