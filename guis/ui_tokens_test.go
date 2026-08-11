@@ -99,19 +99,17 @@ func TestTerminalPanelLayoutKeepsWideCommandBarOnOneRow(t *testing.T) {
 	}
 }
 
-func TestQuickPanelLayoutPreservesLocalizedDesktopControlsAtMinimumWindow(t *testing.T) {
+func TestQuickPanelLayoutKeepsMainWindowFocusedOnQuickLaunchAtMinimumSize(t *testing.T) {
 	panel := layoutRect{X: 22, Y: 72, Width: 500, Height: 606}
 	layout := quickPanelLayoutFor(panel, nativeControls)
-	if layout.Table.Height < 270 {
-		t.Fatalf("minimum quick-launch table is not usable: %#v", layout.Table)
+	if layout.Table.Height < 315 {
+		t.Fatalf("minimum quick-launch table gives too much space to non-launch chrome: %#v", layout.Table)
 	}
 	if layout.Table.Bottom() > layout.SummaryTitle.Y-nativeControls.FieldLabelGap {
 		t.Fatalf("table overlaps selected-connection summary: %#v", layout)
 	}
 	for name, control := range map[string]layoutRect{
-		"search": layout.Search, "find": layout.Find,
-		"new": layout.New, "edit": layout.Edit, "delete": layout.Delete, "test": layout.Test,
-		"connect": layout.Connect,
+		"search": layout.Search, "find": layout.Find, "connect": layout.Connect,
 	} {
 		if control.X < panel.X || control.X+control.Width > panel.X+panel.Width {
 			t.Fatalf("%s escapes minimum quick panel: control=%#v panel=%#v", name, control, panel)
@@ -120,18 +118,18 @@ func TestQuickPanelLayoutPreservesLocalizedDesktopControlsAtMinimumWindow(t *tes
 	if layout.Search.Height != nativeControls.InputHeight || layout.Find.Height != nativeControls.ButtonHeight {
 		t.Fatalf("search row does not preserve semantic heights: %#v", layout)
 	}
-	for name, control := range map[string]layoutRect{
-		"new": layout.New, "edit": layout.Edit, "delete": layout.Delete, "test": layout.Test,
-	} {
-		if control.Height != nativeControls.ButtonHeight || control.Width < 104 {
-			t.Fatalf("%s cannot carry localized desktop text: %#v", name, control)
-		}
-	}
 	if layout.Connect.Height != nativeControls.PrimaryButtonHeight || layout.Connect.Width < 180 {
 		t.Fatalf("primary connect action is undersized: %#v", layout.Connect)
 	}
-	if layout.New.Y == layout.Connect.Y {
-		t.Fatal("minimum quick panel should use separate secondary and primary action rows")
+	if layout.Connect.Y < layout.SelectedRecent.Bottom()+nativeControls.FieldLabelGap {
+		t.Fatalf("quick connect action overlaps selected summary: %#v", layout)
+	}
+	for name, summary := range map[string]layoutRect{
+		"name": layout.SelectedName, "detail": layout.SelectedDetail, "recent": layout.SelectedRecent,
+	} {
+		if summary.X+summary.Width > panel.X+panel.Width-nativeControls.TextInset {
+			t.Fatalf("%s summary reaches the pane clip edge: %#v", name, summary)
+		}
 	}
 }
 
@@ -191,7 +189,7 @@ func TestSettingsEditorAndManagerLayoutsUseSemanticControlMetrics(t *testing.T) 
 	if manager.Group.Height != nativeControls.InputHeight || manager.Search.Height != nativeControls.InputHeight || manager.Find.Height != nativeControls.ButtonHeight ||
 		manager.CloseAfterConnect.Height != nativeControls.InputHeight || manager.New.Height != nativeControls.ButtonHeight ||
 		manager.Edit.Height != nativeControls.ButtonHeight || manager.Delete.Height != nativeControls.ButtonHeight ||
-		manager.Favorite.Height != nativeControls.ButtonHeight || manager.Connect.Height != nativeControls.PrimaryButtonHeight {
+		manager.Test.Height != nativeControls.ButtonHeight || manager.Favorite.Height != nativeControls.ButtonHeight || manager.Connect.Height != nativeControls.PrimaryButtonHeight {
 		t.Fatalf("manager controls do not use semantic heights: %#v", manager)
 	}
 	if manager.Group.X+manager.Group.Width > manager.Search.X-nativeControls.FieldLabelGap {
@@ -200,5 +198,13 @@ func TestSettingsEditorAndManagerLayoutsUseSemanticControlMetrics(t *testing.T) 
 	if manager.CloseAfterConnect.Y-manager.Status.Bottom() < nativeControls.FieldLabelGap ||
 		manager.New.Y-manager.CloseAfterConnect.Bottom() < nativeControls.FieldLabelGap {
 		t.Fatalf("manager footer spacing is too tight: %#v", manager)
+	}
+	for left, right := range map[layoutRect]layoutRect{
+		manager.New: manager.Edit, manager.Edit: manager.Delete, manager.Delete: manager.Test,
+		manager.Test: manager.Favorite, manager.Favorite: manager.Connect,
+	} {
+		if left.X+left.Width > right.X-nativeControls.FieldLabelGap {
+			t.Fatalf("manager actions overlap or lose semantic spacing: left=%#v right=%#v", left, right)
+		}
 	}
 }

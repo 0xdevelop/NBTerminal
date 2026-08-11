@@ -159,6 +159,7 @@ func (m *connectionManagerWindow) build() {
 	root.AddSubview(button(layout.New.X, layout.New.Y, layout.New.Width, layout.New.Height, tr("action.new"), "connection_manager.new", m.newProfile))
 	root.AddSubview(button(layout.Edit.X, layout.Edit.Y, layout.Edit.Width, layout.Edit.Height, tr("action.edit"), "connection_manager.edit", m.editSelected))
 	root.AddSubview(button(layout.Delete.X, layout.Delete.Y, layout.Delete.Width, layout.Delete.Height, tr("action.delete"), "connection_manager.delete", m.deleteSelected))
+	root.AddSubview(button(layout.Test.X, layout.Test.Y, layout.Test.Width, layout.Test.Height, tr("action.test"), "connection_manager.test", m.testSelected))
 	root.AddSubview(button(layout.Favorite.X, layout.Favorite.Y, layout.Favorite.Width, layout.Favorite.Height, tr("manager.favorite"), "connection_manager.favorite", m.toggleFavorite))
 	root.AddSubview(primaryButton(layout.Connect.X, layout.Connect.Y, layout.Connect.Width, layout.Connect.Height, tr("action.connect"), "connection_manager.connect", m.connectSelected))
 
@@ -355,6 +356,13 @@ func (m *connectionManagerWindow) activate(row int) {
 }
 
 func (m *connectionManagerWindow) connectSelected() { m.activate(m.idx) }
+
+func (m *connectionManagerWindow) testSelected() {
+	profile, ok := m.selectedProfile()
+	if ok && m.owner != nil {
+		m.owner.testProfile(profile)
+	}
+}
 
 func (m *connectionManagerWindow) persistCloseAfterConnect(value bool) {
 	if config.GlobalConfig == nil {

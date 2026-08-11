@@ -434,10 +434,6 @@ type finalShellApp struct {
 	selectedName     *uikit.UILabel
 	selectedDetail   *uikit.UILabel
 	selectedRecent   *uikit.UILabel
-	newButton        *uikit.UIButton
-	editButton       *uikit.UIButton
-	deleteButton     *uikit.UIButton
-	testButton       *uikit.UIButton
 	connectButton    *uikit.UIButton
 	cmdInput         *uikit.UITextView
 	output           *uikit.UITerminalView
@@ -812,26 +808,15 @@ func (a *finalShellApp) build() {
 	quickPanel.AddSubview(a.summaryTitle)
 	a.selectedName = label(quickLayout.SelectedName.X, quickLayout.SelectedName.Y, quickLayout.SelectedName.Width, quickLayout.SelectedName.Height, "")
 	a.selectedName.SetFontSize(nativeTypography.SectionTitle)
-	styleDynamicLabel(a.selectedName)
 	a.selectedName.View().SetAutomationID("connections.selected_name")
 	quickPanel.AddSubview(a.selectedName)
 	a.selectedDetail = mutedLabel(quickLayout.SelectedDetail.X, quickLayout.SelectedDetail.Y, quickLayout.SelectedDetail.Width, quickLayout.SelectedDetail.Height, "")
-	styleDynamicLabel(a.selectedDetail)
 	a.selectedDetail.View().SetAutomationID("connections.selected_detail")
 	quickPanel.AddSubview(a.selectedDetail)
 	a.selectedRecent = mutedLabel(quickLayout.SelectedRecent.X, quickLayout.SelectedRecent.Y, quickLayout.SelectedRecent.Width, quickLayout.SelectedRecent.Height, "")
-	styleDynamicLabel(a.selectedRecent)
 	a.selectedRecent.View().SetAutomationID("connections.selected_recent")
 	quickPanel.AddSubview(a.selectedRecent)
 
-	a.newButton = button(quickLayout.New.X, quickLayout.New.Y, quickLayout.New.Width, quickLayout.New.Height, tr("action.new"), "action.new", a.newProfile)
-	quickPanel.AddSubview(a.newButton)
-	a.editButton = button(quickLayout.Edit.X, quickLayout.Edit.Y, quickLayout.Edit.Width, quickLayout.Edit.Height, tr("action.edit"), "action.edit", a.editSelectedProfile)
-	quickPanel.AddSubview(a.editButton)
-	a.deleteButton = button(quickLayout.Delete.X, quickLayout.Delete.Y, quickLayout.Delete.Width, quickLayout.Delete.Height, tr("action.delete"), "action.delete", a.deleteProfile)
-	quickPanel.AddSubview(a.deleteButton)
-	a.testButton = button(quickLayout.Test.X, quickLayout.Test.Y, quickLayout.Test.Width, quickLayout.Test.Height, tr("action.test"), "action.test", a.testConnection)
-	quickPanel.AddSubview(a.testButton)
 	a.connectButton = primaryButton(quickLayout.Connect.X, quickLayout.Connect.Y, quickLayout.Connect.Width, quickLayout.Connect.Height, tr("action.connect"), "action.connect", a.connectSelected)
 	quickPanel.AddSubview(a.connectButton)
 	quickPanel.Raw().SetResizeHandler(a.layoutQuickPanel)
@@ -1179,18 +1164,6 @@ func (a *finalShellApp) layoutQuickPanel() {
 	}
 	if a.selectedRecent != nil && a.selectedRecent.Raw() != nil {
 		a.selectedRecent.Raw().Resize(layout.SelectedRecent.X, layout.SelectedRecent.Y, layout.SelectedRecent.Width, layout.SelectedRecent.Height)
-	}
-	if a.newButton != nil && a.newButton.Raw() != nil {
-		a.newButton.Raw().Resize(layout.New.X, layout.New.Y, layout.New.Width, layout.New.Height)
-	}
-	if a.editButton != nil && a.editButton.Raw() != nil {
-		a.editButton.Raw().Resize(layout.Edit.X, layout.Edit.Y, layout.Edit.Width, layout.Edit.Height)
-	}
-	if a.deleteButton != nil && a.deleteButton.Raw() != nil {
-		a.deleteButton.Raw().Resize(layout.Delete.X, layout.Delete.Y, layout.Delete.Width, layout.Delete.Height)
-	}
-	if a.testButton != nil && a.testButton.Raw() != nil {
-		a.testButton.Raw().Resize(layout.Test.X, layout.Test.Y, layout.Test.Width, layout.Test.Height)
 	}
 	if a.connectButton != nil && a.connectButton.Raw() != nil {
 		a.connectButton.Raw().Resize(layout.Connect.X, layout.Connect.Y, layout.Connect.Width, layout.Connect.Height)
@@ -1649,6 +1622,12 @@ func (a *finalShellApp) selectRow(row int) {
 }
 
 func (a *finalShellApp) updateSelectedSummary() {
+	// These labels sit on the same opaque quick-panel surface. Redrawing that
+	// bounded native region after text changes clears shorter prior values without
+	// giving every label its own box edge at the SplitView clip boundary.
+	if a != nil && a.quickPanel != nil && a.quickPanel.Raw() != nil {
+		defer a.quickPanel.Raw().Redraw()
+	}
 	if a == nil || a.idx < 0 || a.idx >= len(a.rows) {
 		if a != nil && a.selectedName != nil {
 			a.selectedName.SetText(tr("connections.none"))
@@ -2025,11 +2004,7 @@ func (a *finalShellApp) activateProfile(p connectionProfile) bool {
 	return true
 }
 
-func (a *finalShellApp) testConnection() {
-	p, ok := a.selectedProfile()
-	if !ok {
-		return
-	}
+func (a *finalShellApp) testProfile(p connectionProfile) {
 	a.openSession(p)
 	if p.Type == connectionTypeLocal {
 		a.runAsync(p, "pwd && whoami && uname -a")

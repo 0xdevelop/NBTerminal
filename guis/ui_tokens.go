@@ -146,22 +146,21 @@ func terminalPanelLayoutFor(panel layoutRect, tokens controlMetricSet) terminalP
 type quickPanelLayout struct {
 	Title, Subtitle, SearchLabel, Search, Find, Table          layoutRect
 	SummaryTitle, SelectedName, SelectedDetail, SelectedRecent layoutRect
-	New, Edit, Delete, Test, Connect                           layoutRect
+	Connect                                                    layoutRect
 }
 
-// quickPanelLayoutFor keeps the favorites/recent surface usable when the main
-// window reaches its 1120×720 minimum. Actions use two stable desktop rows so
-// Russian labels retain their semantic height and horizontal insets rather than
-// being proportionally crushed by FLTK.
+// quickPanelLayoutFor keeps the main window a fast-launch surface rather than a
+// second profile editor. Saved-profile actions live in Connection Manager, so
+// the native table remains useful at 1120×720 in every frozen locale.
 func quickPanelLayoutFor(panel layoutRect, tokens controlMetricSet) quickPanelLayout {
 	const (
-		inset            = 14
-		titleInset       = 18
-		gap              = 8
-		searchLabelW     = 64
-		findWidth        = 104
-		connectWidth     = 180
-		summaryToActions = 126
+		inset        = 14
+		titleInset   = 18
+		gap          = 8
+		searchLabelW = 64
+		findWidth    = 104
+		connectWidth = 180
+		summaryArea  = 126
 	)
 	innerWidth := panel.Width - inset*2
 	searchY := panel.Y + 52
@@ -174,15 +173,10 @@ func quickPanelLayoutFor(panel layoutRect, tokens controlMetricSet) quickPanelLa
 		Width: find.X - gap - (panel.X + titleInset + searchLabelW), Height: tokens.InputHeight,
 	}
 	connectY := panel.Bottom() - tokens.PrimaryButtonHeight - 8
-	secondaryY := connectY - tokens.ButtonHeight - gap
-	secondaryWidth := (innerWidth - gap*3) / 4
-	newAction := layoutRect{X: panel.X + inset, Y: secondaryY, Width: secondaryWidth, Height: tokens.ButtonHeight}
-	editAction := layoutRect{X: newAction.X + secondaryWidth + gap, Y: secondaryY, Width: secondaryWidth, Height: tokens.ButtonHeight}
-	deleteAction := layoutRect{X: editAction.X + secondaryWidth + gap, Y: secondaryY, Width: secondaryWidth, Height: tokens.ButtonHeight}
-	testAction := layoutRect{X: deleteAction.X + secondaryWidth + gap, Y: secondaryY, Width: panel.X + panel.Width - inset - (deleteAction.X + secondaryWidth + gap), Height: tokens.ButtonHeight}
-	summaryY := secondaryY - summaryToActions
+	summaryY := connectY - summaryArea
 	tableY := panel.Y + 94
 	tableBottom := summaryY - 22
+	summaryWidth := panel.Width - titleInset*2 - tokens.TextInset
 	return quickPanelLayout{
 		Title:          layoutRect{X: panel.X + titleInset, Y: panel.Y + 14, Width: panel.Width - titleInset*2, Height: 24},
 		Subtitle:       layoutRect{X: panel.X + titleInset, Y: panel.Y + 38, Width: panel.Width - titleInset*2, Height: 18},
@@ -191,20 +185,16 @@ func quickPanelLayoutFor(panel layoutRect, tokens controlMetricSet) quickPanelLa
 		Find:           find,
 		Table:          layoutRect{X: panel.X + inset, Y: tableY, Width: innerWidth, Height: tableBottom - tableY},
 		SummaryTitle:   layoutRect{X: panel.X + titleInset, Y: summaryY, Width: panel.Width - titleInset*2, Height: 22},
-		SelectedName:   layoutRect{X: panel.X + titleInset, Y: summaryY + 28, Width: panel.Width - titleInset*2, Height: 24},
-		SelectedDetail: layoutRect{X: panel.X + titleInset, Y: summaryY + 56, Width: panel.Width - titleInset*2, Height: 22},
-		SelectedRecent: layoutRect{X: panel.X + titleInset, Y: summaryY + 82, Width: panel.Width - titleInset*2, Height: 22},
-		New:            newAction,
-		Edit:           editAction,
-		Delete:         deleteAction,
-		Test:           testAction,
+		SelectedName:   layoutRect{X: panel.X + titleInset, Y: summaryY + 28, Width: summaryWidth, Height: 24},
+		SelectedDetail: layoutRect{X: panel.X + titleInset, Y: summaryY + 56, Width: summaryWidth, Height: 22},
+		SelectedRecent: layoutRect{X: panel.X + titleInset, Y: summaryY + 82, Width: summaryWidth, Height: 22},
 		Connect:        layoutRect{X: panel.X + panel.Width - inset - connectWidth, Y: connectY, Width: connectWidth, Height: tokens.PrimaryButtonHeight},
 	}
 }
 
 type connectionManagerLayout struct {
 	Group, Search, Find, Table, Status, CloseAfterConnect layoutRect
-	New, Edit, Delete, Favorite, Connect                  layoutRect
+	New, Edit, Delete, Test, Favorite, Connect            layoutRect
 }
 
 func connectionManagerLayoutFor(tokens controlMetricSet) connectionManagerLayout {
@@ -218,6 +208,7 @@ func connectionManagerLayoutFor(tokens controlMetricSet) connectionManagerLayout
 		New:               layoutRect{X: 28, Y: 594, Width: 94, Height: tokens.ButtonHeight},
 		Edit:              layoutRect{X: 134, Y: 594, Width: 94, Height: tokens.ButtonHeight},
 		Delete:            layoutRect{X: 240, Y: 594, Width: 112, Height: tokens.ButtonHeight},
+		Test:              layoutRect{X: 364, Y: 594, Width: 124, Height: tokens.ButtonHeight},
 		Favorite:          layoutRect{X: 500, Y: 594, Width: 180, Height: tokens.ButtonHeight},
 		Connect:           layoutRect{X: 692, Y: 592, Width: 200, Height: tokens.PrimaryButtonHeight},
 	}
