@@ -12,6 +12,8 @@ import (
 	"github.com/0xdevelop/NBTerminal/config"
 	"github.com/0xdevelop/NBTerminal/locales"
 	"github.com/0xdevelop/NBTerminal/terminal"
+	"github.com/0xdevelop/fltk2go/fltk_bridge"
+	"github.com/0xdevelop/fltk2go/uikit"
 	"github.com/george012/gtbox"
 )
 
@@ -921,6 +923,55 @@ func TestRemoveSelectedProfileCommitsOnlyAfterPersistenceSucceeds(t *testing.T) 
 	}
 	if removed.ID != "prod" || len(app.rows) != 1 || app.rows[0].ID != "local" || app.idx != 0 {
 		t.Fatalf("unexpected committed delete: removed=%#v rows=%#v idx=%d", removed, app.rows, app.idx)
+	}
+}
+
+func TestMoveNavigatorSelectionSupportsSearchKeyboardNavigation(t *testing.T) {
+	tests := []struct {
+		name, current, count, delta, want int
+	}{
+		{name: 1, current: -1, count: 3, delta: 1, want: 0},
+		{name: 2, current: 0, count: 3, delta: 1, want: 1},
+		{name: 3, current: 2, count: 3, delta: 1, want: 2},
+		{name: 4, current: 2, count: 3, delta: -1, want: 1},
+		{name: 5, current: 0, count: 3, delta: -1, want: 0},
+		{name: 6, current: 0, count: 0, delta: 1, want: -1},
+	}
+	for _, tt := range tests {
+		if got := moveNavigatorSelection(tt.current, tt.count, tt.delta); got != tt.want {
+			t.Fatalf("case %d: moveNavigatorSelection(%d, %d, %d) = %d, want %d", tt.name, tt.current, tt.count, tt.delta, got, tt.want)
+		}
+	}
+}
+
+func TestMainSearchKeyboardMovesSelectionAndEscapeClearsQuery(t *testing.T) {
+	rows := []connectionProfile{
+		{ID: "alpha", Name: "Alpha", Type: connectionTypeLocal},
+		{ID: "beta-one", Name: "Beta One", Type: connectionTypeLocal},
+		{ID: "beta-two", Name: "Beta Two", Type: connectionTypeLocal},
+	}
+	app := &finalShellApp{
+		allRows:     rows,
+		rows:        rows,
+		idx:         0,
+		searchInput: uikit.NewInput(0, 0, 240, nativeControls.InputHeight, ""),
+	}
+	app.searchInput.SetText("beta")
+	app.jumpToSearchMatch()
+	if len(app.rows) != 2 || app.idx != 0 {
+		t.Fatalf("search setup = rows %d idx %d, want 2/0", len(app.rows), app.idx)
+	}
+	if !app.handleSearchKey(fltk_bridge.DOWN) || app.idx != 1 {
+		t.Fatalf("Down did not move to second match: idx=%d", app.idx)
+	}
+	if !app.handleSearchKey(fltk_bridge.UP) || app.idx != 0 {
+		t.Fatalf("Up did not move to first match: idx=%d", app.idx)
+	}
+	if !app.handleSearchKey(fltk_bridge.ESCAPE) || app.searchInput.Text() != "" || len(app.rows) != len(rows) {
+		t.Fatalf("Escape did not clear and restore quick rows: query=%q rows=%d", app.searchInput.Text(), len(app.rows))
+	}
+	if app.handleSearchKey(fltk_bridge.ESCAPE) || app.handleSearchKey('x') {
+		t.Fatal("empty Escape or unrelated key must remain available to native input handling")
 	}
 }
 

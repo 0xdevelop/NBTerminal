@@ -754,22 +754,7 @@ func (a *finalShellApp) build() {
 	a.searchInput = inputNoLabel(quickLayout.Search.X, quickLayout.Search.Y, quickLayout.Search.Width, quickLayout.Search.Height, "connections.search", tr("connections.search_placeholder"))
 	a.searchInput.OnChange(a.jumpToSearchMatch)
 	a.searchInput.View().On(fltk_bridge.KEYDOWN, func(fltk_bridge.Event) bool {
-		switch fltk_bridge.EventKey() {
-		case fltk_bridge.ENTER_KEY:
-			a.activateConnectionRow(a.idx)
-			return true
-		case fltk_bridge.DOWN:
-			if a.table != nil && a.idx >= 0 {
-				a.table.SelectRow(a.idx)
-				if raw := a.table.View().Raw(); raw != nil {
-					if focusable, ok := raw.(interface{ TakeFocus() int }); ok {
-						focusable.TakeFocus()
-					}
-				}
-				return true
-			}
-		}
-		return false
+		return a.handleSearchKey(fltk_bridge.EventKey())
 	})
 	quickPanel.AddSubview(a.searchInput)
 	a.findButton = button(quickLayout.Find.X, quickLayout.Find.Y, quickLayout.Find.Width, quickLayout.Find.Height, tr("connections.find"), "connections.find", a.jumpToSearchMatch)
@@ -925,6 +910,29 @@ func (a *finalShellApp) build() {
 	if len(a.rows) > 0 {
 		a.table.SelectRow(activeConnectionIndex(a.rows))
 	}
+}
+
+func (a *finalShellApp) handleSearchKey(key int) bool {
+	if a == nil || a.searchInput == nil {
+		return false
+	}
+	switch key {
+	case fltk_bridge.ENTER_KEY:
+		a.activateConnectionRow(a.idx)
+		return true
+	case fltk_bridge.DOWN:
+		return a.moveSearchSelection(1)
+	case fltk_bridge.UP:
+		return a.moveSearchSelection(-1)
+	case fltk_bridge.ESCAPE:
+		if strings.TrimSpace(a.searchInput.Text()) == "" {
+			return false
+		}
+		a.searchInput.SetText("")
+		a.jumpToSearchMatch()
+		return true
+	}
+	return false
 }
 
 func nativeWindowClass() string {
@@ -1487,6 +1495,38 @@ func (a *finalShellApp) jumpToSearchMatch() {
 		return
 	}
 	a.setStatus(trf("connections.matched", len(a.rows), a.rows[0].Name))
+}
+
+func moveNavigatorSelection(current, count, delta int) int {
+	if count <= 0 {
+		return -1
+	}
+	if current < 0 {
+		return 0
+	}
+	next := current + delta
+	if next < 0 {
+		return 0
+	}
+	if next >= count {
+		return count - 1
+	}
+	return next
+}
+
+func (a *finalShellApp) moveSearchSelection(delta int) bool {
+	if a == nil {
+		return false
+	}
+	next := moveNavigatorSelection(a.idx, len(a.rows), delta)
+	if next < 0 {
+		return false
+	}
+	if a.table != nil {
+		return a.table.SelectRow(next)
+	}
+	a.selectRow(next)
+	return true
 }
 
 // refreshNavigator rebuilds the main-window favorite/recent projection from the

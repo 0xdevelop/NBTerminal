@@ -91,22 +91,7 @@ func (m *connectionManagerWindow) build() {
 	m.search = inputNoLabel(layout.Search.X, layout.Search.Y, layout.Search.Width, layout.Search.Height, "connection_manager.search", tr("connections.search_placeholder"))
 	m.search.OnChange(m.applySearch)
 	m.search.View().On(fltk_bridge.KEYDOWN, func(fltk_bridge.Event) bool {
-		switch fltk_bridge.EventKey() {
-		case fltk_bridge.ENTER_KEY:
-			m.activate(m.idx)
-			return true
-		case fltk_bridge.DOWN:
-			if m.table != nil && m.idx >= 0 {
-				m.table.SelectRow(m.idx)
-				if raw := m.table.View().Raw(); raw != nil {
-					if focusable, ok := raw.(interface{ TakeFocus() int }); ok {
-						focusable.TakeFocus()
-					}
-				}
-				return true
-			}
-		}
-		return false
+		return m.handleSearchKey(fltk_bridge.EventKey())
 	})
 	root.AddSubview(m.search)
 	root.AddSubview(button(layout.Find.X, layout.Find.Y, layout.Find.Width, layout.Find.Height, tr("connections.find"), "connection_manager.find", m.applySearch))
@@ -170,6 +155,29 @@ func (m *connectionManagerWindow) build() {
 			focusable.TakeFocus()
 		}
 	}
+}
+
+func (m *connectionManagerWindow) handleSearchKey(key int) bool {
+	if m == nil || m.search == nil {
+		return false
+	}
+	switch key {
+	case fltk_bridge.ENTER_KEY:
+		m.activate(m.idx)
+		return true
+	case fltk_bridge.DOWN:
+		return m.moveSearchSelection(1)
+	case fltk_bridge.UP:
+		return m.moveSearchSelection(-1)
+	case fltk_bridge.ESCAPE:
+		if strings.TrimSpace(m.search.Text()) == "" {
+			return false
+		}
+		m.search.SetText("")
+		m.applySearch()
+		return true
+	}
+	return false
 }
 
 func (m *connectionManagerWindow) reload(preferredID string) {
@@ -285,6 +293,21 @@ func (m *connectionManagerWindow) applySearch() {
 		preferredID = profile.ID
 	}
 	m.reload(preferredID)
+}
+
+func (m *connectionManagerWindow) moveSearchSelection(delta int) bool {
+	if m == nil {
+		return false
+	}
+	next := moveNavigatorSelection(m.idx, len(m.rows), delta)
+	if next < 0 {
+		return false
+	}
+	if m.table != nil {
+		return m.table.SelectRow(next)
+	}
+	m.selectRow(next)
+	return true
 }
 
 func (m *connectionManagerWindow) selectRow(row int) {
