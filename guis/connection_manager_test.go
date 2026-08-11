@@ -154,6 +154,43 @@ func TestQuickConnectionProjectionPrioritizesFavoritesThenRecent(t *testing.T) {
 	}
 }
 
+func TestQuickConnectionCellsExposeFavoriteWithoutLeakingSecrets(t *testing.T) {
+	profile := connectionProfile{
+		ID:          "prod-db",
+		Name:        "生产数据库",
+		Group:       "Infrastructure/Production/Database",
+		Type:        connectionTypeSSH,
+		Host:        "db.internal",
+		Port:        2222,
+		Username:    "operator",
+		PasswordEnc: "encrypted-secret",
+		PrivateKey:  "private-key-secret",
+		Favorite:    true,
+		LastUsed:    "2026-08-04T10:00:00Z",
+	}
+
+	want := []string{"★", "Database", "生产数据库", "ssh", "db.internal:2222", formatLastUsedCompact(profile.LastUsed)}
+	for column, expected := range want {
+		if got := quickConnectionCellText(profile, column); got != expected {
+			t.Fatalf("column %d = %q, want %q", column, got, expected)
+		}
+	}
+	if got := quickConnectionCellText(profile, len(want)); got != "" {
+		t.Fatalf("out-of-range column = %q, want empty", got)
+	}
+	for _, secret := range []string{profile.Username, profile.PasswordEnc, profile.PrivateKey} {
+		for column := range want {
+			if strings.Contains(quickConnectionCellText(profile, column), secret) {
+				t.Fatalf("column %d exposed a secret-bearing field", column)
+			}
+		}
+	}
+	profile.Favorite = false
+	if got := quickConnectionCellText(profile, 0); got != "" {
+		t.Fatalf("non-favorite marker = %q, want empty", got)
+	}
+}
+
 func TestQuickConnectionProjectionSearchesAllSavedConnections(t *testing.T) {
 	rows := []connectionProfile{
 		{ID: "favorite", Name: "Favorite", Favorite: true},

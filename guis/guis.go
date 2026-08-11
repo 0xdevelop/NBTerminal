@@ -388,7 +388,8 @@ func syncConfigConnections(profiles []connectionProfile, activeID string) error 
 }
 
 type tableModel struct {
-	rows []connectionProfile
+	rows     []connectionProfile
+	cellText func(connectionProfile, int) string
 }
 
 func (m *tableModel) NumberOfRows(_ *tableview.TableView) int { return len(m.rows) }
@@ -398,17 +399,8 @@ func (m *tableModel) CellForColumn(_ *tableview.TableView, row, col int) *tablev
 		return cell
 	}
 	p := m.rows[row]
-	switch col {
-	case 0:
-		cell.SetText(p.Group)
-	case 1:
-		cell.SetText(p.Name)
-	case 2:
-		cell.SetText(string(p.Type))
-	case 3:
-		cell.SetText(p.tableEndpoint())
-	case 4:
-		cell.SetText(formatLastUsed(p.LastUsed))
+	if m.cellText != nil {
+		cell.SetText(m.cellText(p, col))
 	}
 	return cell
 }
@@ -793,12 +785,13 @@ func (a *finalShellApp) build() {
 		a.table.SetHeaderHeight(nativeControls.TableHeaderHeight)
 		a.table.SetDefaultRowHeight(nativeControls.TableRowHeight)
 		a.table.View().SetAutomationID("connections.table").SetAutomationName(tr("app.connections"))
-		a.table.AddColumn(tableview.TableColumn{Identifier: "group", Title: tr("connections.group"), Width: 105})
-		a.table.AddColumn(tableview.TableColumn{Identifier: "name", Title: tr("connections.name"), Width: 150})
+		a.table.AddColumn(tableview.TableColumn{Identifier: "favorite", Title: "★", Width: 36})
+		a.table.AddColumn(tableview.TableColumn{Identifier: "group", Title: tr("connections.group"), Width: 88})
+		a.table.AddColumn(tableview.TableColumn{Identifier: "name", Title: tr("connections.name"), Width: 130})
 		a.table.AddColumn(tableview.TableColumn{Identifier: "type", Title: tr("connections.type"), Width: 45})
 		a.table.AddColumn(tableview.TableColumn{Identifier: "endpoint", Title: tr("connections.endpoint"), Width: 80})
 		a.table.AddColumn(tableview.TableColumn{Identifier: "last", Title: tr("connections.last_used"), Width: 70})
-		a.model = &tableModel{rows: a.rows}
+		a.model = &tableModel{rows: a.rows, cellText: quickConnectionCellText}
 		a.table.SetDataSource(a.model)
 		a.table.SetDelegate(tableDelegate{onSelect: func(row int) {
 			a.selectRow(row)
@@ -1036,7 +1029,7 @@ func (a *finalShellApp) drawConnectionCell(ctx fltk_bridge.TableContext, row, co
 		fltk_bridge.DrawBox(fltk_bridge.FLAT_BOX, x, y, w, h, tokenColor(modernTheme.card))
 		fltk_bridge.PopClip()
 	case fltk_bridge.ContextColHeader:
-		titles := []string{tr("connections.group"), tr("connections.name"), tr("connections.type"), tr("connections.endpoint"), tr("connections.last_used")}
+		titles := []string{"★", tr("connections.group"), tr("connections.name"), tr("connections.type"), tr("connections.endpoint"), tr("connections.last_used")}
 		fltk_bridge.PushClip(x, y, w, h)
 		fltk_bridge.DrawBox(fltk_bridge.FLAT_BOX, x, y, w, h, tokenColor(modernTheme.elevated))
 		fltk_bridge.SetDrawColor(tokenColor(modernTheme.foreground))
@@ -1074,17 +1067,25 @@ func (a *finalShellApp) connectionCellText(row, col int) string {
 	if row < 0 || row >= len(a.rows) {
 		return ""
 	}
-	p := a.rows[row]
+	return quickConnectionCellText(a.rows[row], col)
+}
+
+func quickConnectionCellText(p connectionProfile, col int) string {
 	switch col {
 	case 0:
-		return compactConnectionGroup(p.Group)
+		if p.Favorite {
+			return "★"
+		}
+		return ""
 	case 1:
-		return p.Name
+		return compactConnectionGroup(p.Group)
 	case 2:
-		return string(p.Type)
+		return p.Name
 	case 3:
-		return p.tableEndpoint()
+		return string(p.Type)
 	case 4:
+		return p.tableEndpoint()
+	case 5:
 		return formatLastUsedCompact(p.LastUsed)
 	default:
 		return ""

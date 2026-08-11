@@ -131,7 +131,7 @@ func (m *connectionManagerWindow) build() {
 		m.table.AddColumn(tableview.TableColumn{Identifier: "type", Title: tr("connections.type"), Width: 65})
 		m.table.AddColumn(tableview.TableColumn{Identifier: "endpoint", Title: tr("connections.endpoint"), Width: 185})
 		m.table.AddColumn(tableview.TableColumn{Identifier: "last", Title: tr("connections.last_used"), Width: 100})
-		m.model = &tableModel{}
+		m.model = &tableModel{cellText: managerConnectionCellText}
 		m.table.SetDataSource(m.model)
 		m.table.SetDelegate(tableDelegate{onSelect: m.selectRow})
 		m.table.OnActivate(m.activate)
@@ -489,7 +489,10 @@ func (m *connectionManagerWindow) cellText(row, col int) string {
 	if row < 0 || row >= len(m.rows) {
 		return ""
 	}
-	profile := m.rows[row]
+	return managerConnectionCellText(m.rows[row], col)
+}
+
+func managerConnectionCellText(profile connectionProfile, col int) string {
 	switch col {
 	case 0:
 		if profile.Favorite {
