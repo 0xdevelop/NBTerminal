@@ -789,6 +789,22 @@ func TestConnectionMatchesQuery(t *testing.T) {
 	}
 }
 
+func TestConnectionSearchSupportsWhitespaceSeparatedTermsAcrossVisibleFields(t *testing.T) {
+	rows := []connectionProfile{
+		{ID: "metadata", Name: "Primary", Group: "Production", Host: "database.internal"},
+		{ID: "name", Name: "Production Database", Group: "Servers", Host: "primary.internal"},
+		{ID: "partial", Name: "Production API", Group: "Servers", Host: "api.internal"},
+	}
+
+	got := filterConnections(rows, "production data")
+	if len(got) != 2 || got[0].ID != "name" || got[1].ID != "metadata" {
+		t.Fatalf("multi-term ranked search = %#v, want name match before cross-field match", got)
+	}
+	if got := filterConnections(rows, "production missing"); len(got) != 0 {
+		t.Fatalf("all search terms must match, got %#v", got)
+	}
+}
+
 func TestActiveConnectionIndexUsesGlobalConfigSelection(t *testing.T) {
 	oldGlobal := config.GlobalConfig
 	t.Cleanup(func() { config.GlobalConfig = oldGlobal })

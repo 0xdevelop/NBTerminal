@@ -1653,12 +1653,24 @@ func connectionSearchRank(p connectionProfile, query string) (int, bool) {
 		p.tableEndpoint(),
 		p.Description,
 	}
-	for _, value := range metadata {
-		if strings.Contains(strings.ToLower(value), query) {
-			return 3, true
+	terms := strings.Fields(query)
+	rank := 0
+	for _, term := range terms {
+		termRank := -1
+		if strings.Contains(name, term) {
+			termRank = 2
 		}
+		for _, value := range metadata {
+			if strings.Contains(strings.ToLower(value), term) && (termRank < 0 || termRank > 3) {
+				termRank = 3
+			}
+		}
+		if termRank < 0 {
+			return 0, false
+		}
+		rank += termRank
 	}
-	return 0, false
+	return rank, true
 }
 
 func indexProfileByID(rows []connectionProfile, id string) int {

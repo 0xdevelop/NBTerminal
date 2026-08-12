@@ -100,6 +100,20 @@ func TestConnectionManagerRowsCombineGroupAndSearchWithoutMutatingSource(t *test
 	}
 }
 
+func TestConnectionManagerSearchRanksMultiTermMatchesWithinSelectedGroup(t *testing.T) {
+	rows := []connectionProfile{
+		{ID: "metadata", Name: "Primary", Group: "Production/Database", Host: "db.internal"},
+		{ID: "name", Name: "Production Database", Group: "Production", Host: "primary.internal"},
+		{ID: "partial", Name: "Production API", Group: "Production", Host: "api.internal"},
+		{ID: "outside", Name: "Production Database", Group: "Development", Host: "dev.internal"},
+	}
+
+	got := connectionManagerRows(rows, "Production", "production data")
+	if len(got) != 2 || got[0].ID != "name" || got[1].ID != "metadata" {
+		t.Fatalf("ranked multi-term manager search = %#v, want name match before metadata match", got)
+	}
+}
+
 func TestConnectionManagerSearchKeyboardMovesSelectionAndEscapeClearsQuery(t *testing.T) {
 	rows := []connectionProfile{
 		{ID: "alpha", Name: "Alpha", Type: connectionTypeLocal},

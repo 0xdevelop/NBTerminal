@@ -274,17 +274,15 @@ func compactConnectionGroup(group string) string {
 
 func connectionManagerRows(rows []connectionProfile, group, query string) []connectionProfile {
 	group = normalizeConnectionGroup(group)
-	out := make([]connectionProfile, 0, len(rows))
+	groupRows := make([]connectionProfile, 0, len(rows))
 	for _, row := range rows {
 		rowGroup := normalizeConnectionGroup(row.Group)
 		if group != "" && rowGroup != group && !strings.HasPrefix(rowGroup, group+"/") {
 			continue
 		}
-		if connectionMatchesQuery(row, query) {
-			out = append(out, row)
-		}
+		groupRows = append(groupRows, row)
 	}
-	return out
+	return filterConnections(groupRows, query)
 }
 
 func (m *connectionManagerWindow) applySearch() {
