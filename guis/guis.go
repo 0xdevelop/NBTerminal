@@ -1635,13 +1635,24 @@ func connectionSearchRank(p connectionProfile, query string) (int, bool) {
 	if query == "" {
 		return 0, true
 	}
-	name := strings.ToLower(strings.TrimSpace(p.Name))
-	switch {
-	case name == query:
+	terms := connectionSearchTerms(query)
+	if len(terms) == 0 {
 		return 0, true
-	case strings.HasPrefix(name, query):
+	}
+	name := strings.ToLower(strings.TrimSpace(p.Name))
+	nameQuery := query
+	if strings.Contains(query, `"`) {
+		nameQuery = ""
+		if len(terms) == 1 {
+			nameQuery = terms[0]
+		}
+	}
+	switch {
+	case nameQuery != "" && name == nameQuery:
+		return 0, true
+	case nameQuery != "" && strings.HasPrefix(name, nameQuery):
 		return 1, true
-	case strings.Contains(name, query):
+	case nameQuery != "" && strings.Contains(name, nameQuery):
 		return 2, true
 	}
 	metadata := []string{
@@ -1653,7 +1664,6 @@ func connectionSearchRank(p connectionProfile, query string) (int, bool) {
 		p.tableEndpoint(),
 		p.Description,
 	}
-	terms := strings.Fields(query)
 	rank := 0
 	for _, term := range terms {
 		termRank := -1
@@ -1671,6 +1681,51 @@ func connectionSearchRank(p connectionProfile, query string) (int, bool) {
 		rank += termRank
 	}
 	return rank, true
+}
+
+// connectionSearchTerms supports shell-like quoted phrases without turning the
+// connection search box into a command parser. Whitespace separates ordinary
+// terms, quotes preserve spaces, and an unfinished quote remains useful while
+// the user is still typing. Backslash only escapes a quote or another backslash.
+func connectionSearchTerms(query string) []string {
+	var terms []string
+	var current strings.Builder
+	quoted := false
+	escaped := false
+	flush := func() {
+		if term := strings.TrimSpace(current.String()); term != "" {
+			terms = append(terms, term)
+		}
+		current.Reset()
+	}
+	for _, r := range query {
+		if escaped {
+			if r != '"' && r != '\\' {
+				current.WriteRune('\\')
+			}
+			current.WriteRune(r)
+			escaped = false
+			continue
+		}
+		if quoted && r == '\\' {
+			escaped = true
+			continue
+		}
+		if r == '"' {
+			quoted = !quoted
+			continue
+		}
+		if !quoted && (r == ' ' || r == '	' || r == '\n' || r == '\r') {
+			flush()
+			continue
+		}
+		current.WriteRune(r)
+	}
+	if escaped {
+		current.WriteRune('\\')
+	}
+	flush()
+	return terms
 }
 
 func indexProfileByID(rows []connectionProfile, id string) int {

@@ -805,6 +805,28 @@ func TestConnectionSearchSupportsWhitespaceSeparatedTermsAcrossVisibleFields(t *
 	}
 }
 
+func TestConnectionSearchSupportsQuotedPhrasesAndLiteralUnclosedQuotes(t *testing.T) {
+	rows := []connectionProfile{
+		{ID: "phrase", Name: "Production Database", Group: "Primary"},
+		{ID: "split", Name: "Production API", Group: "Database"},
+		{ID: "cjk", Name: "生产 数据库", Group: "香港"},
+		{ID: "quote", Name: `Production "Blue" Database`, Group: "Archive"},
+	}
+
+	if got := filterConnections(rows, `"production database"`); len(got) != 1 || got[0].ID != "phrase" {
+		t.Fatalf("quoted phrase search = %#v, want phrase-only match", got)
+	}
+	if got := filterConnections(rows, `"生产 数据库" 香港`); len(got) != 1 || got[0].ID != "cjk" {
+		t.Fatalf("quoted CJK plus metadata search = %#v, want cjk match", got)
+	}
+	if got := filterConnections(rows, `"production \"blue\" database"`); len(got) != 1 || got[0].ID != "quote" {
+		t.Fatalf("escaped quote phrase search = %#v, want quote match", got)
+	}
+	if got := filterConnections(rows, `"production database`); len(got) != 1 || got[0].ID != "phrase" {
+		t.Fatalf("unclosed quote should remain a useful phrase search, got %#v", got)
+	}
+}
+
 func TestActiveConnectionIndexUsesGlobalConfigSelection(t *testing.T) {
 	oldGlobal := config.GlobalConfig
 	t.Cleanup(func() { config.GlobalConfig = oldGlobal })
