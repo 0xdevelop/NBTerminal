@@ -832,6 +832,29 @@ func TestFilterConnectionsNarrowsRows(t *testing.T) {
 	}
 }
 
+func TestFilterConnectionsRanksBestLaunchMatchDeterministically(t *testing.T) {
+	rows := []connectionProfile{
+		{ID: "group", Name: "Database console", Group: "Production API", Type: connectionTypeSSH},
+		{ID: "substring", Name: "Legacy API mirror", Group: "Archive", Type: connectionTypeSSH},
+		{ID: "prefix-z", Name: "API Zebra", Group: "Production", Type: connectionTypeSSH},
+		{ID: "exact", Name: "API", Group: "Development", Type: connectionTypeLocal},
+		{ID: "prefix-a", Name: "API Alpha", Group: "Production", Type: connectionTypeSSH},
+	}
+
+	gotRows := filterConnections(rows, "api")
+	got := make([]string, 0, len(gotRows))
+	for _, row := range gotRows {
+		got = append(got, row.ID)
+	}
+	want := []string{"exact", "prefix-a", "prefix-z", "substring", "group"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ranked search = %#v, want %#v", got, want)
+	}
+	if rows[0].ID != "group" {
+		t.Fatalf("ranked search mutated durable source order: %#v", rows)
+	}
+}
+
 func TestUpsertAndRemoveProfileByID(t *testing.T) {
 	rows := []connectionProfile{{ID: "local", Name: "Local"}, {ID: "prod", Name: "Prod"}}
 	rows = upsertProfile(rows, connectionProfile{ID: "prod", Name: "Prod API"})

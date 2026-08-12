@@ -1552,11 +1552,30 @@ func filterConnections(rows []connectionProfile, query string) []connectionProfi
 	if query == "" {
 		return append([]connectionProfile(nil), rows...)
 	}
-	out := make([]connectionProfile, 0, len(rows))
+	type rankedConnection struct {
+		profile connectionProfile
+		rank    int
+	}
+	ranked := make([]rankedConnection, 0, len(rows))
 	for _, row := range rows {
-		if connectionMatchesQuery(row, query) {
-			out = append(out, row)
+		if rank, ok := connectionSearchRank(row, query); ok {
+			ranked = append(ranked, rankedConnection{profile: row, rank: rank})
 		}
+	}
+	sort.SliceStable(ranked, func(i, j int) bool {
+		if ranked[i].rank != ranked[j].rank {
+			return ranked[i].rank < ranked[j].rank
+		}
+		leftName := strings.ToLower(strings.TrimSpace(ranked[i].profile.Name))
+		rightName := strings.ToLower(strings.TrimSpace(ranked[j].profile.Name))
+		if leftName != rightName {
+			return leftName < rightName
+		}
+		return ranked[i].profile.ID < ranked[j].profile.ID
+	})
+	out := make([]connectionProfile, len(ranked))
+	for index, match := range ranked {
+		out[index] = match.profile
 	}
 	return out
 }
@@ -1604,21 +1623,42 @@ func toggledFavorite(profile connectionProfile) connectionProfile {
 }
 
 func connectionMatchesQuery(p connectionProfile, query string) bool {
+	_, matched := connectionSearchRank(p, query)
+	return matched
+}
+
+// connectionSearchRank keeps Enter-to-launch deterministic: exact and prefix
+// profile-name matches precede weaker name matches and metadata-only matches.
+// Secret fields are deliberately absent from both ranking and matching.
+func connectionSearchRank(p connectionProfile, query string) (int, bool) {
 	query = strings.ToLower(strings.TrimSpace(query))
 	if query == "" {
-		return true
+		return 0, true
 	}
-	haystack := strings.ToLower(strings.Join([]string{
+	name := strings.ToLower(strings.TrimSpace(p.Name))
+	switch {
+	case name == query:
+		return 0, true
+	case strings.HasPrefix(name, query):
+		return 1, true
+	case strings.Contains(name, query):
+		return 2, true
+	}
+	metadata := []string{
 		p.Group,
-		p.Name,
 		string(p.Type),
 		p.Host,
 		p.Username,
 		p.endpoint(),
 		p.tableEndpoint(),
 		p.Description,
-	}, "\n"))
-	return strings.Contains(haystack, query)
+	}
+	for _, value := range metadata {
+		if strings.Contains(strings.ToLower(value), query) {
+			return 3, true
+		}
+	}
+	return 0, false
 }
 
 func indexProfileByID(rows []connectionProfile, id string) int {
