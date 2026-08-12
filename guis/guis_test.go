@@ -777,11 +777,18 @@ func TestConnectionMatchesQuery(t *testing.T) {
 		Host:        "10.0.0.8",
 		Port:        2222,
 		Username:    "deploy",
+		PasswordEnc: "encrypted",
+		PrivateKey:  "private-key",
 		Description: "primary backend host",
 	}
-	for _, query := range []string{"prod", "api", "ssh", "10.0.0.8", "deploy", "2222", "backend", ""} {
+	for _, query := range []string{"prod", "api", "ssh", "10.0.0.8", "2222", "backend", ""} {
 		if !connectionMatchesQuery(profile, query) {
 			t.Fatalf("expected query %q to match %#v", query, profile)
+		}
+	}
+	for _, secretBearingQuery := range []string{"deploy", "encrypted", "private-key"} {
+		if connectionMatchesQuery(profile, secretBearingQuery) {
+			t.Fatalf("search must not match credential-bearing field %q", secretBearingQuery)
 		}
 	}
 	if connectionMatchesQuery(profile, "staging") {

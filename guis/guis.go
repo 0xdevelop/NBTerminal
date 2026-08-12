@@ -1659,8 +1659,6 @@ func connectionSearchRank(p connectionProfile, query string) (int, bool) {
 		p.Group,
 		string(p.Type),
 		p.Host,
-		p.Username,
-		p.endpoint(),
 		p.tableEndpoint(),
 		p.Description,
 	}
