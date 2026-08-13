@@ -46,7 +46,9 @@ func TestNativeDesktopDesignTokensMatchProductBaseline(t *testing.T) {
 		nativeControls.PrimaryButtonHeight != 36 || nativeControls.TableHeaderHeight != 30 ||
 		nativeControls.TableRowHeight != 32 || nativeControls.TextInset != 8 ||
 		nativeControls.ButtonHorizontalInset < 14 || nativeControls.FieldLabelGap != 6 ||
-		nativeControls.FieldGroupGap != 20 {
+		nativeControls.FieldGroupGap != 20 || nativeControls.FieldLabelHeight != 20 ||
+		nativeControls.SupportingLineHeight != 22 || nativeControls.SectionTitleHeight != 24 ||
+		nativeControls.WindowTitleHeight != 30 || nativeControls.CheckboxHeight != 34 {
 		t.Fatalf("unexpected native control tokens: %#v", nativeControls)
 	}
 }
@@ -155,17 +157,30 @@ func TestMainWindowLayoutPreservesHeaderAndWorkspaceAtMinimumSize(t *testing.T) 
 
 func TestSettingsEditorAndManagerLayoutsUseSemanticControlMetrics(t *testing.T) {
 	settings := settingsLayoutFor(nativeControls)
+	if settings.Title.Height != nativeControls.WindowTitleHeight || settings.Subtitle.Height != nativeControls.SupportingLineHeight ||
+		settings.GeneralTitle.Height != nativeControls.SectionTitleHeight || settings.BehaviorTitle.Height != nativeControls.SectionTitleHeight {
+		t.Fatalf("settings headings do not use semantic typography carriers: %#v", settings)
+	}
 	if settings.Language.Height != nativeControls.InputHeight || settings.Timeout.Height != nativeControls.InputHeight {
 		t.Fatalf("settings controls do not use input-height token: %#v", settings)
 	}
 	if settings.Save.Height != nativeControls.PrimaryButtonHeight || settings.Cancel.Height != nativeControls.PrimaryButtonHeight {
 		t.Fatalf("settings actions do not use primary-height token: %#v", settings)
 	}
-	if settings.BehaviorTitleY-settings.Timeout.Bottom() < nativeControls.FieldGroupGap {
+	if settings.LanguageLabel.Height != nativeControls.InputHeight || settings.TimeoutLabel.Height != nativeControls.InputHeight ||
+		settings.SecondsHint.Height != nativeControls.SupportingLineHeight || settings.ResetWorkspace.Height != nativeControls.CheckboxHeight ||
+		settings.StartFirst.Height != nativeControls.CheckboxHeight || settings.BehaviorHint.Height < nativeControls.SupportingLineHeight {
+		t.Fatalf("settings labels/checks do not use semantic carriers: %#v", settings)
+	}
+	if settings.BehaviorTitle.Y-settings.Timeout.Bottom() < nativeControls.FieldGroupGap {
 		t.Fatalf("settings field groups are too tight: %#v", settings)
 	}
 
 	editor := connectionEditorLayoutFor(nativeControls)
+	if editor.Title.Height != nativeControls.WindowTitleHeight || editor.Subtitle.Height < nativeControls.SupportingLineHeight ||
+		editor.TypeLabel.Height != nativeControls.FieldLabelHeight || editor.PasswordLabel.Height != nativeControls.FieldLabelHeight {
+		t.Fatalf("editor headings/labels do not use semantic typography carriers: %#v", editor)
+	}
 	for name, field := range map[string]layoutRect{
 		"name": editor.Name, "group": editor.Group, "type": editor.Type,
 		"host": editor.Host, "port": editor.Port, "username": editor.Username,

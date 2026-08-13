@@ -27,6 +27,11 @@ type controlMetricSet struct {
 	PrimaryButtonHeight   int
 	TableHeaderHeight     int
 	TableRowHeight        int
+	WindowTitleHeight     int
+	SectionTitleHeight    int
+	SupportingLineHeight  int
+	FieldLabelHeight      int
+	CheckboxHeight        int
 	TextInset             int
 	ButtonHorizontalInset int
 	FieldLabelGap         int
@@ -39,6 +44,11 @@ var nativeControls = controlMetricSet{
 	PrimaryButtonHeight:   36,
 	TableHeaderHeight:     30,
 	TableRowHeight:        32,
+	WindowTitleHeight:     30,
+	SectionTitleHeight:    24,
+	SupportingLineHeight:  22,
+	FieldLabelHeight:      20,
+	CheckboxHeight:        34,
 	TextInset:             8,
 	ButtonHorizontalInset: 14,
 	FieldLabelGap:         6,
@@ -215,38 +225,54 @@ func connectionManagerLayoutFor(tokens controlMetricSet) connectionManagerLayout
 }
 
 type settingsLayout struct {
-	Language, Timeout, Save, Cancel layoutRect
-	BehaviorTitleY                  int
+	Title, Subtitle, GeneralTitle, LanguageLabel, Language  layoutRect
+	TimeoutLabel, Timeout, SecondsHint                      layoutRect
+	BehaviorTitle, ResetWorkspace, StartFirst, BehaviorHint layoutRect
+	Save, Cancel                                            layoutRect
 }
 
 func settingsLayoutFor(tokens controlMetricSet) settingsLayout {
 	return settingsLayout{
+		Title:          layoutRect{X: 26, Y: 22, Width: 420, Height: tokens.WindowTitleHeight},
+		Subtitle:       layoutRect{X: 28, Y: 54, Width: 550, Height: tokens.SupportingLineHeight},
+		GeneralTitle:   layoutRect{X: 28, Y: 96, Width: 220, Height: tokens.SectionTitleHeight},
+		LanguageLabel:  layoutRect{X: 28, Y: 132, Width: 190, Height: tokens.InputHeight},
 		Language:       layoutRect{X: 238, Y: 132, Width: 330, Height: tokens.InputHeight},
+		TimeoutLabel:   layoutRect{X: 28, Y: 178, Width: 190, Height: tokens.InputHeight},
 		Timeout:        layoutRect{X: 238, Y: 178, Width: 120, Height: tokens.InputHeight},
-		BehaviorTitleY: 238,
+		SecondsHint:    layoutRect{X: 370, Y: 184, Width: 198, Height: tokens.SupportingLineHeight},
+		BehaviorTitle:  layoutRect{X: 28, Y: 238, Width: 300, Height: tokens.SectionTitleHeight},
+		ResetWorkspace: layoutRect{X: 28, Y: 270, Width: 540, Height: tokens.CheckboxHeight},
+		StartFirst:     layoutRect{X: 28, Y: 312, Width: 540, Height: tokens.CheckboxHeight},
+		BehaviorHint:   layoutRect{X: 50, Y: 348, Width: 518, Height: tokens.SupportingLineHeight * 2},
 		Cancel:         layoutRect{X: 360, Y: 408, Width: 96, Height: tokens.PrimaryButtonHeight},
 		Save:           layoutRect{X: 468, Y: 408, Width: 100, Height: tokens.PrimaryButtonHeight},
 	}
 }
 
 type connectionEditorLayout struct {
+	Title, Subtitle, TypeLabel, PasswordLabel                       layoutRect
 	Name, Group, Type, Host, Port, Username, Password, PasswordHint layoutRect
 	WorkingDir, PrivateKey, Save, Cancel                            layoutRect
 }
 
 func connectionEditorLayoutFor(tokens controlMetricSet) connectionEditorLayout {
 	return connectionEditorLayout{
-		Name:         layoutRect{X: 28, Y: 118, Width: 286, Height: tokens.InputHeight},
-		Group:        layoutRect{X: 334, Y: 118, Width: 298, Height: tokens.InputHeight},
-		Type:         layoutRect{X: 28, Y: 190, Width: 132, Height: tokens.InputHeight},
-		Host:         layoutRect{X: 180, Y: 190, Width: 292, Height: tokens.InputHeight},
-		Port:         layoutRect{X: 492, Y: 190, Width: 140, Height: tokens.InputHeight},
-		Username:     layoutRect{X: 28, Y: 262, Width: 286, Height: tokens.InputHeight},
-		Password:     layoutRect{X: 334, Y: 262, Width: 298, Height: tokens.InputHeight},
-		PasswordHint: layoutRect{X: 334, Y: 300, Width: 298, Height: 30},
-		WorkingDir:   layoutRect{X: 28, Y: 350, Width: 604, Height: tokens.InputHeight},
-		PrivateKey:   layoutRect{X: 28, Y: 424, Width: 604, Height: tokens.InputHeight},
-		Cancel:       layoutRect{X: 420, Y: 512, Width: 96, Height: tokens.PrimaryButtonHeight},
-		Save:         layoutRect{X: 528, Y: 512, Width: 104, Height: tokens.PrimaryButtonHeight},
+		Title:         layoutRect{X: 28, Y: 22, Width: 500, Height: tokens.WindowTitleHeight},
+		Subtitle:      layoutRect{X: 30, Y: 54, Width: 590, Height: tokens.SupportingLineHeight * 2},
+		Name:          layoutRect{X: 28, Y: 118, Width: 286, Height: tokens.InputHeight},
+		Group:         layoutRect{X: 334, Y: 118, Width: 298, Height: tokens.InputHeight},
+		Type:          layoutRect{X: 28, Y: 190, Width: 132, Height: tokens.InputHeight},
+		TypeLabel:     layoutRect{X: 28, Y: 164, Width: 132, Height: tokens.FieldLabelHeight},
+		Host:          layoutRect{X: 180, Y: 190, Width: 292, Height: tokens.InputHeight},
+		Port:          layoutRect{X: 492, Y: 190, Width: 140, Height: tokens.InputHeight},
+		Username:      layoutRect{X: 28, Y: 262, Width: 286, Height: tokens.InputHeight},
+		Password:      layoutRect{X: 334, Y: 262, Width: 298, Height: tokens.InputHeight},
+		PasswordLabel: layoutRect{X: 334, Y: 236, Width: 298, Height: tokens.FieldLabelHeight},
+		PasswordHint:  layoutRect{X: 334, Y: 300, Width: 298, Height: 30},
+		WorkingDir:    layoutRect{X: 28, Y: 350, Width: 604, Height: tokens.InputHeight},
+		PrivateKey:    layoutRect{X: 28, Y: 424, Width: 604, Height: tokens.InputHeight},
+		Cancel:        layoutRect{X: 420, Y: 512, Width: 96, Height: tokens.PrimaryButtonHeight},
+		Save:          layoutRect{X: 528, Y: 512, Width: 104, Height: tokens.PrimaryButtonHeight},
 	}
 }

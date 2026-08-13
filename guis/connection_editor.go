@@ -195,12 +195,14 @@ func (e *connectionEditor) build() {
 	e.window.OnCloseRequest(e.shouldClose)
 
 	root := e.window.RootView()
-	root.AddSubview(titleLabel(28, 22, 500, 30, title))
-	root.AddSubview(mutedLabel(30, 54, 590, 36, tr("editor.subtitle")))
+	root.AddSubview(titleLabel(layout.Title.X, layout.Title.Y, layout.Title.Width, layout.Title.Height, title))
+	subtitle := mutedLabel(layout.Subtitle.X, layout.Subtitle.Y, layout.Subtitle.Width, layout.Subtitle.Height, tr("editor.subtitle"))
+	subtitle.SetAlignment(fltk_bridge.ALIGN_LEFT | fltk_bridge.ALIGN_INSIDE | fltk_bridge.ALIGN_WRAP)
+	root.AddSubview(subtitle)
 
 	e.name = editorInput(root, layout.Name, tr("field.name"), "connection_editor.name")
 	e.group = editorInput(root, layout.Group, tr("field.group"), "connection_editor.group")
-	root.AddSubview(mutedLabel(layout.Type.X, layout.Type.Y-nativeTypography.Supporting-nativeControls.FieldLabelGap, layout.Type.Width, 20, tr("field.type")))
+	root.AddSubview(mutedLabel(layout.TypeLabel.X, layout.TypeLabel.Y, layout.TypeLabel.Width, layout.TypeLabel.Height, tr("field.type")))
 	e.connType = uidropdown.NewUIDropdown(rect(layout.Type.X, layout.Type.Y, layout.Type.Width, layout.Type.Height))
 	typeOptions := connectionEditorTypeOptions()
 	typeLabels := make([]string, 0, len(typeOptions))
@@ -224,7 +226,7 @@ func (e *connectionEditor) build() {
 	e.host = editorInput(root, layout.Host, tr("field.host"), "connection_editor.host")
 	e.port = editorInput(root, layout.Port, tr("field.port"), "connection_editor.port")
 	e.username = editorInput(root, layout.Username, tr("field.user"), "connection_editor.username")
-	root.AddSubview(mutedLabel(layout.Password.X, layout.Password.Y-nativeTypography.Supporting-nativeControls.FieldLabelGap, layout.Password.Width, 20, tr("field.password")))
+	root.AddSubview(mutedLabel(layout.PasswordLabel.X, layout.PasswordLabel.Y, layout.PasswordLabel.Width, layout.PasswordLabel.Height, tr("field.password")))
 	e.password = uikit.NewInputWithType(layout.Password.X, layout.Password.Y, layout.Password.Width, layout.Password.Height, "", uikit.SecretInput)
 	styleInput(e.password)
 	e.password.View().SetAutomationID("connection_editor.password").SetAutomationName(tr("field.password"))
@@ -258,7 +260,7 @@ func (e *connectionEditor) build() {
 }
 
 func editorInput(root *uikit.UIView, frame layoutRect, fieldTitle, id string) *uikit.Input {
-	root.AddSubview(mutedLabel(frame.X, frame.Y-nativeTypography.Supporting-nativeControls.FieldLabelGap, frame.Width, 20, fieldTitle))
+	root.AddSubview(mutedLabel(frame.X, frame.Y-nativeControls.FieldLabelHeight-nativeControls.FieldLabelGap, frame.Width, nativeControls.FieldLabelHeight, fieldTitle))
 	in := inputNoLabel(frame.X, frame.Y, frame.Width, frame.Height, id, fieldTitle)
 	root.AddSubview(in)
 	return in
