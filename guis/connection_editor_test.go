@@ -42,6 +42,39 @@ func TestConnectionEditorDraftBuildsProfileWithoutTouchingRecencyOrStoredSecret(
 	}
 }
 
+func TestConnectionEditorDraftClearsSSHCredentialsWhenSavedAsLocal(t *testing.T) {
+	base := connectionProfile{
+		ID:          "target",
+		Type:        connectionTypeSSH,
+		Host:        "old.example.com",
+		Port:        2222,
+		Username:    "operator",
+		PasswordEnc: "stored-secret",
+		PrivateKey:  "~/.ssh/id_ed25519",
+	}
+	draft := connectionEditorDraft{
+		Name:       "Local tools",
+		Group:      "Local",
+		Type:       "local",
+		Host:       "stale.example.com",
+		Port:       "2200",
+		Username:   "stale-user",
+		WorkingDir: "/srv/tools",
+		PrivateKey: "~/.ssh/stale",
+	}
+
+	got, err := draft.Profile(base, "new-secret")
+	if err != nil {
+		t.Fatalf("Profile failed: %v", err)
+	}
+	if got.Type != connectionTypeLocal || got.WorkingDir != draft.WorkingDir {
+		t.Fatalf("local fields mismatch: %#v", got)
+	}
+	if got.Host != "" || got.Port != 0 || got.Username != "" || got.PasswordEnc != "" || got.PrivateKey != "" {
+		t.Fatalf("local profile retained hidden SSH credentials: %#v", got)
+	}
+}
+
 func TestConnectionEditorDraftValidatesTypeAndPort(t *testing.T) {
 	base := connectionProfile{ID: "target", Type: connectionTypeSSH}
 	for _, tc := range []struct {

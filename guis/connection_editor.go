@@ -75,7 +75,15 @@ func (d connectionEditorDraft) Profile(base connectionProfile, password string) 
 		return connectionProfile{}, fmt.Errorf("%s", tr("editor.invalid_type"))
 	}
 	if p.Type == connectionTypeLocal {
+		// Local profiles must not retain hidden SSH-only state from a previous
+		// editor selection. Besides avoiding stale values when switching back to
+		// SSH later, this keeps credentials and remote endpoint metadata out of
+		// the durable encrypted payload when they are no longer applicable.
+		p.Host = ""
 		p.Port = 0
+		p.Username = ""
+		p.PasswordEnc = ""
+		p.PrivateKey = ""
 	} else {
 		portText := strings.TrimSpace(d.Port)
 		if portText == "" {
@@ -87,9 +95,9 @@ func (d connectionEditorDraft) Profile(base connectionProfile, password string) 
 			}
 			p.Port = port
 		}
-	}
-	if password != "" {
-		p.SetPassword(password)
+		if password != "" {
+			p.SetPassword(password)
+		}
 	}
 	return p, nil
 }
