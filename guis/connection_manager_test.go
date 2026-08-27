@@ -158,6 +158,42 @@ func TestConnectionManagerParentGroupIncludesDescendantsOnly(t *testing.T) {
 	}
 }
 
+func TestDuplicateConnectionProfileCreatesIndependentUnsavedCopy(t *testing.T) {
+	source := connectionProfile{
+		ID: "prod-db", Name: "Production DB", Group: "Infrastructure/Production",
+		Type: connectionTypeSSH, Host: "db.internal", Port: 2222, Username: "operator",
+		PasswordEnc: "gtenc-password", PrivateKey: "/keys/prod", WorkingDir: "/srv/db",
+		Favorite: true, LastUsed: "2026-08-20T12:00:00Z",
+	}
+	existing := []connectionProfile{
+		source,
+		{ID: "copy-42", Name: "Production DB (Copy)"},
+		{ID: "copy-42-2", Name: "Production DB (Copy 2)"},
+	}
+
+	got := duplicateConnectionProfile(source, existing, 42)
+	if got.ID != "copy-42-3" || got.Name != "Production DB (Copy 3)" {
+		t.Fatalf("duplicate identity = %q/%q, want copy-42-3/Production DB (Copy 3)", got.ID, got.Name)
+	}
+	if got.Favorite || got.LastUsed != "" {
+		t.Fatalf("duplicate inherited projection metadata: favorite=%t lastUsed=%q", got.Favorite, got.LastUsed)
+	}
+	if got.Group != source.Group || got.Type != source.Type || got.Host != source.Host || got.Port != source.Port ||
+		got.Username != source.Username || got.PasswordEnc != source.PasswordEnc || got.PrivateKey != source.PrivateKey || got.WorkingDir != source.WorkingDir {
+		t.Fatalf("duplicate lost reusable connection fields: got=%#v source=%#v", got, source)
+	}
+	if source.ID != "prod-db" || source.Name != "Production DB" || !source.Favorite || source.LastUsed == "" {
+		t.Fatalf("duplicate mutated source profile: %#v", source)
+	}
+}
+
+func TestDuplicateConnectionProfileUsesCopyNameForUnnamedSource(t *testing.T) {
+	got := duplicateConnectionProfile(connectionProfile{ID: "blank", Name: "   "}, nil, 7)
+	if got.ID != "copy-7" || got.Name != "Connection (Copy)" {
+		t.Fatalf("unnamed duplicate = %#v", got)
+	}
+}
+
 func TestConnectionEditorNormalizesHierarchicalGroupPath(t *testing.T) {
 	draft := connectionEditorDraft{Name: "DB", Group: " Infrastructure // Production / Database ", Type: "local"}
 	profile, err := draft.Profile(connectionProfile{ID: "db"}, "")

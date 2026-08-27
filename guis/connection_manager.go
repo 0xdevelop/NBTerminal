@@ -1,8 +1,10 @@
 package guis
 
 import (
+	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/0xdevelop/NBTerminal/config"
 	"github.com/0xdevelop/fltk2go/fltk_bridge"
@@ -143,6 +145,7 @@ func (m *connectionManagerWindow) build() {
 	root.AddSubview(m.closeAfterConnect)
 	root.AddSubview(button(layout.New.X, layout.New.Y, layout.New.Width, layout.New.Height, tr("action.new"), "connection_manager.new", m.newProfile))
 	root.AddSubview(button(layout.Edit.X, layout.Edit.Y, layout.Edit.Width, layout.Edit.Height, tr("action.edit"), "connection_manager.edit", m.editSelected))
+	root.AddSubview(button(layout.Duplicate.X, layout.Duplicate.Y, layout.Duplicate.Width, layout.Duplicate.Height, "Duplicate", "connection_manager.duplicate", m.duplicateSelected))
 	root.AddSubview(button(layout.Delete.X, layout.Delete.Y, layout.Delete.Width, layout.Delete.Height, tr("action.delete"), "connection_manager.delete", m.deleteSelected))
 	root.AddSubview(button(layout.Test.X, layout.Test.Y, layout.Test.Width, layout.Test.Height, tr("action.test"), "connection_manager.test", m.testSelected))
 	root.AddSubview(button(layout.Favorite.X, layout.Favorite.Y, layout.Favorite.Width, layout.Favorite.Height, tr("manager.favorite"), "connection_manager.favorite", m.toggleFavorite))
@@ -358,6 +361,49 @@ func (m *connectionManagerWindow) editSelected() {
 	profile, ok := m.selectedProfile()
 	if ok && m.owner != nil {
 		m.owner.openConnectionEditor(profile)
+	}
+}
+
+// duplicateSelected opens a prefilled, unsaved editor draft. Nothing is written
+// until the user explicitly saves, while the existing encrypted credentials are
+// retained in memory and later pass through the normal encrypted store boundary.
+func (m *connectionManagerWindow) duplicateSelected() {
+	profile, ok := m.selectedProfile()
+	if !ok || m.owner == nil {
+		return
+	}
+	m.owner.openConnectionEditor(duplicateConnectionProfile(profile, m.owner.allRows, time.Now().UnixNano()))
+}
+
+func duplicateConnectionProfile(source connectionProfile, existing []connectionProfile, nonce int64) connectionProfile {
+	copy := source
+	copy.Favorite = false
+	copy.LastUsed = ""
+
+	baseName := strings.TrimSpace(source.Name)
+	if baseName == "" {
+		baseName = "Connection"
+	}
+	usedIDs := make(map[string]struct{}, len(existing))
+	usedNames := make(map[string]struct{}, len(existing))
+	for _, profile := range existing {
+		usedIDs[profile.ID] = struct{}{}
+		usedNames[strings.ToLower(strings.TrimSpace(profile.Name))] = struct{}{}
+	}
+	for sequence := 1; ; sequence++ {
+		id := fmt.Sprintf("copy-%d", nonce)
+		name := baseName + " (Copy)"
+		if sequence > 1 {
+			id = fmt.Sprintf("%s-%d", id, sequence)
+			name = fmt.Sprintf("%s (Copy %d)", baseName, sequence)
+		}
+		_, idUsed := usedIDs[id]
+		_, nameUsed := usedNames[strings.ToLower(name)]
+		if !idUsed && !nameUsed {
+			copy.ID = id
+			copy.Name = name
+			return copy
+		}
 	}
 }
 
