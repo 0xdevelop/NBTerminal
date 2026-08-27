@@ -9,4 +9,4 @@
 # 功能
 - [x] en: Cross-platform use; zh-CN: 跨平台使用; ru: Кроссплатформенное использование;
 - [ ] en: Private storage of secret keys; zh-CN: 私有化存储秘钥; ru: Приватный ключ хранилища;
-- [ ] en: Multi-level group management; zh-CN: 多层级分组管理; ru: Многоуровневое управление группами;
+- [x] en: Multi-level group management; zh-CN: 多层级分组管理; ru: Многоуровневое управление группами;

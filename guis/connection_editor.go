@@ -112,15 +112,17 @@ type connectionEditor struct {
 	pendingReplacement *connectionProfile
 	pendingAfterClose  func()
 
-	name       *uikit.Input
-	group      *uikit.Input
-	connType   *uidropdown.UIDropdown
-	host       *uikit.Input
-	port       *uikit.Input
-	username   *uikit.Input
-	password   *uikit.Input
-	workingDir *uikit.Input
-	privateKey *uikit.Input
+	name         *uikit.Input
+	group        *uikit.Input
+	groupBrowse  *uidropdown.UIDropdown
+	groupOptions []connectionGroupOption
+	connType     *uidropdown.UIDropdown
+	host         *uikit.Input
+	port         *uikit.Input
+	username     *uikit.Input
+	password     *uikit.Input
+	workingDir   *uikit.Input
+	privateKey   *uikit.Input
 }
 
 func (a *finalShellApp) openConnectionEditor(profile connectionProfile) {
@@ -202,6 +204,27 @@ func (e *connectionEditor) build() {
 
 	e.name = editorInput(root, layout.Name, tr("field.name"), "connection_editor.name")
 	e.group = editorInput(root, layout.Group, tr("field.group"), "connection_editor.group")
+	e.groupBrowse = uidropdown.NewUIDropdown(rect(layout.GroupBrowse.X, layout.GroupBrowse.Y, layout.GroupBrowse.Width, layout.GroupBrowse.Height))
+	e.groupOptions = connectionEditorGroupOptions(e.owner.allRows, e.profile.Group)
+	groupLabels := make([]string, len(e.groupOptions))
+	for index, option := range e.groupOptions {
+		groupLabels[index] = option.Label
+	}
+	e.groupBrowse.SetOptions(groupLabels)
+	for index, option := range e.groupOptions {
+		if option.Path == normalizeConnectionGroup(e.profile.Group) {
+			e.groupBrowse.SetSelectedIndex(index)
+			break
+		}
+	}
+	styleDropdown(e.groupBrowse)
+	e.groupBrowse.View().SetAutomationID("connection_editor.group_browse").SetAutomationName("Existing groups")
+	e.groupBrowse.OnSelectionChanged(func(index int, _ string) {
+		if e.group != nil && index >= 0 && index < len(e.groupOptions) {
+			e.group.SetText(e.groupOptions[index].Path)
+		}
+	})
+	root.AddSubview(e.groupBrowse)
 	root.AddSubview(mutedLabel(layout.TypeLabel.X, layout.TypeLabel.Y, layout.TypeLabel.Width, layout.TypeLabel.Height, tr("field.type")))
 	e.connType = uidropdown.NewUIDropdown(rect(layout.Type.X, layout.Type.Y, layout.Type.Width, layout.Type.Height))
 	typeOptions := connectionEditorTypeOptions()
@@ -264,6 +287,17 @@ func editorInput(root *uikit.UIView, frame layoutRect, fieldTitle, id string) *u
 	in := inputNoLabel(frame.X, frame.Y, frame.Width, frame.Height, id, fieldTitle)
 	root.AddSubview(in)
 	return in
+}
+
+// connectionEditorGroupOptions lets users reuse any existing hierarchy level
+// while retaining the editable group field for creating a new path. The picker
+// shows hierarchical leaf labels while each selection maps back to its full path.
+func connectionEditorGroupOptions(rows []connectionProfile, current string) []connectionGroupOption {
+	withCurrent := append([]connectionProfile(nil), rows...)
+	if current = normalizeConnectionGroup(current); current != "" {
+		withCurrent = append(withCurrent, connectionProfile{Group: current})
+	}
+	return connectionManagerGroupOptions(withCurrent)[1:]
 }
 
 func styleDropdown(dropdown *uidropdown.UIDropdown) {

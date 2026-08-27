@@ -205,6 +205,27 @@ func TestConnectionEditorNormalizesHierarchicalGroupPath(t *testing.T) {
 	}
 }
 
+func TestConnectionEditorGroupOptionsExposeExistingHierarchyWithoutDuplicates(t *testing.T) {
+	rows := []connectionProfile{
+		{ID: "prod-db", Group: " Infrastructure / Production / Database "},
+		{ID: "prod-web", Group: "Infrastructure/Production/Web"},
+		{ID: "duplicate", Group: "Infrastructure/Production/Database"},
+		{ID: "ungrouped", Group: ""},
+	}
+
+	got := connectionEditorGroupOptions(rows, "Infrastructure / Staging")
+	want := []connectionGroupOption{
+		{Path: "Infrastructure", Label: "Infrastructure"},
+		{Path: "Infrastructure/Production", Label: "  Production"},
+		{Path: "Infrastructure/Production/Database", Label: "    Database"},
+		{Path: "Infrastructure/Production/Web", Label: "    Web"},
+		{Path: "Infrastructure/Staging", Label: "  Staging"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("editor group options = %#v, want %#v", got, want)
+	}
+}
+
 func TestCompactNavigatorUsesLeafGroupName(t *testing.T) {
 	if got := compactConnectionGroup("Infrastructure/Production/Database"); got != "Database" {
 		t.Fatalf("compact group = %q, want leaf name", got)

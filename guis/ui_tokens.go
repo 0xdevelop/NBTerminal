@@ -252,9 +252,10 @@ func settingsLayoutFor(tokens controlMetricSet) settingsLayout {
 }
 
 type connectionEditorLayout struct {
-	Title, Subtitle, TypeLabel, PasswordLabel                       layoutRect
-	Name, Group, Type, Host, Port, Username, Password, PasswordHint layoutRect
-	WorkingDir, PrivateKey, Save, Cancel                            layoutRect
+	Title, Subtitle, TypeLabel, PasswordLabel            layoutRect
+	Name, Group, GroupBrowse, Type, Host, Port, Username layoutRect
+	Password, PasswordHint                               layoutRect
+	WorkingDir, PrivateKey, Save, Cancel                 layoutRect
 }
 
 func connectionEditorLayoutFor(tokens controlMetricSet) connectionEditorLayout {
@@ -262,7 +263,8 @@ func connectionEditorLayoutFor(tokens controlMetricSet) connectionEditorLayout {
 		Title:         layoutRect{X: 28, Y: 22, Width: 500, Height: tokens.WindowTitleHeight},
 		Subtitle:      layoutRect{X: 30, Y: 54, Width: 590, Height: tokens.SupportingLineHeight * 2},
 		Name:          layoutRect{X: 28, Y: 118, Width: 286, Height: tokens.InputHeight},
-		Group:         layoutRect{X: 334, Y: 118, Width: 298, Height: tokens.InputHeight},
+		Group:         layoutRect{X: 334, Y: 118, Width: 188, Height: tokens.InputHeight},
+		GroupBrowse:   layoutRect{X: 532, Y: 118, Width: 100, Height: tokens.InputHeight},
 		Type:          layoutRect{X: 28, Y: 190, Width: 132, Height: tokens.InputHeight},
 		TypeLabel:     layoutRect{X: 28, Y: 164, Width: 132, Height: tokens.FieldLabelHeight},
 		Host:          layoutRect{X: 180, Y: 190, Width: 292, Height: tokens.InputHeight},

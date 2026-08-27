@@ -182,13 +182,16 @@ func TestSettingsEditorAndManagerLayoutsUseSemanticControlMetrics(t *testing.T) 
 		t.Fatalf("editor headings/labels do not use semantic typography carriers: %#v", editor)
 	}
 	for name, field := range map[string]layoutRect{
-		"name": editor.Name, "group": editor.Group, "type": editor.Type,
+		"name": editor.Name, "group": editor.Group, "group browse": editor.GroupBrowse, "type": editor.Type,
 		"host": editor.Host, "port": editor.Port, "username": editor.Username,
 		"password": editor.Password, "working directory": editor.WorkingDir, "private key": editor.PrivateKey,
 	} {
 		if field.Height != nativeControls.InputHeight {
 			t.Fatalf("%s height = %d, want %d", name, field.Height, nativeControls.InputHeight)
 		}
+	}
+	if editor.Group.X+editor.Group.Width > editor.GroupBrowse.X-nativeControls.FieldLabelGap {
+		t.Fatalf("editor group input and hierarchy picker overlap: %#v", editor)
 	}
 	if editor.Save.Height != nativeControls.PrimaryButtonHeight || editor.Cancel.Height != nativeControls.PrimaryButtonHeight {
 		t.Fatalf("editor actions do not use primary-height token: %#v", editor)
