@@ -1805,9 +1805,20 @@ func (a *finalShellApp) persistActiveRow(row int) error {
 }
 
 func newConnectionProfile(username string) connectionProfile {
+	return newConnectionProfileInGroup(username, "")
+}
+
+// newConnectionProfileInGroup preserves the manager's current hierarchy as the
+// context for a new draft. Choosing All Groups keeps the existing default-group
+// behavior, while a concrete parent or leaf avoids repetitive path re-entry.
+func newConnectionProfileInGroup(username, group string) connectionProfile {
+	group = normalizeConnectionGroup(group)
+	if group == "" {
+		group = tr("profile.default_group")
+	}
 	return connectionProfile{
 		ID: fmt.Sprintf("conn-%d", time.Now().UnixNano()), Name: tr("profile.new_ssh"),
-		Group: tr("profile.default_group"), Type: connectionTypeSSH, Port: 22, Username: username,
+		Group: group, Type: connectionTypeSSH, Port: 22, Username: username,
 	}
 }
 

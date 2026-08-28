@@ -226,6 +226,21 @@ func TestConnectionEditorGroupOptionsExposeExistingHierarchyWithoutDuplicates(t 
 	}
 }
 
+func TestNewConnectionFromManagerInheritsSelectedGroup(t *testing.T) {
+	got := newConnectionProfileInGroup("operator", " Infrastructure / Production ")
+	if got.Group != "Infrastructure/Production" {
+		t.Fatalf("new connection group = %q, want selected hierarchy", got.Group)
+	}
+	if got.Type != connectionTypeSSH || got.Port != 22 || got.Username != "operator" {
+		t.Fatalf("new connection lost SSH defaults: %#v", got)
+	}
+
+	got = newConnectionProfileInGroup("operator", "  ")
+	if got.Group != tr("profile.default_group") {
+		t.Fatalf("all-groups new connection group = %q, want default %q", got.Group, tr("profile.default_group"))
+	}
+}
+
 func TestCompactNavigatorUsesLeafGroupName(t *testing.T) {
 	if got := compactConnectionGroup("Infrastructure/Production/Database"); got != "Database" {
 		t.Fatalf("compact group = %q, want leaf name", got)

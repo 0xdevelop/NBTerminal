@@ -2,6 +2,7 @@ package guis
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -353,7 +354,7 @@ func (m *connectionManagerWindow) selectedProfile() (connectionProfile, bool) {
 
 func (m *connectionManagerWindow) newProfile() {
 	if m != nil && m.owner != nil {
-		m.owner.newProfile()
+		m.owner.openConnectionEditor(newConnectionProfileInGroup(os.Getenv("USER"), m.selectedGroup))
 	}
 }
 
