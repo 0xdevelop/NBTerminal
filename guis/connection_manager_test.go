@@ -241,6 +241,54 @@ func TestNewConnectionFromManagerInheritsSelectedGroup(t *testing.T) {
 	}
 }
 
+func TestRenameConnectionGroupMovesExactGroupAndDescendants(t *testing.T) {
+	rows := []connectionProfile{
+		{ID: "prod", Group: "Infrastructure/Production", PasswordEnc: "gtenc-prod"},
+		{ID: "db", Group: "Infrastructure/Production/Database", PrivateKey: "/keys/db"},
+		{ID: "lab", Group: "Infrastructure/Production-Lab"},
+		{ID: "dev", Group: "Infrastructure/Development"},
+	}
+
+	got, changed, err := renameConnectionGroup(rows, " Infrastructure / Production ", "Operations/Live")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed != 2 {
+		t.Fatalf("changed = %d, want 2", changed)
+	}
+	wantGroups := []string{"Operations/Live", "Operations/Live/Database", "Infrastructure/Production-Lab", "Infrastructure/Development"}
+	for index, want := range wantGroups {
+		if got[index].Group != want {
+			t.Fatalf("row %d group = %q, want %q", index, got[index].Group, want)
+		}
+	}
+	if got[0].PasswordEnc != rows[0].PasswordEnc || got[1].PrivateKey != rows[1].PrivateKey {
+		t.Fatal("group rename changed secret-bearing profile fields")
+	}
+	if rows[0].Group != "Infrastructure/Production" || rows[1].Group != "Infrastructure/Production/Database" {
+		t.Fatalf("group rename mutated source rows: %#v", rows)
+	}
+}
+
+func TestRenameConnectionGroupRejectsInvalidMoves(t *testing.T) {
+	rows := []connectionProfile{{ID: "prod", Group: "Infrastructure/Production"}}
+	for _, test := range []struct {
+		name, oldPath, newPath string
+	}{
+		{name: "all groups", newPath: "Other"},
+		{name: "empty destination", oldPath: "Infrastructure/Production"},
+		{name: "same destination", oldPath: "Infrastructure/Production", newPath: " Infrastructure / Production "},
+		{name: "descendant destination", oldPath: "Infrastructure", newPath: "Infrastructure/Production/Archive"},
+		{name: "missing source", oldPath: "Missing", newPath: "Other"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, _, err := renameConnectionGroup(rows, test.oldPath, test.newPath); err == nil {
+				t.Fatal("rename unexpectedly succeeded")
+			}
+		})
+	}
+}
+
 func TestCompactNavigatorUsesLeafGroupName(t *testing.T) {
 	if got := compactConnectionGroup("Infrastructure/Production/Database"); got != "Database" {
 		t.Fatalf("compact group = %q, want leaf name", got)

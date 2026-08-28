@@ -1,6 +1,7 @@
 package guis
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -37,6 +38,7 @@ type connectionManagerWindow struct {
 	closeAfterConnect *checkbox.UICheckbox
 	groupOptions      []connectionGroupOption
 	selectedGroup     string
+	groupRename       *groupRenameWindow
 }
 
 type connectionGroupOption struct {
@@ -77,6 +79,9 @@ func (m *connectionManagerWindow) build() {
 	root := m.window.RootView()
 	root.SetAutomationID("connection_manager.window").SetAutomationRole("window").SetAutomationName(tr("manager.title"))
 	m.window.OnClose(func() {
+		if m.groupRename != nil && m.groupRename.window != nil {
+			m.groupRename.window.Close()
+		}
 		root.SetAutomationID("")
 		if m.owner != nil && m.owner.manager == m {
 			m.owner.manager = nil
@@ -147,6 +152,7 @@ func (m *connectionManagerWindow) build() {
 	root.AddSubview(button(layout.New.X, layout.New.Y, layout.New.Width, layout.New.Height, tr("action.new"), "connection_manager.new", m.newProfile))
 	root.AddSubview(button(layout.Edit.X, layout.Edit.Y, layout.Edit.Width, layout.Edit.Height, tr("action.edit"), "connection_manager.edit", m.editSelected))
 	root.AddSubview(button(layout.Duplicate.X, layout.Duplicate.Y, layout.Duplicate.Width, layout.Duplicate.Height, "Duplicate", "connection_manager.duplicate", m.duplicateSelected))
+	root.AddSubview(button(layout.RenameGroup.X, layout.RenameGroup.Y, layout.RenameGroup.Width, layout.RenameGroup.Height, "Rename Group", "connection_manager.rename_group", m.renameSelectedGroup))
 	root.AddSubview(button(layout.Delete.X, layout.Delete.Y, layout.Delete.Width, layout.Delete.Height, tr("action.delete"), "connection_manager.delete", m.deleteSelected))
 	root.AddSubview(button(layout.Test.X, layout.Test.Y, layout.Test.Width, layout.Test.Height, tr("action.test"), "connection_manager.test", m.testSelected))
 	root.AddSubview(button(layout.Favorite.X, layout.Favorite.Y, layout.Favorite.Width, layout.Favorite.Height, tr("manager.favorite"), "connection_manager.favorite", m.toggleFavorite))
@@ -274,6 +280,38 @@ func compactConnectionGroup(group string) string {
 		return group[index+1:]
 	}
 	return group
+}
+
+func renameConnectionGroup(rows []connectionProfile, oldPath, newPath string) ([]connectionProfile, int, error) {
+	oldPath = normalizeConnectionGroup(oldPath)
+	newPath = normalizeConnectionGroup(newPath)
+	if oldPath == "" {
+		return nil, 0, errors.New("select a group to rename")
+	}
+	if newPath == "" {
+		return nil, 0, errors.New("new group path is required")
+	}
+	if newPath == oldPath {
+		return nil, 0, errors.New("new group path is unchanged")
+	}
+	if strings.HasPrefix(newPath, oldPath+"/") {
+		return nil, 0, errors.New("a group cannot be moved inside itself")
+	}
+
+	next := append([]connectionProfile(nil), rows...)
+	changed := 0
+	for index := range next {
+		group := normalizeConnectionGroup(next[index].Group)
+		if group != oldPath && !strings.HasPrefix(group, oldPath+"/") {
+			continue
+		}
+		next[index].Group = newPath + strings.TrimPrefix(group, oldPath)
+		changed++
+	}
+	if changed == 0 {
+		return nil, 0, errors.New("selected group no longer exists")
+	}
+	return next, changed, nil
 }
 
 func connectionManagerRows(rows []connectionProfile, group, query string) []connectionProfile {

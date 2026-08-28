@@ -203,8 +203,8 @@ func quickPanelLayoutFor(panel layoutRect, tokens controlMetricSet) quickPanelLa
 }
 
 type connectionManagerLayout struct {
-	Group, Search, Find, Table, Status, CloseAfterConnect layoutRect
-	New, Edit, Duplicate, Delete, Test, Favorite, Connect layoutRect
+	Group, Search, Find, Table, Status, CloseAfterConnect              layoutRect
+	New, Edit, Duplicate, RenameGroup, Delete, Test, Favorite, Connect layoutRect
 }
 
 func connectionManagerLayoutFor(tokens controlMetricSet) connectionManagerLayout {
@@ -215,13 +215,14 @@ func connectionManagerLayoutFor(tokens controlMetricSet) connectionManagerLayout
 		Table:             layoutRect{X: 28, Y: 143, Width: 864, Height: 382},
 		Status:            layoutRect{X: 30, Y: 530, Width: 862, Height: 18},
 		CloseAfterConnect: layoutRect{X: 28, Y: 554, Width: 420, Height: tokens.InputHeight},
-		New:               layoutRect{X: 28, Y: 594, Width: 76, Height: tokens.ButtonHeight},
-		Edit:              layoutRect{X: 114, Y: 594, Width: 76, Height: tokens.ButtonHeight},
-		Duplicate:         layoutRect{X: 200, Y: 594, Width: 104, Height: tokens.ButtonHeight},
-		Delete:            layoutRect{X: 314, Y: 594, Width: 88, Height: tokens.ButtonHeight},
-		Test:              layoutRect{X: 412, Y: 594, Width: 88, Height: tokens.ButtonHeight},
-		Favorite:          layoutRect{X: 510, Y: 594, Width: 148, Height: tokens.ButtonHeight},
-		Connect:           layoutRect{X: 668, Y: 592, Width: 224, Height: tokens.PrimaryButtonHeight},
+		New:               layoutRect{X: 28, Y: 594, Width: 64, Height: tokens.ButtonHeight},
+		Edit:              layoutRect{X: 100, Y: 594, Width: 64, Height: tokens.ButtonHeight},
+		Duplicate:         layoutRect{X: 172, Y: 594, Width: 90, Height: tokens.ButtonHeight},
+		RenameGroup:       layoutRect{X: 270, Y: 594, Width: 112, Height: tokens.ButtonHeight},
+		Delete:            layoutRect{X: 390, Y: 594, Width: 72, Height: tokens.ButtonHeight},
+		Test:              layoutRect{X: 470, Y: 594, Width: 68, Height: tokens.ButtonHeight},
+		Favorite:          layoutRect{X: 546, Y: 594, Width: 148, Height: tokens.ButtonHeight},
+		Connect:           layoutRect{X: 702, Y: 592, Width: 190, Height: tokens.PrimaryButtonHeight},
 	}
 }
 
