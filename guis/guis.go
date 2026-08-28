@@ -848,7 +848,7 @@ func (a *finalShellApp) build() {
 	// events through the reusable terminal view.
 	a.output.Raw().SetHorizontalScrollbar(fltk_bridge.TerminalScrollbarAuto)
 	a.output.SetFont(fltk_bridge.COURIER)
-	a.output.SetFontSize(nativeTypography.Terminal)
+	a.output.SetFontSize(terminalFontSize())
 	a.output.SetTextColor(uint(tokenColor(modernTheme.foreground)))
 	a.output.SetBackgroundColor(uint(tokenColor(modernTheme.terminal)))
 	a.output.SetSelectionColors(uint(tokenColor(modernTheme.foreground)), uint(tokenColor(modernTheme.selected)))
@@ -1390,11 +1390,45 @@ func styleCommandInput(in *uikit.UITextView) {
 		return
 	}
 	in.SetFont(fltk_bridge.COURIER)
-	in.SetFontSize(nativeTypography.Terminal)
+	in.SetFontSize(terminalFontSize())
 	in.SetTextColor(uint(tokenColor(modernTheme.foreground)))
 	in.SetCursorColor(uint(tokenColor(modernTheme.primary)))
 	in.SetSelectionColor(uint(tokenColor(modernTheme.selected)))
 	in.SetBackgroundColor(uint(tokenColor(modernTheme.elevated)))
+}
+
+func terminalFontSize() int {
+	if config.GlobalConfig == nil || config.GlobalConfig.Terminal == nil {
+		return config.TerminalFontSizeDefault
+	}
+	size := config.GlobalConfig.Terminal.FontSize
+	if size == 0 {
+		return config.TerminalFontSizeDefault
+	}
+	if size < config.TerminalFontSizeMin {
+		return config.TerminalFontSizeMin
+	}
+	if size > config.TerminalFontSizeMax {
+		return config.TerminalFontSizeMax
+	}
+	return size
+}
+
+func (a *finalShellApp) applyTerminalFontSize(size int) {
+	if a == nil {
+		return
+	}
+	if size < config.TerminalFontSizeMin {
+		size = config.TerminalFontSizeMin
+	} else if size > config.TerminalFontSizeMax {
+		size = config.TerminalFontSizeMax
+	}
+	if a.output != nil {
+		a.output.SetFontSize(size)
+	}
+	if a.cmdInput != nil {
+		a.cmdInput.SetFontSize(size)
+	}
 }
 
 func button(x, y, w, h int, title, id string, cb func()) *uikit.UIButton {

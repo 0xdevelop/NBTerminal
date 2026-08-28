@@ -24,6 +24,9 @@ const (
 	ProjectDescription           = "NB Terminal"
 	APIPortDefault               = 8765
 	CommandTimeoutDefaultSeconds = 60
+	TerminalFontSizeDefault      = 14
+	TerminalFontSizeMin          = 10
+	TerminalFontSizeMax          = 24
 	WorkspaceSplitRatioDefault   = 0.35
 	WorkspaceSplitRatioMin       = 0.25
 	WorkspaceSplitRatioMax       = 0.65
@@ -41,6 +44,7 @@ type Auth struct {
 
 type TerminalSettings struct {
 	CommandTimeoutSeconds int `yaml:"command_timeout_seconds" json:"command_timeout_seconds"`
+	FontSize              int `yaml:"font_size" json:"font_size"`
 }
 
 type FileConfig struct {
@@ -76,6 +80,13 @@ func (fc *FileConfig) Normalize() {
 	}
 	if fc.Terminal.CommandTimeoutSeconds <= 0 {
 		fc.Terminal.CommandTimeoutSeconds = CommandTimeoutDefaultSeconds
+	}
+	if fc.Terminal.FontSize == 0 {
+		fc.Terminal.FontSize = TerminalFontSizeDefault
+	} else if fc.Terminal.FontSize < TerminalFontSizeMin {
+		fc.Terminal.FontSize = TerminalFontSizeMin
+	} else if fc.Terminal.FontSize > TerminalFontSizeMax {
+		fc.Terminal.FontSize = TerminalFontSizeMax
 	}
 
 	if fc.WorkspaceSplitRatio == 0 {

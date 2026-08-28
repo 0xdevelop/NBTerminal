@@ -16,13 +16,14 @@ import (
 
 const (
 	settingsWindowWidth  = 620
-	settingsWindowHeight = 470
+	settingsWindowHeight = 530
 	maxCommandTimeout    = 86400
 )
 
 type settingsDraft struct {
 	Language                 string
 	CommandTimeoutSeconds    int
+	TerminalFontSize         int
 	ResetWorkspaceOnStart    bool
 	StartWithFirstConnection bool
 }
@@ -41,17 +42,21 @@ func (d settingsDraft) Validate() error {
 	if d.CommandTimeoutSeconds < 1 || d.CommandTimeoutSeconds > maxCommandTimeout {
 		return fmt.Errorf("command timeout must be between 1 and %d seconds", maxCommandTimeout)
 	}
+	if d.TerminalFontSize < config.TerminalFontSizeMin || d.TerminalFontSize > config.TerminalFontSizeMax {
+		return fmt.Errorf("terminal font size must be between %d and %d", config.TerminalFontSizeMin, config.TerminalFontSizeMax)
+	}
 	return nil
 }
 
 func currentSettingsDraft() settingsDraft {
-	draft := settingsDraft{Language: locales.CurrentLanguage().LanguageTag(), CommandTimeoutSeconds: config.CommandTimeoutDefaultSeconds}
+	draft := settingsDraft{Language: locales.CurrentLanguage().LanguageTag(), CommandTimeoutSeconds: config.CommandTimeoutDefaultSeconds, TerminalFontSize: config.TerminalFontSizeDefault}
 	if config.GlobalConfig == nil {
 		return draft
 	}
 	draft.Language = config.GlobalConfig.Language
 	if config.GlobalConfig.Terminal != nil {
 		draft.CommandTimeoutSeconds = config.GlobalConfig.Terminal.CommandTimeoutSeconds
+		draft.TerminalFontSize = config.GlobalConfig.Terminal.FontSize
 	}
 	draft.ResetWorkspaceOnStart = config.GlobalConfig.ResetWorkspaceOnStart
 	draft.StartWithFirstConnection = config.GlobalConfig.StartWithFirstConnection
@@ -75,7 +80,7 @@ func persistSettingsDraft(draft settingsDraft) error {
 	previousFirst := cfg.StartWithFirstConnection
 
 	cfg.Language = draft.Language
-	cfg.Terminal = &config.TerminalSettings{CommandTimeoutSeconds: draft.CommandTimeoutSeconds}
+	cfg.Terminal = &config.TerminalSettings{CommandTimeoutSeconds: draft.CommandTimeoutSeconds, FontSize: draft.TerminalFontSize}
 	cfg.ResetWorkspaceOnStart = draft.ResetWorkspaceOnStart
 	cfg.StartWithFirstConnection = draft.StartWithFirstConnection
 	if err := config.SaveConfig(config.CurrentApp.AppConfigFilePath); err != nil {
@@ -95,6 +100,7 @@ type settingsWindow struct {
 	closing        unsavedCloseController
 	language       *uidropdown.UIDropdown
 	timeout        *uikit.Input
+	terminalFont   *uikit.Input
 	resetWorkspace *checkbox.UICheckbox
 	startFirst     *checkbox.UICheckbox
 }
@@ -170,6 +176,13 @@ func (s *settingsWindow) build(draft settingsDraft) {
 	s.timeout.View().SetAutomationID("settings.command_timeout").SetAutomationName(tr("settings.command_timeout"))
 	root.AddSubview(s.timeout)
 	root.AddSubview(mutedLabel(layout.SecondsHint.X, layout.SecondsHint.Y, layout.SecondsHint.Width, layout.SecondsHint.Height, tr("settings.seconds_hint")))
+	root.AddSubview(label(layout.TerminalFontLabel.X, layout.TerminalFontLabel.Y, layout.TerminalFontLabel.Width, layout.TerminalFontLabel.Height, "Terminal font size"))
+	s.terminalFont = uikit.NewInputWithType(layout.TerminalFont.X, layout.TerminalFont.Y, layout.TerminalFont.Width, layout.TerminalFont.Height, "", uikit.IntInput)
+	styleInput(s.terminalFont)
+	s.terminalFont.SetText(strconv.Itoa(draft.TerminalFontSize))
+	s.terminalFont.View().SetAutomationID("settings.terminal_font_size").SetAutomationName("Terminal font size")
+	root.AddSubview(s.terminalFont)
+	root.AddSubview(mutedLabel(layout.TerminalFontHint.X, layout.TerminalFontHint.Y, layout.TerminalFontHint.Width, layout.TerminalFontHint.Height, fmt.Sprintf("%d–%d px", config.TerminalFontSizeMin, config.TerminalFontSizeMax)))
 
 	root.AddSubview(sectionTitle(layout.BehaviorTitle.X, layout.BehaviorTitle.Y, layout.BehaviorTitle.Width, layout.BehaviorTitle.Height, tr("settings.behavior")))
 	checkStyle := checkbox.DefaultCheckboxStyle()
@@ -195,7 +208,7 @@ func (s *settingsWindow) build(draft settingsDraft) {
 }
 
 func (s *settingsWindow) draft() (settingsDraft, error) {
-	if s == nil || s.language == nil || s.timeout == nil || s.resetWorkspace == nil || s.startFirst == nil {
+	if s == nil || s.language == nil || s.timeout == nil || s.terminalFont == nil || s.resetWorkspace == nil || s.startFirst == nil {
 		return settingsDraft{}, errors.New("settings controls are unavailable")
 	}
 	languages := locales.SupportedLanguages()
@@ -207,9 +220,14 @@ func (s *settingsWindow) draft() (settingsDraft, error) {
 	if err != nil {
 		return settingsDraft{}, errors.New("command timeout must be an integer")
 	}
+	fontSize, err := strconv.Atoi(strings.TrimSpace(s.terminalFont.Text()))
+	if err != nil {
+		return settingsDraft{}, errors.New("terminal font size must be an integer")
+	}
 	return settingsDraft{
 		Language:                 languages[index].LanguageTag(),
 		CommandTimeoutSeconds:    timeout,
+		TerminalFontSize:         fontSize,
 		ResetWorkspaceOnStart:    s.resetWorkspace.Value(),
 		StartWithFirstConnection: s.startFirst.Value(),
 	}, nil
@@ -246,6 +264,7 @@ func (s *settingsWindow) save() {
 		s.owner.rebuildForLanguage(locales.GetLanguageFromTag(draft.Language))
 		return
 	}
+	s.owner.applyTerminalFontSize(draft.TerminalFontSize)
 	s.owner.setStatus(tr("settings.saved"))
 }
 

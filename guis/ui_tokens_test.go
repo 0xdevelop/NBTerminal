@@ -3,6 +3,7 @@ package guis
 import (
 	"testing"
 
+	"github.com/0xdevelop/NBTerminal/config"
 	"github.com/0xdevelop/fltk2go/fltk_bridge"
 	"github.com/0xdevelop/fltk2go/uikit"
 )
@@ -23,10 +24,13 @@ func TestStyleInputUsesNativeDarkTextAndVisibleCaret(t *testing.T) {
 }
 
 func TestStyleCommandInputUsesNativeDarkTextCaretAndSelection(t *testing.T) {
+	oldGlobal := config.GlobalConfig
+	t.Cleanup(func() { config.GlobalConfig = oldGlobal })
+	config.GlobalConfig = &config.FileConfig{Terminal: &config.TerminalSettings{FontSize: 18}}
 	input := uikit.NewUITextView(rect(0, 0, 240, nativeControls.InputHeight))
 	styleCommandInput(input)
 	raw := input.Raw()
-	if raw.TextSize() != nativeTypography.Terminal || raw.TextColor() != tokenColor(modernTheme.foreground) {
+	if raw.TextSize() != 18 || raw.TextColor() != tokenColor(modernTheme.foreground) {
 		t.Fatalf("command input text style = size:%d color:%v", raw.TextSize(), raw.TextColor())
 	}
 	if raw.Color() != tokenColor(modernTheme.elevated) || raw.CursorColor() != tokenColor(modernTheme.primary) {
@@ -34,6 +38,22 @@ func TestStyleCommandInputUsesNativeDarkTextCaretAndSelection(t *testing.T) {
 	}
 	if raw.SelectionColor() != tokenColor(modernTheme.selected) {
 		t.Fatalf("command input selection = %v, want %v", raw.SelectionColor(), tokenColor(modernTheme.selected))
+	}
+}
+
+func TestApplyTerminalFontSizeUpdatesLiveTerminalSurfaces(t *testing.T) {
+	app := &finalShellApp{
+		output:   uikit.NewUITerminalView(rect(0, 0, 480, 240)),
+		cmdInput: uikit.NewUITextView(rect(0, 0, 240, nativeControls.InputHeight)),
+	}
+	before := app.output.Size()
+	app.applyTerminalFontSize(19)
+	after := app.output.Size()
+	if after.Columns >= before.Columns && after.Rows >= before.Rows {
+		t.Fatalf("terminal grid did not shrink for larger font: before=%#v after=%#v", before, after)
+	}
+	if got := app.cmdInput.Raw().TextSize(); got != 19 {
+		t.Fatalf("command input font size = %d, want 19", got)
 	}
 }
 
@@ -161,18 +181,18 @@ func TestSettingsEditorAndManagerLayoutsUseSemanticControlMetrics(t *testing.T) 
 		settings.GeneralTitle.Height != nativeControls.SectionTitleHeight || settings.BehaviorTitle.Height != nativeControls.SectionTitleHeight {
 		t.Fatalf("settings headings do not use semantic typography carriers: %#v", settings)
 	}
-	if settings.Language.Height != nativeControls.InputHeight || settings.Timeout.Height != nativeControls.InputHeight {
+	if settings.Language.Height != nativeControls.InputHeight || settings.Timeout.Height != nativeControls.InputHeight || settings.TerminalFont.Height != nativeControls.InputHeight {
 		t.Fatalf("settings controls do not use input-height token: %#v", settings)
 	}
 	if settings.Save.Height != nativeControls.PrimaryButtonHeight || settings.Cancel.Height != nativeControls.PrimaryButtonHeight {
 		t.Fatalf("settings actions do not use primary-height token: %#v", settings)
 	}
-	if settings.LanguageLabel.Height != nativeControls.InputHeight || settings.TimeoutLabel.Height != nativeControls.InputHeight ||
-		settings.SecondsHint.Height != nativeControls.SupportingLineHeight || settings.ResetWorkspace.Height != nativeControls.CheckboxHeight ||
+	if settings.LanguageLabel.Height != nativeControls.InputHeight || settings.TimeoutLabel.Height != nativeControls.InputHeight || settings.TerminalFontLabel.Height != nativeControls.InputHeight ||
+		settings.SecondsHint.Height != nativeControls.SupportingLineHeight || settings.TerminalFontHint.Height != nativeControls.SupportingLineHeight || settings.ResetWorkspace.Height != nativeControls.CheckboxHeight ||
 		settings.StartFirst.Height != nativeControls.CheckboxHeight || settings.BehaviorHint.Height < nativeControls.SupportingLineHeight {
 		t.Fatalf("settings labels/checks do not use semantic carriers: %#v", settings)
 	}
-	if settings.BehaviorTitle.Y-settings.Timeout.Bottom() < nativeControls.FieldGroupGap {
+	if settings.BehaviorTitle.Y-settings.TerminalFont.Bottom() < nativeControls.FieldGroupGap {
 		t.Fatalf("settings field groups are too tight: %#v", settings)
 	}
 

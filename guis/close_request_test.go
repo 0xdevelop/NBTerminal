@@ -57,7 +57,7 @@ func TestConnectionEditorDirtyStateIncludesCanonicalFieldsAndNewPassword(t *test
 }
 
 func TestSettingsDirtyStateUsesCompleteDraft(t *testing.T) {
-	baseline := settingsDraft{Language: "en", CommandTimeoutSeconds: 60}
+	baseline := settingsDraft{Language: "en", CommandTimeoutSeconds: 60, TerminalFontSize: 14}
 	if settingsDraftChanged(baseline, baseline) {
 		t.Fatal("unchanged settings reported dirty")
 	}
@@ -65,5 +65,10 @@ func TestSettingsDirtyStateUsesCompleteDraft(t *testing.T) {
 	changed.StartWithFirstConnection = true
 	if !settingsDraftChanged(baseline, changed) {
 		t.Fatal("changed startup behavior did not report dirty")
+	}
+	changed = baseline
+	changed.TerminalFontSize = 18
+	if !settingsDraftChanged(baseline, changed) {
+		t.Fatal("changed terminal font size did not report dirty")
 	}
 }

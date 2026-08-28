@@ -92,6 +92,27 @@ func TestFileConfigNormalizePreservesPositiveTerminalTimeout(t *testing.T) {
 	}
 }
 
+func TestFileConfigNormalizeTerminalFontSize(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		size int
+		want int
+	}{
+		{name: "default", size: 0, want: TerminalFontSizeDefault},
+		{name: "minimum clamp", size: TerminalFontSizeMin - 1, want: TerminalFontSizeMin},
+		{name: "maximum clamp", size: TerminalFontSizeMax + 1, want: TerminalFontSizeMax},
+		{name: "preserve", size: 16, want: 16},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := &FileConfig{Terminal: &TerminalSettings{FontSize: test.size}}
+			cfg.Normalize()
+			if cfg.Terminal.FontSize != test.want {
+				t.Fatalf("font size = %d, want %d", cfg.Terminal.FontSize, test.want)
+			}
+		})
+	}
+}
+
 func TestFileConfigNormalizeSplitRatio(t *testing.T) {
 	tests := []struct {
 		name string
