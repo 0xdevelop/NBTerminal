@@ -18,18 +18,21 @@ import (
 )
 
 const (
-	ProjectName                  = "NBTerminal"
-	ProjectVersion               = "v0.0.7"
-	ProjectBundleID              = "com.0xdevelop.NBTerminal"
-	ProjectDescription           = "NB Terminal"
-	APIPortDefault               = 8765
-	CommandTimeoutDefaultSeconds = 60
-	TerminalFontSizeDefault      = 14
-	TerminalFontSizeMin          = 10
-	TerminalFontSizeMax          = 24
-	WorkspaceSplitRatioDefault   = 0.35
-	WorkspaceSplitRatioMin       = 0.25
-	WorkspaceSplitRatioMax       = 0.65
+	ProjectName                   = "NBTerminal"
+	ProjectVersion                = "v0.0.7"
+	ProjectBundleID               = "com.0xdevelop.NBTerminal"
+	ProjectDescription            = "NB Terminal"
+	APIPortDefault                = 8765
+	CommandTimeoutDefaultSeconds  = 60
+	TerminalFontSizeDefault       = 14
+	TerminalFontSizeMin           = 10
+	TerminalFontSizeMax           = 24
+	TerminalScrollbackRowsDefault = 4000
+	TerminalScrollbackRowsMin     = 500
+	TerminalScrollbackRowsMax     = 100000
+	WorkspaceSplitRatioDefault    = 0.35
+	WorkspaceSplitRatioMin        = 0.25
+	WorkspaceSplitRatioMax        = 0.65
 )
 
 var (
@@ -45,6 +48,7 @@ type Auth struct {
 type TerminalSettings struct {
 	CommandTimeoutSeconds int `yaml:"command_timeout_seconds" json:"command_timeout_seconds"`
 	FontSize              int `yaml:"font_size" json:"font_size"`
+	ScrollbackRows        int `yaml:"scrollback_rows" json:"scrollback_rows"`
 }
 
 type FileConfig struct {
@@ -87,6 +91,13 @@ func (fc *FileConfig) Normalize() {
 		fc.Terminal.FontSize = TerminalFontSizeMin
 	} else if fc.Terminal.FontSize > TerminalFontSizeMax {
 		fc.Terminal.FontSize = TerminalFontSizeMax
+	}
+	if fc.Terminal.ScrollbackRows == 0 {
+		fc.Terminal.ScrollbackRows = TerminalScrollbackRowsDefault
+	} else if fc.Terminal.ScrollbackRows < TerminalScrollbackRowsMin {
+		fc.Terminal.ScrollbackRows = TerminalScrollbackRowsMin
+	} else if fc.Terminal.ScrollbackRows > TerminalScrollbackRowsMax {
+		fc.Terminal.ScrollbackRows = TerminalScrollbackRowsMax
 	}
 
 	if fc.WorkspaceSplitRatio == 0 {

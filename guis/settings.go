@@ -16,7 +16,7 @@ import (
 
 const (
 	settingsWindowWidth  = 620
-	settingsWindowHeight = 530
+	settingsWindowHeight = 576
 	maxCommandTimeout    = 86400
 )
 
@@ -24,6 +24,7 @@ type settingsDraft struct {
 	Language                 string
 	CommandTimeoutSeconds    int
 	TerminalFontSize         int
+	TerminalScrollbackRows   int
 	ResetWorkspaceOnStart    bool
 	StartWithFirstConnection bool
 }
@@ -45,11 +46,14 @@ func (d settingsDraft) Validate() error {
 	if d.TerminalFontSize < config.TerminalFontSizeMin || d.TerminalFontSize > config.TerminalFontSizeMax {
 		return fmt.Errorf("terminal font size must be between %d and %d", config.TerminalFontSizeMin, config.TerminalFontSizeMax)
 	}
+	if d.TerminalScrollbackRows < config.TerminalScrollbackRowsMin || d.TerminalScrollbackRows > config.TerminalScrollbackRowsMax {
+		return fmt.Errorf("terminal scrollback rows must be between %d and %d", config.TerminalScrollbackRowsMin, config.TerminalScrollbackRowsMax)
+	}
 	return nil
 }
 
 func currentSettingsDraft() settingsDraft {
-	draft := settingsDraft{Language: locales.CurrentLanguage().LanguageTag(), CommandTimeoutSeconds: config.CommandTimeoutDefaultSeconds, TerminalFontSize: config.TerminalFontSizeDefault}
+	draft := settingsDraft{Language: locales.CurrentLanguage().LanguageTag(), CommandTimeoutSeconds: config.CommandTimeoutDefaultSeconds, TerminalFontSize: config.TerminalFontSizeDefault, TerminalScrollbackRows: config.TerminalScrollbackRowsDefault}
 	if config.GlobalConfig == nil {
 		return draft
 	}
@@ -57,6 +61,7 @@ func currentSettingsDraft() settingsDraft {
 	if config.GlobalConfig.Terminal != nil {
 		draft.CommandTimeoutSeconds = config.GlobalConfig.Terminal.CommandTimeoutSeconds
 		draft.TerminalFontSize = config.GlobalConfig.Terminal.FontSize
+		draft.TerminalScrollbackRows = config.GlobalConfig.Terminal.ScrollbackRows
 	}
 	draft.ResetWorkspaceOnStart = config.GlobalConfig.ResetWorkspaceOnStart
 	draft.StartWithFirstConnection = config.GlobalConfig.StartWithFirstConnection
@@ -80,7 +85,7 @@ func persistSettingsDraft(draft settingsDraft) error {
 	previousFirst := cfg.StartWithFirstConnection
 
 	cfg.Language = draft.Language
-	cfg.Terminal = &config.TerminalSettings{CommandTimeoutSeconds: draft.CommandTimeoutSeconds, FontSize: draft.TerminalFontSize}
+	cfg.Terminal = &config.TerminalSettings{CommandTimeoutSeconds: draft.CommandTimeoutSeconds, FontSize: draft.TerminalFontSize, ScrollbackRows: draft.TerminalScrollbackRows}
 	cfg.ResetWorkspaceOnStart = draft.ResetWorkspaceOnStart
 	cfg.StartWithFirstConnection = draft.StartWithFirstConnection
 	if err := config.SaveConfig(config.CurrentApp.AppConfigFilePath); err != nil {
@@ -101,6 +106,7 @@ type settingsWindow struct {
 	language       *uidropdown.UIDropdown
 	timeout        *uikit.Input
 	terminalFont   *uikit.Input
+	scrollbackRows *uikit.Input
 	resetWorkspace *checkbox.UICheckbox
 	startFirst     *checkbox.UICheckbox
 }
@@ -183,6 +189,13 @@ func (s *settingsWindow) build(draft settingsDraft) {
 	s.terminalFont.View().SetAutomationID("settings.terminal_font_size").SetAutomationName("Terminal font size")
 	root.AddSubview(s.terminalFont)
 	root.AddSubview(mutedLabel(layout.TerminalFontHint.X, layout.TerminalFontHint.Y, layout.TerminalFontHint.Width, layout.TerminalFontHint.Height, fmt.Sprintf("%d–%d px", config.TerminalFontSizeMin, config.TerminalFontSizeMax)))
+	root.AddSubview(label(layout.ScrollbackLabel.X, layout.ScrollbackLabel.Y, layout.ScrollbackLabel.Width, layout.ScrollbackLabel.Height, "Scrollback rows"))
+	s.scrollbackRows = uikit.NewInputWithType(layout.Scrollback.X, layout.Scrollback.Y, layout.Scrollback.Width, layout.Scrollback.Height, "", uikit.IntInput)
+	styleInput(s.scrollbackRows)
+	s.scrollbackRows.SetText(strconv.Itoa(draft.TerminalScrollbackRows))
+	s.scrollbackRows.View().SetAutomationID("settings.terminal_scrollback_rows").SetAutomationName("Scrollback rows")
+	root.AddSubview(s.scrollbackRows)
+	root.AddSubview(mutedLabel(layout.ScrollbackHint.X, layout.ScrollbackHint.Y, layout.ScrollbackHint.Width, layout.ScrollbackHint.Height, fmt.Sprintf("%d–%d lines", config.TerminalScrollbackRowsMin, config.TerminalScrollbackRowsMax)))
 
 	root.AddSubview(sectionTitle(layout.BehaviorTitle.X, layout.BehaviorTitle.Y, layout.BehaviorTitle.Width, layout.BehaviorTitle.Height, tr("settings.behavior")))
 	checkStyle := checkbox.DefaultCheckboxStyle()
@@ -208,7 +221,7 @@ func (s *settingsWindow) build(draft settingsDraft) {
 }
 
 func (s *settingsWindow) draft() (settingsDraft, error) {
-	if s == nil || s.language == nil || s.timeout == nil || s.terminalFont == nil || s.resetWorkspace == nil || s.startFirst == nil {
+	if s == nil || s.language == nil || s.timeout == nil || s.terminalFont == nil || s.scrollbackRows == nil || s.resetWorkspace == nil || s.startFirst == nil {
 		return settingsDraft{}, errors.New("settings controls are unavailable")
 	}
 	languages := locales.SupportedLanguages()
@@ -224,10 +237,15 @@ func (s *settingsWindow) draft() (settingsDraft, error) {
 	if err != nil {
 		return settingsDraft{}, errors.New("terminal font size must be an integer")
 	}
+	scrollbackRows, err := strconv.Atoi(strings.TrimSpace(s.scrollbackRows.Text()))
+	if err != nil {
+		return settingsDraft{}, errors.New("terminal scrollback rows must be an integer")
+	}
 	return settingsDraft{
 		Language:                 languages[index].LanguageTag(),
 		CommandTimeoutSeconds:    timeout,
 		TerminalFontSize:         fontSize,
+		TerminalScrollbackRows:   scrollbackRows,
 		ResetWorkspaceOnStart:    s.resetWorkspace.Value(),
 		StartWithFirstConnection: s.startFirst.Value(),
 	}, nil
@@ -265,6 +283,7 @@ func (s *settingsWindow) save() {
 		return
 	}
 	s.owner.applyTerminalFontSize(draft.TerminalFontSize)
+	s.owner.applyTerminalScrollbackRows(draft.TerminalScrollbackRows)
 	s.owner.setStatus(tr("settings.saved"))
 }
 

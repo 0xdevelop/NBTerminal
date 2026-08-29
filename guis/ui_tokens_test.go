@@ -181,18 +181,18 @@ func TestSettingsEditorAndManagerLayoutsUseSemanticControlMetrics(t *testing.T) 
 		settings.GeneralTitle.Height != nativeControls.SectionTitleHeight || settings.BehaviorTitle.Height != nativeControls.SectionTitleHeight {
 		t.Fatalf("settings headings do not use semantic typography carriers: %#v", settings)
 	}
-	if settings.Language.Height != nativeControls.InputHeight || settings.Timeout.Height != nativeControls.InputHeight || settings.TerminalFont.Height != nativeControls.InputHeight {
+	if settings.Language.Height != nativeControls.InputHeight || settings.Timeout.Height != nativeControls.InputHeight || settings.TerminalFont.Height != nativeControls.InputHeight || settings.Scrollback.Height != nativeControls.InputHeight {
 		t.Fatalf("settings controls do not use input-height token: %#v", settings)
 	}
 	if settings.Save.Height != nativeControls.PrimaryButtonHeight || settings.Cancel.Height != nativeControls.PrimaryButtonHeight {
 		t.Fatalf("settings actions do not use primary-height token: %#v", settings)
 	}
-	if settings.LanguageLabel.Height != nativeControls.InputHeight || settings.TimeoutLabel.Height != nativeControls.InputHeight || settings.TerminalFontLabel.Height != nativeControls.InputHeight ||
-		settings.SecondsHint.Height != nativeControls.SupportingLineHeight || settings.TerminalFontHint.Height != nativeControls.SupportingLineHeight || settings.ResetWorkspace.Height != nativeControls.CheckboxHeight ||
+	if settings.LanguageLabel.Height != nativeControls.InputHeight || settings.TimeoutLabel.Height != nativeControls.InputHeight || settings.TerminalFontLabel.Height != nativeControls.InputHeight || settings.ScrollbackLabel.Height != nativeControls.InputHeight ||
+		settings.SecondsHint.Height != nativeControls.SupportingLineHeight || settings.TerminalFontHint.Height != nativeControls.SupportingLineHeight || settings.ScrollbackHint.Height != nativeControls.SupportingLineHeight || settings.ResetWorkspace.Height != nativeControls.CheckboxHeight ||
 		settings.StartFirst.Height != nativeControls.CheckboxHeight || settings.BehaviorHint.Height < nativeControls.SupportingLineHeight {
 		t.Fatalf("settings labels/checks do not use semantic carriers: %#v", settings)
 	}
-	if settings.BehaviorTitle.Y-settings.TerminalFont.Bottom() < nativeControls.FieldGroupGap {
+	if settings.BehaviorTitle.Y-settings.Scrollback.Bottom() < nativeControls.FieldGroupGap {
 		t.Fatalf("settings field groups are too tight: %#v", settings)
 	}
 

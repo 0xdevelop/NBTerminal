@@ -853,7 +853,7 @@ func (a *finalShellApp) build() {
 	a.output.SetBackgroundColor(uint(tokenColor(modernTheme.terminal)))
 	a.output.SetSelectionColors(uint(tokenColor(modernTheme.foreground)), uint(tokenColor(modernTheme.selected)))
 	a.output.SetMargins(nativeControls.TextInset, nativeControls.TextInset, nativeControls.TextInset, nativeControls.TextInset)
-	a.output.SetHistoryRows(4000)
+	a.output.SetHistoryRows(terminalScrollbackRows())
 	a.output.SetRedrawRate(0.016)
 	a.output.OnInput(a.writeActiveTerminalInput)
 	a.output.OnResize(a.terminalViewResized)
@@ -1429,6 +1429,35 @@ func (a *finalShellApp) applyTerminalFontSize(size int) {
 	if a.cmdInput != nil {
 		a.cmdInput.SetFontSize(size)
 	}
+}
+
+func terminalScrollbackRows() int {
+	if config.GlobalConfig == nil || config.GlobalConfig.Terminal == nil {
+		return config.TerminalScrollbackRowsDefault
+	}
+	rows := config.GlobalConfig.Terminal.ScrollbackRows
+	if rows == 0 {
+		return config.TerminalScrollbackRowsDefault
+	}
+	if rows < config.TerminalScrollbackRowsMin {
+		return config.TerminalScrollbackRowsMin
+	}
+	if rows > config.TerminalScrollbackRowsMax {
+		return config.TerminalScrollbackRowsMax
+	}
+	return rows
+}
+
+func (a *finalShellApp) applyTerminalScrollbackRows(rows int) {
+	if a == nil || a.output == nil {
+		return
+	}
+	if rows < config.TerminalScrollbackRowsMin {
+		rows = config.TerminalScrollbackRowsMin
+	} else if rows > config.TerminalScrollbackRowsMax {
+		rows = config.TerminalScrollbackRowsMax
+	}
+	a.output.SetHistoryRows(rows)
 }
 
 func button(x, y, w, h int, title, id string, cb func()) *uikit.UIButton {

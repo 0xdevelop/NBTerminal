@@ -230,6 +230,7 @@ type settingsLayout struct {
 	Title, Subtitle, GeneralTitle, LanguageLabel, Language  layoutRect
 	TimeoutLabel, Timeout, SecondsHint                      layoutRect
 	TerminalFontLabel, TerminalFont, TerminalFontHint       layoutRect
+	ScrollbackLabel, Scrollback, ScrollbackHint             layoutRect
 	BehaviorTitle, ResetWorkspace, StartFirst, BehaviorHint layoutRect
 	Save, Cancel                                            layoutRect
 }
@@ -247,12 +248,15 @@ func settingsLayoutFor(tokens controlMetricSet) settingsLayout {
 		TerminalFontLabel: layoutRect{X: 28, Y: 224, Width: 190, Height: tokens.InputHeight},
 		TerminalFont:      layoutRect{X: 238, Y: 224, Width: 120, Height: tokens.InputHeight},
 		TerminalFontHint:  layoutRect{X: 370, Y: 230, Width: 198, Height: tokens.SupportingLineHeight},
-		BehaviorTitle:     layoutRect{X: 28, Y: 284, Width: 300, Height: tokens.SectionTitleHeight},
-		ResetWorkspace:    layoutRect{X: 28, Y: 316, Width: 540, Height: tokens.CheckboxHeight},
-		StartFirst:        layoutRect{X: 28, Y: 358, Width: 540, Height: tokens.CheckboxHeight},
-		BehaviorHint:      layoutRect{X: 50, Y: 394, Width: 518, Height: tokens.SupportingLineHeight * 2},
-		Cancel:            layoutRect{X: 360, Y: 468, Width: 96, Height: tokens.PrimaryButtonHeight},
-		Save:              layoutRect{X: 468, Y: 468, Width: 100, Height: tokens.PrimaryButtonHeight},
+		ScrollbackLabel:   layoutRect{X: 28, Y: 270, Width: 190, Height: tokens.InputHeight},
+		Scrollback:        layoutRect{X: 238, Y: 270, Width: 120, Height: tokens.InputHeight},
+		ScrollbackHint:    layoutRect{X: 370, Y: 276, Width: 198, Height: tokens.SupportingLineHeight},
+		BehaviorTitle:     layoutRect{X: 28, Y: 330, Width: 300, Height: tokens.SectionTitleHeight},
+		ResetWorkspace:    layoutRect{X: 28, Y: 362, Width: 540, Height: tokens.CheckboxHeight},
+		StartFirst:        layoutRect{X: 28, Y: 404, Width: 540, Height: tokens.CheckboxHeight},
+		BehaviorHint:      layoutRect{X: 50, Y: 440, Width: 518, Height: tokens.SupportingLineHeight * 2},
+		Cancel:            layoutRect{X: 360, Y: 514, Width: 96, Height: tokens.PrimaryButtonHeight},
+		Save:              layoutRect{X: 468, Y: 514, Width: 100, Height: tokens.PrimaryButtonHeight},
 	}
 }
 

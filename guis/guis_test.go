@@ -37,6 +37,29 @@ func TestCommandTimeoutUsesConfigDefaultAndOverride(t *testing.T) {
 	}
 }
 
+func TestTerminalScrollbackRowsUsesDefaultAndClampsConfig(t *testing.T) {
+	oldGlobal := config.GlobalConfig
+	t.Cleanup(func() { config.GlobalConfig = oldGlobal })
+
+	config.GlobalConfig = nil
+	if got := terminalScrollbackRows(); got != config.TerminalScrollbackRowsDefault {
+		t.Fatalf("default scrollback rows = %d", got)
+	}
+
+	config.GlobalConfig = &config.FileConfig{Terminal: &config.TerminalSettings{ScrollbackRows: 12000}}
+	if got := terminalScrollbackRows(); got != 12000 {
+		t.Fatalf("configured scrollback rows = %d", got)
+	}
+	config.GlobalConfig.Terminal.ScrollbackRows = config.TerminalScrollbackRowsMin - 1
+	if got := terminalScrollbackRows(); got != config.TerminalScrollbackRowsMin {
+		t.Fatalf("minimum-clamped scrollback rows = %d", got)
+	}
+	config.GlobalConfig.Terminal.ScrollbackRows = config.TerminalScrollbackRowsMax + 1
+	if got := terminalScrollbackRows(); got != config.TerminalScrollbackRowsMax {
+		t.Fatalf("maximum-clamped scrollback rows = %d", got)
+	}
+}
+
 func TestExecuteLocalCommand(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

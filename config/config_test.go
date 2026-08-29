@@ -113,6 +113,27 @@ func TestFileConfigNormalizeTerminalFontSize(t *testing.T) {
 	}
 }
 
+func TestFileConfigNormalizeTerminalScrollbackRows(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		rows int
+		want int
+	}{
+		{name: "default", rows: 0, want: TerminalScrollbackRowsDefault},
+		{name: "minimum clamp", rows: TerminalScrollbackRowsMin - 1, want: TerminalScrollbackRowsMin},
+		{name: "maximum clamp", rows: TerminalScrollbackRowsMax + 1, want: TerminalScrollbackRowsMax},
+		{name: "preserve", rows: 12000, want: 12000},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := &FileConfig{Terminal: &TerminalSettings{ScrollbackRows: test.rows}}
+			cfg.Normalize()
+			if cfg.Terminal.ScrollbackRows != test.want {
+				t.Fatalf("scrollback rows = %d, want %d", cfg.Terminal.ScrollbackRows, test.want)
+			}
+		})
+	}
+}
+
 func TestFileConfigNormalizeSplitRatio(t *testing.T) {
 	tests := []struct {
 		name string
