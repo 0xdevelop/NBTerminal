@@ -114,6 +114,24 @@ func TestConnectionManagerSearchRanksMultiTermMatchesWithinSelectedGroup(t *test
 	}
 }
 
+func TestConnectionManagerSelectionStatusIncludesVisibleDescriptionOnly(t *testing.T) {
+	profile := connectionProfile{
+		Name: "Production DB", Group: "Infrastructure", Favorite: true,
+		Description: "  Primary PostgreSQL cluster  ", PasswordEnc: "encrypted-marker", PrivateKey: "/secret/key-marker",
+	}
+	got := managerSelectionStatus(profile)
+	if !strings.Contains(got, "Description: Primary PostgreSQL cluster") {
+		t.Fatalf("manager selection status omitted description: %q", got)
+	}
+	if strings.Contains(got, "encrypted-marker") || strings.Contains(got, "key-marker") {
+		t.Fatalf("manager selection status exposed credentials: %q", got)
+	}
+	profile.Description = ""
+	if got := managerSelectionStatus(profile); strings.Contains(got, "Description:") {
+		t.Fatalf("empty description left a status suffix: %q", got)
+	}
+}
+
 func TestConnectionManagerSearchKeyboardMovesSelectionAndEscapeClearsQuery(t *testing.T) {
 	rows := []connectionProfile{
 		{ID: "alpha", Name: "Alpha", Type: connectionTypeLocal},

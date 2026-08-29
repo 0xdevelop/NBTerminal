@@ -376,11 +376,19 @@ func (m *connectionManagerWindow) updateStatus() {
 		m.status.SetText(tr("connections.none"))
 		return
 	}
+	m.status.SetText(managerSelectionStatus(profile))
+}
+
+func managerSelectionStatus(profile connectionProfile) string {
 	favorite := tr("manager.not_favorite")
 	if profile.Favorite {
 		favorite = tr("manager.is_favorite")
 	}
-	m.status.SetText(trf("manager.selected_format", profile.Name, profile.Group, favorite))
+	status := trf("manager.selected_format", profile.Name, profile.Group, favorite)
+	if description := strings.TrimSpace(profile.Description); description != "" {
+		status += " · Description: " + description
+	}
+	return status
 }
 
 func (m *connectionManagerWindow) selectedProfile() (connectionProfile, bool) {

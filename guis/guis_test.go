@@ -1066,6 +1066,26 @@ func TestMainSearchKeyboardMovesSelectionAndEscapeClearsQuery(t *testing.T) {
 	}
 }
 
+func TestSelectedProfileSupplementPrefersDescriptionWithoutExposingCredentials(t *testing.T) {
+	profile := connectionProfile{
+		Description: "  Production database maintenance window  ",
+		LastUsed:    "2026-08-29T12:00:00Z",
+		PasswordEnc: "encrypted-secret-marker",
+		PrivateKey:  "/private/key-marker",
+	}
+	got := selectedProfileSupplement(profile)
+	if got != "Description: Production database maintenance window" {
+		t.Fatalf("description supplement = %q", got)
+	}
+	if strings.Contains(got, "encrypted-secret-marker") || strings.Contains(got, "key-marker") {
+		t.Fatalf("supplement exposed credential-bearing fields: %q", got)
+	}
+	profile.Description = "   "
+	if got := selectedProfileSupplement(profile); got != trf("connections.selected_recent_format", formatLastUsed(profile.LastUsed)) {
+		t.Fatalf("empty-description fallback = %q", got)
+	}
+}
+
 func TestConfirmedDeleteClearsSelectionSummaryWhenLastProfileIsRemoved(t *testing.T) {
 	oldGlobal := config.GlobalConfig
 	oldApp := config.CurrentApp

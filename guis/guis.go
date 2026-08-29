@@ -1856,8 +1856,15 @@ func (a *finalShellApp) updateSelectedSummary() {
 		a.selectedDetail.SetText(trf("connections.selected_detail_format", p.Group, strings.ToUpper(string(p.Type)), p.tableEndpoint()))
 	}
 	if a.selectedRecent != nil {
-		a.selectedRecent.SetText(trf("connections.selected_recent_format", formatLastUsed(p.LastUsed)))
+		a.selectedRecent.SetText(selectedProfileSupplement(p))
 	}
+}
+
+func selectedProfileSupplement(profile connectionProfile) string {
+	if description := strings.TrimSpace(profile.Description); description != "" {
+		return "Description: " + description
+	}
+	return trf("connections.selected_recent_format", formatLastUsed(profile.LastUsed))
 }
 
 func (a *finalShellApp) persistActiveRow(row int) error {
