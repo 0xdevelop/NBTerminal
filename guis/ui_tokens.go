@@ -264,7 +264,7 @@ type connectionEditorLayout struct {
 	Title, Subtitle, TypeLabel, PasswordLabel            layoutRect
 	Name, Group, GroupBrowse, Type, Host, Port, Username layoutRect
 	Password, PasswordHint                               layoutRect
-	WorkingDir, PrivateKey, Save, Cancel                 layoutRect
+	Description, WorkingDir, PrivateKey, Save, Cancel    layoutRect
 }
 
 func connectionEditorLayoutFor(tokens controlMetricSet) connectionEditorLayout {
@@ -282,9 +282,10 @@ func connectionEditorLayoutFor(tokens controlMetricSet) connectionEditorLayout {
 		Password:      layoutRect{X: 334, Y: 262, Width: 298, Height: tokens.InputHeight},
 		PasswordLabel: layoutRect{X: 334, Y: 236, Width: 298, Height: tokens.FieldLabelHeight},
 		PasswordHint:  layoutRect{X: 334, Y: 300, Width: 298, Height: 30},
-		WorkingDir:    layoutRect{X: 28, Y: 350, Width: 604, Height: tokens.InputHeight},
-		PrivateKey:    layoutRect{X: 28, Y: 424, Width: 604, Height: tokens.InputHeight},
-		Cancel:        layoutRect{X: 420, Y: 512, Width: 96, Height: tokens.PrimaryButtonHeight},
-		Save:          layoutRect{X: 528, Y: 512, Width: 104, Height: tokens.PrimaryButtonHeight},
+		Description:   layoutRect{X: 28, Y: 368, Width: 604, Height: tokens.InputHeight},
+		WorkingDir:    layoutRect{X: 28, Y: 440, Width: 604, Height: tokens.InputHeight},
+		PrivateKey:    layoutRect{X: 28, Y: 512, Width: 604, Height: tokens.InputHeight},
+		Cancel:        layoutRect{X: 420, Y: 582, Width: 96, Height: tokens.PrimaryButtonHeight},
+		Save:          layoutRect{X: 528, Y: 582, Width: 104, Height: tokens.PrimaryButtonHeight},
 	}
 }

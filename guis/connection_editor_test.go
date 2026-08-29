@@ -15,14 +15,15 @@ func TestConnectionEditorDraftBuildsProfileWithoutTouchingRecencyOrStoredSecret(
 		LastUsed:    "2026-08-03T10:00:00Z",
 	}
 	draft := connectionEditorDraft{
-		Name:       "  生产 API  ",
-		Group:      "  生产环境  ",
-		Type:       "SSH",
-		Host:       " api.example.com ",
-		Port:       "2222",
-		Username:   " deploy ",
-		WorkingDir: " /srv/api ",
-		PrivateKey: " ~/.ssh/id_ed25519 ",
+		Name:        "  生产 API  ",
+		Group:       "  生产环境  ",
+		Description: "  Primary backend host  ",
+		Type:        "SSH",
+		Host:        " api.example.com ",
+		Port:        "2222",
+		Username:    " deploy ",
+		WorkingDir:  " /srv/api ",
+		PrivateKey:  " ~/.ssh/id_ed25519 ",
 	}
 
 	got, err := draft.Profile(base, "")
@@ -31,7 +32,7 @@ func TestConnectionEditorDraftBuildsProfileWithoutTouchingRecencyOrStoredSecret(
 	}
 	if got.ID != base.ID || got.Name != "生产 API" || got.Group != "生产环境" || got.Type != connectionTypeSSH ||
 		got.Host != "api.example.com" || got.Port != 2222 || got.Username != "deploy" || got.WorkingDir != "/srv/api" ||
-		got.PrivateKey != "~/.ssh/id_ed25519" {
+		got.PrivateKey != "~/.ssh/id_ed25519" || got.Description != "Primary backend host" {
 		t.Fatalf("unexpected profile: %#v", got)
 	}
 	if got.PasswordEnc != base.PasswordEnc {

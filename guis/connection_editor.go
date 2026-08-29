@@ -14,21 +14,22 @@ import (
 
 const (
 	connectionEditorWidth  = 660
-	connectionEditorHeight = 570
+	connectionEditorHeight = 640
 )
 
 // connectionEditorDraft is deliberately independent from native controls. It
 // makes validation deterministic and ensures opening/editing a connection does
 // not mutate durable state until Save succeeds.
 type connectionEditorDraft struct {
-	Name       string
-	Group      string
-	Type       string
-	Host       string
-	Port       string
-	Username   string
-	WorkingDir string
-	PrivateKey string
+	Name        string
+	Group       string
+	Description string
+	Type        string
+	Host        string
+	Port        string
+	Username    string
+	WorkingDir  string
+	PrivateKey  string
 }
 
 type connectionEditorTypeOption struct {
@@ -59,6 +60,7 @@ func (d connectionEditorDraft) Profile(base connectionProfile, password string) 
 	p := base
 	p.Name = strings.TrimSpace(d.Name)
 	p.Group = normalizeConnectionGroup(d.Group)
+	p.Description = strings.TrimSpace(d.Description)
 	p.Type = connectionType(strings.ToLower(strings.TrimSpace(d.Type)))
 	p.Host = strings.TrimSpace(d.Host)
 	p.Username = strings.TrimSpace(d.Username)
@@ -114,6 +116,7 @@ type connectionEditor struct {
 
 	name         *uikit.Input
 	group        *uikit.Input
+	description  *uikit.Input
 	groupBrowse  *uidropdown.UIDropdown
 	groupOptions []connectionGroupOption
 	connType     *uidropdown.UIDropdown
@@ -257,11 +260,13 @@ func (e *connectionEditor) build() {
 	passwordHint := mutedLabel(layout.PasswordHint.X, layout.PasswordHint.Y, layout.PasswordHint.Width, layout.PasswordHint.Height, tr("editor.password_hint"))
 	passwordHint.SetAlignment(fltk_bridge.ALIGN_LEFT | fltk_bridge.ALIGN_INSIDE | fltk_bridge.ALIGN_WRAP)
 	root.AddSubview(passwordHint)
+	e.description = editorInput(root, layout.Description, "Description", "connection_editor.description")
 	e.workingDir = editorInput(root, layout.WorkingDir, tr("field.workdir"), "connection_editor.working_dir")
 	e.privateKey = editorInput(root, layout.PrivateKey, tr("field.key"), "connection_editor.private_key")
 
 	e.name.SetText(e.profile.Name)
 	e.group.SetText(e.profile.Group)
+	e.description.SetText(e.profile.Description)
 	e.host.SetText(e.profile.Host)
 	if e.profile.Port > 0 {
 		e.port.SetText(strconv.Itoa(e.profile.Port))
@@ -338,7 +343,7 @@ func (e *connectionEditor) applyFieldPolicy(connType connectionType) {
 }
 
 func (e *connectionEditor) draft() (connectionEditorDraft, error) {
-	if e == nil || e.name == nil || e.group == nil || e.connType == nil || e.host == nil || e.port == nil ||
+	if e == nil || e.name == nil || e.group == nil || e.description == nil || e.connType == nil || e.host == nil || e.port == nil ||
 		e.username == nil || e.password == nil || e.workingDir == nil || e.privateKey == nil {
 		return connectionEditorDraft{}, errors.New(tr("editor.controls_unavailable"))
 	}
@@ -347,14 +352,15 @@ func (e *connectionEditor) draft() (connectionEditorDraft, error) {
 		return connectionEditorDraft{}, err
 	}
 	return connectionEditorDraft{
-		Name:       e.name.Text(),
-		Group:      e.group.Text(),
-		Type:       string(connType),
-		Host:       e.host.Text(),
-		Port:       e.port.Text(),
-		Username:   e.username.Text(),
-		WorkingDir: e.workingDir.Text(),
-		PrivateKey: e.privateKey.Text(),
+		Name:        e.name.Text(),
+		Group:       e.group.Text(),
+		Description: e.description.Text(),
+		Type:        string(connType),
+		Host:        e.host.Text(),
+		Port:        e.port.Text(),
+		Username:    e.username.Text(),
+		WorkingDir:  e.workingDir.Text(),
+		PrivateKey:  e.privateKey.Text(),
 	}, nil
 }
 
@@ -410,7 +416,7 @@ func connectionEditorDraftForProfile(profile connectionProfile) connectionEditor
 		port = strconv.Itoa(profile.Port)
 	}
 	return connectionEditorDraft{
-		Name: profile.Name, Group: profile.Group, Type: string(profile.Type),
+		Name: profile.Name, Group: profile.Group, Description: profile.Description, Type: string(profile.Type),
 		Host: profile.Host, Port: port, Username: profile.Username,
 		WorkingDir: profile.WorkingDir, PrivateKey: profile.PrivateKey,
 	}

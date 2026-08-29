@@ -204,7 +204,7 @@ func TestSettingsEditorAndManagerLayoutsUseSemanticControlMetrics(t *testing.T) 
 	for name, field := range map[string]layoutRect{
 		"name": editor.Name, "group": editor.Group, "group browse": editor.GroupBrowse, "type": editor.Type,
 		"host": editor.Host, "port": editor.Port, "username": editor.Username,
-		"password": editor.Password, "working directory": editor.WorkingDir, "private key": editor.PrivateKey,
+		"password": editor.Password, "description": editor.Description, "working directory": editor.WorkingDir, "private key": editor.PrivateKey,
 	} {
 		if field.Height != nativeControls.InputHeight {
 			t.Fatalf("%s height = %d, want %d", name, field.Height, nativeControls.InputHeight)
@@ -218,6 +218,9 @@ func TestSettingsEditorAndManagerLayoutsUseSemanticControlMetrics(t *testing.T) 
 	}
 	if editor.WorkingDir.Y-editor.Password.Bottom() < nativeControls.FieldGroupGap+nativeTypography.Supporting {
 		t.Fatalf("password hint/group spacing is too tight: %#v", editor)
+	}
+	if editor.WorkingDir.Y-editor.Description.Bottom() < nativeControls.FieldGroupGap {
+		t.Fatalf("description and working-directory fields are too tight: %#v", editor)
 	}
 	if editor.PasswordHint.Y < editor.Password.Bottom() || editor.PasswordHint.Height < nativeTypography.Supporting*2 {
 		t.Fatalf("password hint cannot wrap localized text: %#v", editor)
