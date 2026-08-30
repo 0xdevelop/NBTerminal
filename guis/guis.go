@@ -418,8 +418,11 @@ type finalShellApp struct {
 	window     *uikit.UIWindow
 	workspace  *uikit.UISplitView
 	quickPanel *uikit.UIGroup
-	table      *uikit.UITableView
-	model      *tableModel
+	// quickLaunchOverride temporarily replaces the active-session monitor when
+	// the user invokes the global quick-launch shortcut.
+	quickLaunchOverride bool
+	table               *uikit.UITableView
+	model               *tableModel
 
 	mainTitle        *uikit.UILabel
 	mainSubtitle     *uikit.UILabel
@@ -751,12 +754,13 @@ func (a *finalShellApp) build() {
 	quickPanel.AddSubview(a.quickSubtitle)
 	a.searchLabel = mutedLabel(quickLayout.SearchLabel.X, quickLayout.SearchLabel.Y, quickLayout.SearchLabel.Width, quickLayout.SearchLabel.Height, tr("connections.search"))
 	quickPanel.AddSubview(a.searchLabel)
-	a.searchInput = inputNoLabel(quickLayout.Search.X, quickLayout.Search.Y, quickLayout.Search.Width, quickLayout.Search.Height, "connections.search", tr("connections.search_placeholder"))
+	a.searchInput = inputNoLabel(quickLayout.Search.X, quickLayout.Search.Y, quickLayout.Search.Width, quickLayout.Search.Height, "connections.search", tr("connections.search_placeholder")+" · Ctrl+K")
 	a.searchInput.OnChange(a.jumpToSearchMatch)
 	a.searchInput.View().On(fltk_bridge.KEYDOWN, func(fltk_bridge.Event) bool {
 		return a.handleSearchKey(fltk_bridge.EventKey())
 	})
 	quickPanel.AddSubview(a.searchInput)
+	a.window.OnShortcut(fltk_bridge.CTRL+int('k'), a.focusQuickLauncher)
 	a.findButton = button(quickLayout.Find.X, quickLayout.Find.Y, quickLayout.Find.Width, quickLayout.Find.Height, tr("connections.find"), "connections.find", a.jumpToSearchMatch)
 	quickPanel.AddSubview(a.findButton)
 
@@ -856,6 +860,7 @@ func (a *finalShellApp) build() {
 	a.output.SetHistoryRows(terminalScrollbackRows())
 	a.output.SetRedrawRate(0.016)
 	a.output.OnInput(a.writeActiveTerminalInput)
+	a.output.OnShortcut(fltk_bridge.CTRL+int('k'), a.focusQuickLauncher)
 	a.output.OnResize(a.terminalViewResized)
 	a.setTerminalOutput(terminalWelcomeText())
 	if _, ok := a.sessions.Active(); ok {
@@ -926,6 +931,10 @@ func (a *finalShellApp) handleSearchKey(key int) bool {
 		return a.moveSearchSelection(-1)
 	case fltk_bridge.ESCAPE:
 		if strings.TrimSpace(a.searchInput.Text()) == "" {
+			if a.quickLaunchOverride {
+				a.dismissQuickLauncher()
+				return true
+			}
 			return false
 		}
 		a.searchInput.SetText("")
@@ -933,6 +942,38 @@ func (a *finalShellApp) handleSearchKey(key int) bool {
 		return true
 	}
 	return false
+}
+
+func (a *finalShellApp) focusQuickLauncher() {
+	if a == nil || a.searchInput == nil {
+		return
+	}
+	a.quickLaunchOverride = true
+	if a.monitorPanel != nil && a.monitorPanel.Raw() != nil {
+		a.monitorPanel.Raw().Hide()
+	}
+	if a.quickPanel != nil && a.quickPanel.Raw() != nil {
+		a.quickPanel.Raw().Show()
+	}
+	if raw := a.searchInput.View().Raw(); raw != nil {
+		if focusable, ok := raw.(interface{ TakeFocus() int }); ok {
+			focusable.TakeFocus()
+		}
+	}
+}
+
+func (a *finalShellApp) dismissQuickLauncher() {
+	if a == nil {
+		return
+	}
+	a.quickLaunchOverride = false
+	if a.sessions != nil {
+		if state, ok := a.sessions.Active(); ok {
+			a.renderMonitorSidebar(state, true)
+			return
+		}
+	}
+	a.renderMonitorSidebar(terminalTabState{}, false)
 }
 
 func nativeWindowClass() string {
@@ -2038,6 +2079,7 @@ func (a *finalShellApp) renderActiveSession() {
 	if a == nil || a.sessions == nil {
 		return
 	}
+	a.quickLaunchOverride = false
 	state, ok := a.sessions.Active()
 	if !ok {
 		a.configureActiveTerminalMode(terminalTabState{}, false)

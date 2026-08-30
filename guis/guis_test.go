@@ -1066,6 +1066,32 @@ func TestMainSearchKeyboardMovesSelectionAndEscapeClearsQuery(t *testing.T) {
 	}
 }
 
+func TestQuickLaunchShortcutOverridesActiveMonitorAndEscapeRestoresIt(t *testing.T) {
+	quick := uikit.NewUIGroup(rect(0, 0, 320, 480))
+	monitor := uikit.NewUIGroup(rect(0, 0, 320, 480))
+	quick.Raw().Hide()
+	monitor.Raw().Show()
+	workspace := newSessionWorkspace()
+	workspace.Open(connectionProfile{ID: "local", Name: "Local", Type: connectionTypeLocal})
+	app := &finalShellApp{
+		quickPanel:   quick,
+		monitorPanel: monitor,
+		searchInput:  uikit.NewInput(10, 10, 200, nativeControls.InputHeight, ""),
+		sessions:     workspace,
+	}
+
+	app.focusQuickLauncher()
+	if !app.quickLaunchOverride || !quick.Raw().Visible() || monitor.Raw().Visible() {
+		t.Fatalf("shortcut did not reveal quick launch: override=%v quick=%v monitor=%v", app.quickLaunchOverride, quick.Raw().Visible(), monitor.Raw().Visible())
+	}
+	if !app.handleSearchKey(fltk_bridge.ESCAPE) {
+		t.Fatal("empty Escape must dismiss a shortcut-opened quick launcher")
+	}
+	if app.quickLaunchOverride || quick.Raw().Visible() || !monitor.Raw().Visible() {
+		t.Fatalf("Escape did not restore active monitor: override=%v quick=%v monitor=%v", app.quickLaunchOverride, quick.Raw().Visible(), monitor.Raw().Visible())
+	}
+}
+
 func TestSelectedProfileSupplementPrefersDescriptionWithoutExposingCredentials(t *testing.T) {
 	profile := connectionProfile{
 		Description: "  Production database maintenance window  ",
