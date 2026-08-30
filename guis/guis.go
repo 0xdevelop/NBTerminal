@@ -439,6 +439,7 @@ type finalShellApp struct {
 	selectedRecent   *uikit.UILabel
 	connectButton    *uikit.UIButton
 	cmdInput         *uikit.UITextView
+	commandHistory   map[string]*commandHistoryCursor
 	output           *uikit.UITerminalView
 	terminalColumns  int
 	sessionTabs      *uikit.UITabView
@@ -886,13 +887,7 @@ func (a *finalShellApp) build() {
 	a.cmdInput.SetWrapNone()
 	styleCommandInput(a.cmdInput)
 	a.cmdInput.SetFallbackFont(fltk_bridge.FREE_FONT, isEmojiRune)
-	a.cmdInput.OnKey(func(event uikit.KeyEvent) bool {
-		if event.Key != fltk_bridge.ENTER_KEY {
-			return false
-		}
-		a.runCommand()
-		return true
-	})
+	a.cmdInput.OnKey(a.handleCommandInputKey)
 	rightPanel.AddSubview(a.cmdInput)
 	a.stopButton = button(terminalLayout.Stop.X, terminalLayout.Stop.Y, terminalLayout.Stop.Width, terminalLayout.Stop.Height, tr("terminal.stop"), "terminal.stop", a.stopCommand)
 	rightPanel.AddSubview(a.stopButton)
