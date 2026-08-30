@@ -761,7 +761,6 @@ func (a *finalShellApp) build() {
 		return a.handleSearchKey(fltk_bridge.EventKey())
 	})
 	quickPanel.AddSubview(a.searchInput)
-	a.window.OnShortcut(fltk_bridge.CTRL+int('k'), a.focusQuickLauncher)
 	a.findButton = button(quickLayout.Find.X, quickLayout.Find.Y, quickLayout.Find.Width, quickLayout.Find.Height, tr("connections.find"), "connections.find", a.jumpToSearchMatch)
 	quickPanel.AddSubview(a.findButton)
 
@@ -861,7 +860,8 @@ func (a *finalShellApp) build() {
 	a.output.SetHistoryRows(terminalScrollbackRows())
 	a.output.SetRedrawRate(0.016)
 	a.output.OnInput(a.writeActiveTerminalInput)
-	a.output.OnShortcut(fltk_bridge.CTRL+int('k'), a.focusQuickLauncher)
+	registerApplicationShortcut(a.window, a.output, fltk_bridge.CTRL+int('k'), a.focusQuickLauncher)
+	registerApplicationShortcut(a.window, a.output, fltk_bridge.CTRL+int(','), a.openSettings)
 	a.output.OnResize(a.terminalViewResized)
 	a.setTerminalOutput(terminalWelcomeText())
 	if _, ok := a.sessions.Active(); ok {
