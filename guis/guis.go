@@ -822,6 +822,10 @@ func (a *finalShellApp) build() {
 	a.terminalSubtitle = mutedLabel(terminalLayout.Subtitle.X, terminalLayout.Subtitle.Y, terminalLayout.Subtitle.Width, terminalLayout.Subtitle.Height, tr("terminal.subtitle"))
 	rightPanel.AddSubview(a.terminalSubtitle)
 	a.closeTabButton = button(terminalLayout.CloseTab.X, terminalLayout.CloseTab.Y, terminalLayout.CloseTab.Width, terminalLayout.CloseTab.Height, tr("session.close"), "terminal.session_close", a.closeActiveSession)
+	a.closeTabButton.View().SetAutomationName(tr("session.close") + " · Ctrl+W")
+	if raw := a.closeTabButton.Raw(); raw != nil {
+		raw.SetTooltip("Close Active Session (Ctrl+W)")
+	}
 	rightPanel.AddSubview(a.closeTabButton)
 
 	if a.sessions == nil {
@@ -870,6 +874,7 @@ func (a *finalShellApp) build() {
 		OpenSettings:       a.openSettings,
 		NextSession:        a.selectNextSession,
 		PreviousSession:    a.selectPreviousSession,
+		CloseSession:       a.closeActiveSession,
 	})
 	a.output.OnResize(a.terminalViewResized)
 	a.setTerminalOutput(terminalWelcomeText())

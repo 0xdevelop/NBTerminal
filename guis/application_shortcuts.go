@@ -17,6 +17,7 @@ type applicationShortcutActions struct {
 	OpenSettings       func()
 	NextSession        func()
 	PreviousSession    func()
+	CloseSession       func()
 }
 
 func registerApplicationShortcut(window, terminal applicationShortcutRegistrar, shortcut int, handler func()) {
@@ -29,8 +30,8 @@ func registerApplicationShortcut(window, terminal applicationShortcutRegistrar, 
 
 // registerDefaultApplicationShortcuts keeps the window and focused terminal
 // routes in sync. Ctrl+N starts a connection draft, Ctrl+O opens the saved
-// resource library, and Ctrl+Tab / Ctrl+Shift+Tab cycle runtime sessions without
-// leaking tab bytes into the focused PTY.
+// resource library, Ctrl+Tab / Ctrl+Shift+Tab cycle runtime sessions, and Ctrl+W
+// closes the active session without leaking control bytes into the focused PTY.
 func registerDefaultApplicationShortcuts(window, terminal applicationShortcutRegistrar, actions applicationShortcutActions) {
 	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+int('k'), actions.FocusQuickLauncher)
 	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+int('n'), actions.NewConnection)
@@ -38,4 +39,5 @@ func registerDefaultApplicationShortcuts(window, terminal applicationShortcutReg
 	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+int(','), actions.OpenSettings)
 	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+fltk_bridge.TAB, actions.NextSession)
 	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+fltk_bridge.SHIFT+fltk_bridge.TAB, actions.PreviousSession)
+	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+int('w'), actions.CloseSession)
 }
