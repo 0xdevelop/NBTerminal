@@ -42,3 +42,30 @@ func TestRegisterApplicationShortcutRejectsIncompleteRegistration(t *testing.T) 
 		t.Fatal("partial shortcut registration leaves the consuming terminal route uncovered")
 	}
 }
+
+func TestRegisterDefaultApplicationShortcutsRoutesEveryCommand(t *testing.T) {
+	window := &shortcutRecorder{}
+	terminal := &shortcutRecorder{}
+	invocations := map[string]int{}
+
+	registerDefaultApplicationShortcuts(window, terminal, applicationShortcutActions{
+		FocusQuickLauncher: func() { invocations["quick"]++ },
+		OpenConnections:    func() { invocations["connections"]++ },
+		OpenSettings:       func() { invocations["settings"]++ },
+	})
+
+	shortcuts := map[int]string{
+		fltk_bridge.CTRL + int('k'): "quick",
+		fltk_bridge.CTRL + int('o'): "connections",
+		fltk_bridge.CTRL + int(','): "settings",
+	}
+	for shortcut, command := range shortcuts {
+		if window.handlers[shortcut] == nil || terminal.handlers[shortcut] == nil {
+			t.Fatalf("%s shortcut %d was not registered on both native routes", command, shortcut)
+		}
+		terminal.handlers[shortcut]()
+		if invocations[command] != 1 {
+			t.Fatalf("terminal %s shortcut invoked command %d times, want 1", command, invocations[command])
+		}
+	}
+}

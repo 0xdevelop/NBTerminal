@@ -705,7 +705,10 @@ func (a *finalShellApp) build() {
 	a.mainSubtitle = mutedLabel(mainLayout.Subtitle.X, mainLayout.Subtitle.Y, mainLayout.Subtitle.Width, mainLayout.Subtitle.Height, tr("app.subtitle"))
 	root.AddSubview(a.mainSubtitle)
 	a.managerButton = button(mainLayout.Manager.X, mainLayout.Manager.Y, mainLayout.Manager.Width, mainLayout.Manager.Height, tr("manager.open_compact"), "app.connection_manager", a.openConnectionManager)
-	a.managerButton.View().SetAutomationName(tr("manager.open"))
+	a.managerButton.View().SetAutomationName(tr("manager.open") + " · Ctrl+O")
+	if raw := a.managerButton.Raw(); raw != nil {
+		raw.SetTooltip("Open Connection Manager (Ctrl+O)")
+	}
 	root.AddSubview(a.managerButton)
 	a.settingsButton = button(mainLayout.Settings.X, mainLayout.Settings.Y, mainLayout.Settings.Width, mainLayout.Settings.Height, tr("setting.title"), "app.settings", a.openSettings)
 	root.AddSubview(a.settingsButton)
@@ -860,8 +863,11 @@ func (a *finalShellApp) build() {
 	a.output.SetHistoryRows(terminalScrollbackRows())
 	a.output.SetRedrawRate(0.016)
 	a.output.OnInput(a.writeActiveTerminalInput)
-	registerApplicationShortcut(a.window, a.output, fltk_bridge.CTRL+int('k'), a.focusQuickLauncher)
-	registerApplicationShortcut(a.window, a.output, fltk_bridge.CTRL+int(','), a.openSettings)
+	registerDefaultApplicationShortcuts(a.window, a.output, applicationShortcutActions{
+		FocusQuickLauncher: a.focusQuickLauncher,
+		OpenConnections:    a.openConnectionManager,
+		OpenSettings:       a.openSettings,
+	})
 	a.output.OnResize(a.terminalViewResized)
 	a.setTerminalOutput(terminalWelcomeText())
 	if _, ok := a.sessions.Active(); ok {
