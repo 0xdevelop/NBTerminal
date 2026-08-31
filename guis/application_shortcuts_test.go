@@ -53,13 +53,17 @@ func TestRegisterDefaultApplicationShortcutsRoutesEveryCommand(t *testing.T) {
 		NewConnection:      func() { invocations["new"]++ },
 		OpenConnections:    func() { invocations["connections"]++ },
 		OpenSettings:       func() { invocations["settings"]++ },
+		NextSession:        func() { invocations["next-session"]++ },
+		PreviousSession:    func() { invocations["previous-session"]++ },
 	})
 
 	shortcuts := map[int]string{
-		fltk_bridge.CTRL + int('k'): "quick",
-		fltk_bridge.CTRL + int('n'): "new",
-		fltk_bridge.CTRL + int('o'): "connections",
-		fltk_bridge.CTRL + int(','): "settings",
+		fltk_bridge.CTRL + int('k'):                            "quick",
+		fltk_bridge.CTRL + int('n'):                            "new",
+		fltk_bridge.CTRL + int('o'):                            "connections",
+		fltk_bridge.CTRL + int(','):                            "settings",
+		fltk_bridge.CTRL + fltk_bridge.TAB:                     "next-session",
+		fltk_bridge.CTRL + fltk_bridge.SHIFT + fltk_bridge.TAB: "previous-session",
 	}
 	for shortcut, command := range shortcuts {
 		if window.handlers[shortcut] == nil || terminal.handlers[shortcut] == nil {

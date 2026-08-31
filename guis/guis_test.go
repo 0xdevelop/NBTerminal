@@ -1149,3 +1149,27 @@ func TestConfirmedDeleteClearsSelectionSummaryWhenLastProfileIsRemoved(t *testin
 		t.Fatalf("stale recent detail remained after delete: %q", got)
 	}
 }
+
+func TestSessionShortcutsCycleRuntimeTabsAndWorkspaceTogether(t *testing.T) {
+	workspace := newSessionWorkspace()
+	workspace.Open(connectionProfile{ID: "one", Name: "One", Type: connectionTypeLocal})
+	workspace.Open(connectionProfile{ID: "two", Name: "Two", Type: connectionTypeLocal})
+	workspace.Open(connectionProfile{ID: "three", Name: "Three", Type: connectionTypeLocal})
+	workspace.Select(0)
+
+	tabs := uikit.NewUITabView(rect(0, 0, 480, 180))
+	for _, state := range workspace.Tabs() {
+		tabs.AddTabWithID(state.ID, state.Profile.Name, nil)
+	}
+	app := &finalShellApp{sessions: workspace, sessionTabs: tabs}
+	tabs.OnTabChanged(app.selectSessionTab)
+
+	app.selectPreviousSession()
+	if workspace.ActiveIndex() != 2 || tabs.ActiveIndex() != 2 {
+		t.Fatalf("previous session did not wrap in sync: workspace=%d tabs=%d", workspace.ActiveIndex(), tabs.ActiveIndex())
+	}
+	app.selectNextSession()
+	if workspace.ActiveIndex() != 0 || tabs.ActiveIndex() != 0 {
+		t.Fatalf("next session did not wrap in sync: workspace=%d tabs=%d", workspace.ActiveIndex(), tabs.ActiveIndex())
+	}
+}

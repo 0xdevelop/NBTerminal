@@ -868,6 +868,8 @@ func (a *finalShellApp) build() {
 		NewConnection:      a.newProfile,
 		OpenConnections:    a.openConnectionManager,
 		OpenSettings:       a.openSettings,
+		NextSession:        a.selectNextSession,
+		PreviousSession:    a.selectPreviousSession,
 	})
 	a.output.OnResize(a.terminalViewResized)
 	a.setTerminalOutput(terminalWelcomeText())
@@ -2119,6 +2121,18 @@ func (a *finalShellApp) selectSessionTab(index int) {
 		if state, ok := a.sessions.Active(); ok {
 			a.setStatus(trf("session.active", state.Profile.Name))
 		}
+	}
+}
+
+func (a *finalShellApp) selectNextSession() {
+	if a != nil && a.sessionTabs != nil {
+		a.sessionTabs.SelectNext()
+	}
+}
+
+func (a *finalShellApp) selectPreviousSession() {
+	if a != nil && a.sessionTabs != nil {
+		a.sessionTabs.SelectPrevious()
 	}
 }
 
