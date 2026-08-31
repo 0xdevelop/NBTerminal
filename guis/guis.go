@@ -865,6 +865,7 @@ func (a *finalShellApp) build() {
 	a.output.OnInput(a.writeActiveTerminalInput)
 	registerDefaultApplicationShortcuts(a.window, a.output, applicationShortcutActions{
 		FocusQuickLauncher: a.focusQuickLauncher,
+		NewConnection:      a.newProfile,
 		OpenConnections:    a.openConnectionManager,
 		OpenSettings:       a.openSettings,
 	})

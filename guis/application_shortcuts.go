@@ -12,6 +12,7 @@ type applicationShortcutRegistrar interface {
 
 type applicationShortcutActions struct {
 	FocusQuickLauncher func()
+	NewConnection      func()
 	OpenConnections    func()
 	OpenSettings       func()
 }
@@ -25,10 +26,12 @@ func registerApplicationShortcut(window, terminal applicationShortcutRegistrar, 
 }
 
 // registerDefaultApplicationShortcuts keeps the window and focused terminal
-// routes in sync. Ctrl+O follows the desktop convention for opening a saved
-// resource and exposes the complete Connection Manager without leaving the PTY.
+// routes in sync. Ctrl+N starts a connection draft, while Ctrl+O follows the
+// desktop convention for opening a saved resource and exposes the complete
+// Connection Manager without leaving the PTY.
 func registerDefaultApplicationShortcuts(window, terminal applicationShortcutRegistrar, actions applicationShortcutActions) {
 	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+int('k'), actions.FocusQuickLauncher)
+	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+int('n'), actions.NewConnection)
 	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+int('o'), actions.OpenConnections)
 	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+int(','), actions.OpenSettings)
 }

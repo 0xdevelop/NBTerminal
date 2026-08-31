@@ -50,12 +50,14 @@ func TestRegisterDefaultApplicationShortcutsRoutesEveryCommand(t *testing.T) {
 
 	registerDefaultApplicationShortcuts(window, terminal, applicationShortcutActions{
 		FocusQuickLauncher: func() { invocations["quick"]++ },
+		NewConnection:      func() { invocations["new"]++ },
 		OpenConnections:    func() { invocations["connections"]++ },
 		OpenSettings:       func() { invocations["settings"]++ },
 	})
 
 	shortcuts := map[int]string{
 		fltk_bridge.CTRL + int('k'): "quick",
+		fltk_bridge.CTRL + int('n'): "new",
 		fltk_bridge.CTRL + int('o'): "connections",
 		fltk_bridge.CTRL + int(','): "settings",
 	}
