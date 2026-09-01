@@ -14,6 +14,7 @@ import (
 	"github.com/0xdevelop/NBTerminal/terminal"
 	"github.com/0xdevelop/fltk2go/fltk_bridge"
 	"github.com/0xdevelop/fltk2go/uikit"
+	"github.com/0xdevelop/fltk2go/uikit/view"
 	"github.com/george012/gtbox"
 )
 
@@ -1171,5 +1172,55 @@ func TestSessionShortcutsCycleRuntimeTabsAndWorkspaceTogether(t *testing.T) {
 	app.selectNextSession()
 	if workspace.ActiveIndex() != 0 || tabs.ActiveIndex() != 0 {
 		t.Fatalf("next session did not wrap in sync: workspace=%d tabs=%d", workspace.ActiveIndex(), tabs.ActiveIndex())
+	}
+}
+
+func TestSessionTabCloseAffordanceClosesRequestedBackgroundRuntime(t *testing.T) {
+	workspace := newSessionWorkspace()
+	workspace.Open(connectionProfile{ID: "one", Name: "One", Type: connectionTypeLocal})
+	workspace.Open(connectionProfile{ID: "two", Name: "Two", Type: connectionTypeLocal})
+	workspace.Open(connectionProfile{ID: "three", Name: "Three", Type: connectionTypeLocal})
+
+	tabs := uikit.NewUITabView(rect(0, 0, 480, 180))
+	tabs.SetAutomationID("terminal.sessions.test")
+	for _, state := range workspace.Tabs() {
+		tabs.AddTabWithID(state.ID, state.Profile.Name, nil)
+	}
+	tabs.SelectTab(2)
+	workspace.Select(2)
+	app := &finalShellApp{sessions: workspace, sessionTabs: tabs}
+	tabs.SetTabsClosable(true)
+	tabs.OnTabCloseRequested(app.closeSessionAt)
+
+	if err := view.AutomationClick("terminal.sessions.test.tab.runtime-2.close"); err != nil {
+		t.Fatalf("background close click failed: %v", err)
+	}
+	states := workspace.Tabs()
+	if len(states) != 2 || states[0].ID != "runtime-1" || states[1].ID != "runtime-3" {
+		t.Fatalf("wrong runtime closed: %#v", states)
+	}
+	if workspace.ActiveIndex() != 1 || tabs.ActiveIndex() != 1 || tabs.TabID(1) != "runtime-3" {
+		t.Fatalf("active identity drifted: workspace=%d tabs=%d id=%q", workspace.ActiveIndex(), tabs.ActiveIndex(), tabs.TabID(tabs.ActiveIndex()))
+	}
+}
+
+func TestSessionTabCloseAffordanceRespectsRunningSessionVeto(t *testing.T) {
+	workspace := newSessionWorkspace()
+	workspace.Open(connectionProfile{ID: "one", Name: "One", Type: connectionTypeLocal})
+	if !workspace.BeginRun("run-1") {
+		t.Fatal("failed to start run")
+	}
+	tabs := uikit.NewUITabView(rect(0, 0, 320, 180))
+	tabs.SetAutomationID("terminal.sessions.running")
+	tabs.AddTabWithID("runtime-1", "One", nil)
+	tabs.SetTabsClosable(true)
+	app := &finalShellApp{sessions: workspace, sessionTabs: tabs}
+	tabs.OnTabCloseRequested(app.closeSessionAt)
+
+	if err := view.AutomationClick("terminal.sessions.running.tab.runtime-1.close"); err != nil {
+		t.Fatalf("running close click failed: %v", err)
+	}
+	if len(workspace.Tabs()) != 1 || tabs.Count() != 1 {
+		t.Fatal("running session close request bypassed the workspace veto")
 	}
 }

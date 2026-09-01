@@ -851,6 +851,8 @@ func (a *finalShellApp) build() {
 		a.sessions.Select(activeSessionIndex)
 	}
 	a.sessionTabs.OnTabChanged(a.selectSessionTab)
+	a.sessionTabs.SetTabsClosable(true)
+	a.sessionTabs.OnTabCloseRequested(a.closeSessionAt)
 
 	a.output = uikit.NewUITerminalView(rect(terminalLayout.Output.X, terminalLayout.Output.Y, terminalLayout.Output.Width, terminalLayout.Output.Height))
 	a.output.SetAutomationID("terminal.output").SetAutomationName(tr("terminal.output_name"))
@@ -2198,12 +2200,25 @@ func (a *finalShellApp) closeActiveSession() {
 	if a == nil || a.sessions == nil {
 		return
 	}
-	index := a.sessions.ActiveIndex()
-	state, ok := a.sessions.Active()
-	if !ok {
+	a.closeSessionAt(a.sessions.ActiveIndex())
+}
+
+// closeSessionAt applies the same runtime ownership and running-session veto to
+// mouse close affordances and Ctrl+W. Background tabs close without first
+// becoming active, preserving the user's current terminal and draft.
+func (a *finalShellApp) closeSessionAt(index int) {
+	if a == nil || a.sessions == nil {
 		return
 	}
-	a.syncActiveSessionView()
+	tabs := a.sessions.Tabs()
+	if index < 0 || index >= len(tabs) {
+		return
+	}
+	state := tabs[index]
+	wasActive := index == a.sessions.ActiveIndex()
+	if wasActive {
+		a.syncActiveSessionView()
+	}
 	if !a.sessions.Close(index) {
 		a.setStatus(tr("session.close_running"))
 		a.showTopNotice(tr("session.close_running_title"), tr("session.close_running"), false)
@@ -2217,7 +2232,9 @@ func (a *finalShellApp) closeActiveSession() {
 		a.sessionTabs.RemoveTab(index)
 	}
 	a.renderActiveSession()
-	if next, exists := a.sessions.Active(); exists {
+	if !wasActive {
+		a.setStatus(fmt.Sprintf("Closed %s", state.Profile.Name))
+	} else if next, exists := a.sessions.Active(); exists {
 		a.setStatus(trf("session.closed_active", state.Profile.Name, next.Profile.Name))
 	} else {
 		a.setStatus(trf("session.closed", state.Profile.Name))
