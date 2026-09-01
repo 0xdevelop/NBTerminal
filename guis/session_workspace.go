@@ -212,3 +212,13 @@ func (w *sessionWorkspace) ReopenLastClosed() (int, bool) {
 	}
 	return index, opened
 }
+
+// DuplicateActive opens the active profile snapshot as a new runtime. Draft,
+// output, process state, and transport identity deliberately remain tab-local.
+func (w *sessionWorkspace) DuplicateActive() (int, bool) {
+	active, ok := w.Active()
+	if !ok {
+		return -1, false
+	}
+	return w.Open(active.Profile)
+}

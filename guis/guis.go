@@ -879,6 +879,7 @@ func (a *finalShellApp) build() {
 		CloseSession:       a.closeActiveSession,
 		ReopenSession:      a.reopenLastClosedSession,
 		ReconnectSession:   a.reconnectActiveSession,
+		DuplicateSession:   a.duplicateActiveSession,
 	})
 	a.output.OnResize(a.terminalViewResized)
 	a.setTerminalOutput(terminalWelcomeText())
@@ -2252,27 +2253,9 @@ func (a *finalShellApp) reopenLastClosedSession() {
 		a.setStatus("No recently closed session")
 		return
 	}
-	state, ok := a.sessions.Active()
-	if !ok {
-		return
+	if state, ok := a.sessions.Active(); ok {
+		a.activateFreshRuntimeSession(index, state, fmt.Sprintf("Reopened %s", state.Profile.Name))
 	}
-	a.startMonitorForSession(state)
-	if a.sessionTabs != nil {
-		a.sessionTabs.AddTabWithID(state.ID, sessionTabTitle(state), nil)
-		a.sessionTabs.SelectTab(index)
-	}
-	a.renderActiveSession()
-	if state.Profile.Type == connectionTypeLocal || state.Profile.Type == connectionTypeSSH {
-		if err := a.startInteractiveSession(state); err != nil {
-			a.appendSessionOutput(state.ID, trf("output.session_shell_start_failed", err.Error()))
-			a.setStatus(tr("status.session_shell_start_failed"))
-			a.showTopNotice(tr("notice.session_shell_start_failed.title"), err.Error(), true)
-			return
-		}
-		a.configureActiveTerminalMode(state, true)
-		a.updateCommandControls()
-	}
-	a.setStatus(fmt.Sprintf("Reopened %s", state.Profile.Name))
 }
 
 func (a *finalShellApp) reconnectActiveSession() {
@@ -2302,6 +2285,47 @@ func (a *finalShellApp) reconnectActiveSession() {
 		a.output.Raw().TakeFocus()
 	}
 	a.setStatus(fmt.Sprintf("Reconnected %s", state.Profile.Name))
+}
+
+func (a *finalShellApp) duplicateActiveSession() {
+	if a == nil || a.sessions == nil {
+		return
+	}
+	a.syncActiveSessionView()
+	index, duplicated := a.sessions.DuplicateActive()
+	if !duplicated {
+		a.setStatus("No active session to duplicate")
+		return
+	}
+	if state, ok := a.sessions.Active(); ok {
+		a.activateFreshRuntimeSession(index, state, fmt.Sprintf("Duplicated %s", state.Profile.Name))
+	}
+}
+
+// activateFreshRuntimeSession joins a newly-created workspace tab to its native
+// tab, monitor, and transport. Reopen and duplicate both create clean runtimes,
+// so they must share this ownership sequence instead of drifting independently.
+func (a *finalShellApp) activateFreshRuntimeSession(index int, state terminalTabState, readyStatus string) {
+	a.startMonitorForSession(state)
+	if a.sessionTabs != nil {
+		a.sessionTabs.AddTabWithID(state.ID, sessionTabTitle(state), nil)
+		a.sessionTabs.SelectTab(index)
+	}
+	a.renderActiveSession()
+	if state.Profile.Type == connectionTypeLocal || state.Profile.Type == connectionTypeSSH {
+		if err := a.startInteractiveSession(state); err != nil {
+			a.appendSessionOutput(state.ID, trf("output.session_shell_start_failed", err.Error()))
+			a.setStatus(tr("status.session_shell_start_failed"))
+			a.showTopNotice(tr("notice.session_shell_start_failed.title"), err.Error(), true)
+			return
+		}
+		a.configureActiveTerminalMode(state, true)
+		a.updateCommandControls()
+		if a.output != nil && a.output.Raw() != nil {
+			a.output.Raw().TakeFocus()
+		}
+	}
+	a.setStatus(readyStatus)
 }
 
 func (a *finalShellApp) activeSessionProfile() (connectionProfile, bool) {

@@ -20,6 +20,7 @@ type applicationShortcutActions struct {
 	CloseSession       func()
 	ReopenSession      func()
 	ReconnectSession   func()
+	DuplicateSession   func()
 }
 
 func registerApplicationShortcut(window, terminal applicationShortcutRegistrar, shortcut int, handler func()) {
@@ -34,8 +35,9 @@ func registerApplicationShortcut(window, terminal applicationShortcutRegistrar, 
 // routes in sync. Ctrl+N starts a connection draft, Ctrl+O opens the saved
 // resource library, Ctrl+Tab / Ctrl+Shift+Tab cycle runtime sessions, and Ctrl+W
 // closes the active session without leaking control bytes into the focused PTY;
-// Ctrl+Shift+T reopens the most recently closed profile as a fresh runtime, and
-// Ctrl+Shift+R replaces the active tab's transport without replacing its tab.
+// Ctrl+Shift+T reopens the most recently closed profile as a fresh runtime,
+// Ctrl+Shift+R replaces the active tab's transport without replacing its tab,
+// and Ctrl+Shift+D opens the active profile in an independent runtime tab.
 func registerDefaultApplicationShortcuts(window, terminal applicationShortcutRegistrar, actions applicationShortcutActions) {
 	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+int('k'), actions.FocusQuickLauncher)
 	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+int('n'), actions.NewConnection)
@@ -46,4 +48,5 @@ func registerDefaultApplicationShortcuts(window, terminal applicationShortcutReg
 	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+int('w'), actions.CloseSession)
 	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+fltk_bridge.SHIFT+int('t'), actions.ReopenSession)
 	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+fltk_bridge.SHIFT+int('r'), actions.ReconnectSession)
+	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+fltk_bridge.SHIFT+int('d'), actions.DuplicateSession)
 }

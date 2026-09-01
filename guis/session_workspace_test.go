@@ -176,3 +176,31 @@ func TestSessionWorkspaceReopenRejectsEmptyHistory(t *testing.T) {
 		t.Fatalf("empty reopen = index %d, ok %t", index, ok)
 	}
 }
+
+func TestSessionWorkspaceDuplicatesActiveProfileAsFreshRuntime(t *testing.T) {
+	workspace := newSessionWorkspace()
+	profile := connectionProfile{ID: "local", Name: "Local Shell", Type: connectionTypeLocal}
+	workspace.Open(profile)
+	workspace.SetActiveDraft("do not copy")
+	workspace.AppendActiveOutput("private terminal state")
+	original, _ := workspace.Active()
+
+	index, duplicated := workspace.DuplicateActive()
+	if !duplicated || index != 1 {
+		t.Fatalf("duplicate active = index %d, ok %t", index, duplicated)
+	}
+	duplicate, ok := workspace.Active()
+	if !ok || duplicate.ID == original.ID || duplicate.ProfileID != profile.ID || duplicate.InstanceNumber != 2 {
+		t.Fatalf("duplicate runtime identity = %#v, original %#v", duplicate, original)
+	}
+	if duplicate.CommandDraft != "" || strings.Contains(duplicate.Output, "private terminal state") {
+		t.Fatalf("duplicate inherited mutable terminal state: %#v", duplicate)
+	}
+}
+
+func TestSessionWorkspaceDuplicateRejectsEmptyWorkspace(t *testing.T) {
+	workspace := newSessionWorkspace()
+	if index, ok := workspace.DuplicateActive(); ok || index != -1 {
+		t.Fatalf("empty duplicate = index %d, ok %t", index, ok)
+	}
+}
