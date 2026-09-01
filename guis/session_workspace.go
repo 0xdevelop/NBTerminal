@@ -31,6 +31,7 @@ type sessionWorkspace struct {
 	activeIndex      int
 	profileSelection string
 	nextRuntimeID    uint64
+	closedProfiles   []connectionProfile
 }
 
 func newSessionWorkspace() *sessionWorkspace {
@@ -173,8 +174,13 @@ func (w *sessionWorkspace) Close(index int) bool {
 	if w == nil || index < 0 || index >= len(w.tabs) || w.tabs[index].Status == sessionRunning {
 		return false
 	}
+	closedProfile := w.tabs[index].Profile
 	wasActive := index == w.activeIndex
 	w.tabs = append(w.tabs[:index], w.tabs[index+1:]...)
+	w.closedProfiles = append(w.closedProfiles, closedProfile)
+	if len(w.closedProfiles) > 20 {
+		w.closedProfiles = append([]connectionProfile(nil), w.closedProfiles[len(w.closedProfiles)-20:]...)
+	}
 	if len(w.tabs) == 0 {
 		w.activeIndex = -1
 		return true
@@ -188,4 +194,21 @@ func (w *sessionWorkspace) Close(index int) bool {
 		w.activeIndex--
 	}
 	return true
+}
+
+// ReopenLastClosed creates a fresh runtime session for the most recently
+// closed profile. Mutable terminal state and transport identity are never
+// revived: the closed tab's profile snapshot is the only retained value.
+func (w *sessionWorkspace) ReopenLastClosed() (int, bool) {
+	if w == nil || len(w.closedProfiles) == 0 {
+		return -1, false
+	}
+	last := len(w.closedProfiles) - 1
+	profile := w.closedProfiles[last]
+	w.closedProfiles = w.closedProfiles[:last]
+	index, opened := w.Open(profile)
+	if !opened {
+		w.closedProfiles = append(w.closedProfiles, profile)
+	}
+	return index, opened
 }

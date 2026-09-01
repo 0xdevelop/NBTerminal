@@ -875,6 +875,7 @@ func (a *finalShellApp) build() {
 		NextSession:        a.selectNextSession,
 		PreviousSession:    a.selectPreviousSession,
 		CloseSession:       a.closeActiveSession,
+		ReopenSession:      a.reopenLastClosedSession,
 	})
 	a.output.OnResize(a.terminalViewResized)
 	a.setTerminalOutput(terminalWelcomeText())
@@ -2221,6 +2222,39 @@ func (a *finalShellApp) closeActiveSession() {
 	} else {
 		a.setStatus(trf("session.closed", state.Profile.Name))
 	}
+}
+
+func (a *finalShellApp) reopenLastClosedSession() {
+	if a == nil || a.sessions == nil {
+		return
+	}
+	a.syncActiveSessionView()
+	index, reopened := a.sessions.ReopenLastClosed()
+	if !reopened {
+		a.setStatus("No recently closed session")
+		return
+	}
+	state, ok := a.sessions.Active()
+	if !ok {
+		return
+	}
+	a.startMonitorForSession(state)
+	if a.sessionTabs != nil {
+		a.sessionTabs.AddTabWithID(state.ID, sessionTabTitle(state), nil)
+		a.sessionTabs.SelectTab(index)
+	}
+	a.renderActiveSession()
+	if state.Profile.Type == connectionTypeLocal || state.Profile.Type == connectionTypeSSH {
+		if err := a.startInteractiveSession(state); err != nil {
+			a.appendSessionOutput(state.ID, trf("output.session_shell_start_failed", err.Error()))
+			a.setStatus(tr("status.session_shell_start_failed"))
+			a.showTopNotice(tr("notice.session_shell_start_failed.title"), err.Error(), true)
+			return
+		}
+		a.configureActiveTerminalMode(state, true)
+		a.updateCommandControls()
+	}
+	a.setStatus(fmt.Sprintf("Reopened %s", state.Profile.Name))
 }
 
 func (a *finalShellApp) activeSessionProfile() (connectionProfile, bool) {

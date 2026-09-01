@@ -133,3 +133,46 @@ func TestSessionWorkspaceRuntimeIdentitySurvivesEarlierTabClose(t *testing.T) {
 		t.Fatalf("duplicate profile tab title = %q, want %q", got, "Server · 3")
 	}
 }
+
+func TestSessionWorkspaceReopensMostRecentlyClosedProfileAsFreshRuntime(t *testing.T) {
+	workspace := newSessionWorkspace()
+	first := connectionProfile{ID: "first", Name: "First", Type: connectionTypeLocal}
+	second := connectionProfile{ID: "second", Name: "Second", Type: connectionTypeSSH}
+	workspace.Open(first)
+	firstRuntime, _ := workspace.Active()
+	workspace.Open(second)
+	secondRuntime, _ := workspace.Active()
+
+	if !workspace.Close(workspace.ActiveIndex()) || !workspace.Close(workspace.ActiveIndex()) {
+		t.Fatal("failed to close runtime sessions")
+	}
+	if _, ok := workspace.Active(); ok {
+		t.Fatal("workspace should be empty before reopen")
+	}
+
+	index, reopened := workspace.ReopenLastClosed()
+	if !reopened || index != 0 {
+		t.Fatalf("reopen latest profile: index=%d reopened=%t", index, reopened)
+	}
+	active, _ := workspace.Active()
+	if active.ProfileID != first.ID || active.ID == firstRuntime.ID || active.CommandDraft != "" {
+		t.Fatalf("reopened session is not a fresh runtime for the latest profile: %#v", active)
+	}
+	if !workspace.Close(index) {
+		t.Fatal("failed to close reopened profile")
+	}
+	if _, reopened = workspace.ReopenLastClosed(); !reopened {
+		t.Fatal("failed to reopen the profile a second time")
+	}
+	active, _ = workspace.Active()
+	if active.ProfileID != first.ID || active.ID == secondRuntime.ID {
+		t.Fatalf("closing a reopened tab did not update the LIFO stack: %#v", active)
+	}
+}
+
+func TestSessionWorkspaceReopenRejectsEmptyHistory(t *testing.T) {
+	workspace := newSessionWorkspace()
+	if index, ok := workspace.ReopenLastClosed(); ok || index != -1 {
+		t.Fatalf("empty reopen = index %d, ok %t", index, ok)
+	}
+}
