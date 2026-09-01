@@ -878,6 +878,7 @@ func (a *finalShellApp) build() {
 		PreviousSession:    a.selectPreviousSession,
 		CloseSession:       a.closeActiveSession,
 		ReopenSession:      a.reopenLastClosedSession,
+		ReconnectSession:   a.reconnectActiveSession,
 	})
 	a.output.OnResize(a.terminalViewResized)
 	a.setTerminalOutput(terminalWelcomeText())
@@ -2272,6 +2273,35 @@ func (a *finalShellApp) reopenLastClosedSession() {
 		a.updateCommandControls()
 	}
 	a.setStatus(fmt.Sprintf("Reopened %s", state.Profile.Name))
+}
+
+func (a *finalShellApp) reconnectActiveSession() {
+	if a == nil || a.sessions == nil {
+		return
+	}
+	a.syncActiveSessionView()
+	state, ok := a.sessions.Active()
+	if !ok {
+		a.setStatus("No active session to reconnect")
+		return
+	}
+	if state.Profile.Type != connectionTypeLocal && state.Profile.Type != connectionTypeSSH {
+		a.setStatus("This session cannot be reconnected")
+		return
+	}
+	if err := a.replaceInteractiveSession(state); err != nil {
+		a.appendSessionOutput(state.ID, fmt.Sprintf("\r\nReconnect failed: %s\r\n", err.Error()))
+		a.setStatus("Reconnect failed")
+		a.showTopNotice("Reconnect failed", err.Error(), true)
+		return
+	}
+	a.appendSessionOutput(state.ID, "\r\n— Reconnected —\r\n")
+	a.configureActiveTerminalMode(state, true)
+	a.updateCommandControls()
+	if a.output != nil && a.output.Raw() != nil {
+		a.output.Raw().TakeFocus()
+	}
+	a.setStatus(fmt.Sprintf("Reconnected %s", state.Profile.Name))
 }
 
 func (a *finalShellApp) activeSessionProfile() (connectionProfile, bool) {

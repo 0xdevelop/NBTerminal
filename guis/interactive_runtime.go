@@ -54,6 +54,45 @@ func (r *interactiveRuntimeRegistry) Start(parent context.Context, id string, se
 	return nil
 }
 
+// Replace starts a successor transport before atomically publishing it under
+// the same runtime ID. A failed replacement leaves the current terminal usable;
+// once the swap succeeds, the superseded transport is cancelled and closed.
+func (r *interactiveRuntimeRegistry) Replace(parent context.Context, id string, session terminal.InteractiveSession, size terminal.TerminalSize) error {
+	id = strings.TrimSpace(id)
+	if parent == nil {
+		parent = context.Background()
+	}
+	if r == nil || id == "" || session == nil {
+		return errInteractiveRuntimeNotFound
+	}
+	r.mu.RLock()
+	previous, exists := r.runtimes[id]
+	r.mu.RUnlock()
+	if !exists {
+		return errInteractiveRuntimeNotFound
+	}
+
+	ctx, cancel := context.WithCancel(parent)
+	if err := session.Start(ctx, size); err != nil {
+		cancel()
+		return err
+	}
+	r.mu.Lock()
+	current, exists := r.runtimes[id]
+	if !exists || current.session != previous.session {
+		r.mu.Unlock()
+		cancel()
+		_ = session.Close()
+		return errInteractiveRuntimeExists
+	}
+	r.runtimes[id] = interactiveRuntime{session: session, cancel: cancel}
+	r.mu.Unlock()
+
+	previous.cancel()
+	_ = previous.session.Close()
+	return nil
+}
+
 func (r *interactiveRuntimeRegistry) Session(id string) (terminal.InteractiveSession, bool) {
 	if r == nil {
 		return nil, false

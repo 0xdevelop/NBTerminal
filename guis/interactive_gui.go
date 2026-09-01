@@ -67,6 +67,20 @@ func (a *finalShellApp) startInteractiveSession(state terminalTabState) error {
 	if a.interactive.Has(state.ID) {
 		return nil
 	}
+	return a.installInteractiveSession(state, false)
+}
+
+func (a *finalShellApp) replaceInteractiveSession(state terminalTabState) error {
+	if a == nil || strings.TrimSpace(state.ID) == "" {
+		return nil
+	}
+	if a.interactive == nil || !a.interactive.Has(state.ID) {
+		return a.startInteractiveSession(state)
+	}
+	return a.installInteractiveSession(state, true)
+}
+
+func (a *finalShellApp) installInteractiveSession(state terminalTabState, replace bool) error {
 	conn, err := profileToConnection(state.Profile)
 	if err != nil {
 		return err
@@ -84,7 +98,13 @@ func (a *finalShellApp) startInteractiveSession(state terminalTabState) error {
 	default:
 		return nil
 	}
-	if err := a.interactive.Start(context.Background(), state.ID, transport, a.activeTerminalSize()); err != nil {
+	register := func() error {
+		if replace {
+			return a.interactive.Replace(context.Background(), state.ID, transport, a.activeTerminalSize())
+		}
+		return a.interactive.Start(context.Background(), state.ID, transport, a.activeTerminalSize())
+	}
+	if err := register(); err != nil {
 		var hostKeyErr *terminal.SSHHostKeyError
 		if !errors.As(err, &hostKeyErr) {
 			return err
@@ -100,7 +120,7 @@ func (a *finalShellApp) startInteractiveSession(state terminalTabState) error {
 		if err := a.sshHostKeys.Trust(hostKeyErr); err != nil {
 			return err
 		}
-		if err := a.interactive.Start(context.Background(), state.ID, transport, a.activeTerminalSize()); err != nil {
+		if err := register(); err != nil {
 			return err
 		}
 	}

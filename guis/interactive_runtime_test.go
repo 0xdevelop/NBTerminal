@@ -19,6 +19,7 @@ type fakeInteractiveSession struct {
 	closes     int
 	output     chan []byte
 	done       chan struct{}
+	startErr   error
 	waitErr    error
 }
 
@@ -30,7 +31,7 @@ func (s *fakeInteractiveSession) Start(_ context.Context, size terminal.Terminal
 	s.mu.Lock()
 	s.started = append(s.started, size)
 	s.mu.Unlock()
-	return nil
+	return s.startErr
 }
 func (s *fakeInteractiveSession) WriteInput(data []byte) error {
 	s.mu.Lock()
@@ -116,6 +117,41 @@ func TestInteractiveRuntimeRegistryOwnsCloseAndRejectsDuplicates(t *testing.T) {
 	if err := registry.WriteInput("runtime-1", []byte("lost")); !errors.Is(err, errInteractiveRuntimeNotFound) {
 		t.Fatalf("write after close error = %v", err)
 	}
+}
+
+func TestInteractiveRuntimeRegistryReplacesOnlyExistingRuntime(t *testing.T) {
+	registry := newInteractiveRuntimeRegistry()
+	first := newFakeInteractiveSession()
+	second := newFakeInteractiveSession()
+	failing := newFakeInteractiveSession()
+	failing.startErr = errors.New("replacement start failed")
+	size := terminal.TerminalSize{Columns: 100, Rows: 30}
+	if err := registry.Start(context.Background(), "runtime-1", first, size); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := registry.Replace(context.Background(), "missing", second, size); !errors.Is(err, errInteractiveRuntimeNotFound) {
+		t.Fatalf("replace missing runtime error = %v", err)
+	}
+	if err := registry.Replace(context.Background(), "runtime-1", failing, size); !errors.Is(err, failing.startErr) {
+		t.Fatalf("failed replacement error = %v", err)
+	}
+	if current, ok := registry.Session("runtime-1"); !ok || current != first {
+		t.Fatal("failed replacement discarded the working runtime")
+	}
+	if err := registry.Replace(context.Background(), "runtime-1", second, size); err != nil {
+		t.Fatal(err)
+	}
+	if current, ok := registry.Session("runtime-1"); !ok || current != second {
+		t.Fatalf("replacement runtime = %#v, ok=%t", current, ok)
+	}
+	first.mu.Lock()
+	firstCloses := first.closes
+	first.mu.Unlock()
+	if firstCloses != 1 {
+		t.Fatalf("replaced transport close count = %d, want 1", firstCloses)
+	}
+	registry.CloseAll()
 }
 
 func TestRunInteractiveCommandPersistsSubmittedCommandHistory(t *testing.T) {
