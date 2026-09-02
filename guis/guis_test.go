@@ -1174,6 +1174,31 @@ func TestSessionShortcutsCycleRuntimeTabsAndWorkspaceTogether(t *testing.T) {
 	}
 }
 
+func TestSessionShortcutSelectsExactRuntimeTab(t *testing.T) {
+	workspace := newSessionWorkspace()
+	workspace.Open(connectionProfile{ID: "one", Name: "One", Type: connectionTypeLocal})
+	workspace.Open(connectionProfile{ID: "two", Name: "Two", Type: connectionTypeLocal})
+	workspace.Open(connectionProfile{ID: "three", Name: "Three", Type: connectionTypeLocal})
+
+	tabs := uikit.NewUITabView(rect(0, 0, 480, 180))
+	for _, state := range workspace.Tabs() {
+		tabs.AddTabWithID(state.ID, state.Profile.Name, nil)
+	}
+	tabs.SelectTab(2)
+	workspace.Select(2)
+	app := &finalShellApp{sessions: workspace, sessionTabs: tabs}
+	tabs.OnTabChanged(app.selectSessionTab)
+
+	app.selectSessionAt(0)
+	if workspace.ActiveIndex() != 0 || tabs.ActiveIndex() != 0 {
+		t.Fatalf("exact session selection drifted: workspace=%d tabs=%d", workspace.ActiveIndex(), tabs.ActiveIndex())
+	}
+	app.selectSessionAt(8)
+	if workspace.ActiveIndex() != 0 || tabs.ActiveIndex() != 0 {
+		t.Fatalf("out-of-range shortcut changed selection: workspace=%d tabs=%d", workspace.ActiveIndex(), tabs.ActiveIndex())
+	}
+}
+
 func TestSessionTabCloseAffordanceClosesRequestedBackgroundRuntime(t *testing.T) {
 	workspace := newSessionWorkspace()
 	workspace.Open(connectionProfile{ID: "one", Name: "One", Type: connectionTypeLocal})

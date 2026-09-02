@@ -1,6 +1,7 @@
 package guis
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/0xdevelop/fltk2go/fltk_bridge"
@@ -59,6 +60,7 @@ func TestRegisterDefaultApplicationShortcutsRoutesEveryCommand(t *testing.T) {
 		ReopenSession:      func() { invocations["reopen-session"]++ },
 		ReconnectSession:   func() { invocations["reconnect-session"]++ },
 		DuplicateSession:   func() { invocations["duplicate-session"]++ },
+		SelectSession:      func(index int) { invocations[fmt.Sprintf("select-session-%d", index)]++ },
 	})
 
 	shortcuts := map[int]string{
@@ -74,6 +76,17 @@ func TestRegisterDefaultApplicationShortcutsRoutesEveryCommand(t *testing.T) {
 		fltk_bridge.CTRL + fltk_bridge.SHIFT + int('d'):        "duplicate-session",
 	}
 	for shortcut, command := range shortcuts {
+		if window.handlers[shortcut] == nil || terminal.handlers[shortcut] == nil {
+			t.Fatalf("%s shortcut %d was not registered on both native routes", command, shortcut)
+		}
+		terminal.handlers[shortcut]()
+		if invocations[command] != 1 {
+			t.Fatalf("terminal %s shortcut invoked command %d times, want 1", command, invocations[command])
+		}
+	}
+	for index := 0; index < 9; index++ {
+		shortcut := fltk_bridge.ALT + int('1'+rune(index))
+		command := fmt.Sprintf("select-session-%d", index)
 		if window.handlers[shortcut] == nil || terminal.handlers[shortcut] == nil {
 			t.Fatalf("%s shortcut %d was not registered on both native routes", command, shortcut)
 		}

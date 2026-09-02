@@ -21,6 +21,7 @@ type applicationShortcutActions struct {
 	ReopenSession      func()
 	ReconnectSession   func()
 	DuplicateSession   func()
+	SelectSession      func(index int)
 }
 
 func registerApplicationShortcut(window, terminal applicationShortcutRegistrar, shortcut int, handler func()) {
@@ -38,6 +39,8 @@ func registerApplicationShortcut(window, terminal applicationShortcutRegistrar, 
 // Ctrl+Shift+T reopens the most recently closed profile as a fresh runtime,
 // Ctrl+Shift+R replaces the active tab's transport without replacing its tab,
 // and Ctrl+Shift+D opens the active profile in an independent runtime tab.
+// Alt+1 through Alt+9 select a runtime tab directly without sending an escape
+// sequence to the focused shell.
 func registerDefaultApplicationShortcuts(window, terminal applicationShortcutRegistrar, actions applicationShortcutActions) {
 	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+int('k'), actions.FocusQuickLauncher)
 	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+int('n'), actions.NewConnection)
@@ -49,4 +52,12 @@ func registerDefaultApplicationShortcuts(window, terminal applicationShortcutReg
 	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+fltk_bridge.SHIFT+int('t'), actions.ReopenSession)
 	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+fltk_bridge.SHIFT+int('r'), actions.ReconnectSession)
 	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+fltk_bridge.SHIFT+int('d'), actions.DuplicateSession)
+	if actions.SelectSession != nil {
+		for index := 0; index < 9; index++ {
+			index := index
+			registerApplicationShortcut(window, terminal, fltk_bridge.ALT+int('1'+rune(index)), func() {
+				actions.SelectSession(index)
+			})
+		}
+	}
 }

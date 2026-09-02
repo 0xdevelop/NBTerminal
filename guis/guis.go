@@ -878,6 +878,7 @@ func (a *finalShellApp) build() {
 		ReopenSession:      a.reopenLastClosedSession,
 		ReconnectSession:   a.reconnectActiveSession,
 		DuplicateSession:   a.duplicateActiveSession,
+		SelectSession:      a.selectSessionAt,
 	})
 	a.output.OnResize(a.terminalViewResized)
 	a.setTerminalOutput(terminalWelcomeText())
@@ -2142,6 +2143,13 @@ func (a *finalShellApp) selectPreviousSession() {
 	if a != nil && a.sessionTabs != nil {
 		a.sessionTabs.SelectPrevious()
 	}
+}
+
+func (a *finalShellApp) selectSessionAt(index int) {
+	if a == nil || a.sessions == nil || a.sessionTabs == nil || index < 0 || index >= len(a.sessions.Tabs()) {
+		return
+	}
+	a.sessionTabs.SelectTab(index)
 }
 
 func (a *finalShellApp) openSession(profile connectionProfile) {
