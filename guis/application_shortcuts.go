@@ -15,6 +15,7 @@ type applicationShortcutActions struct {
 	NewConnection      func()
 	OpenConnections    func()
 	OpenSettings       func()
+	NewLocalSession    func()
 	NextSession        func()
 	PreviousSession    func()
 	CloseSession       func()
@@ -40,6 +41,7 @@ func registerApplicationShortcut(window, terminal applicationShortcutRegistrar, 
 // closes the active session without leaking control bytes into the focused PTY;
 // Ctrl+Shift+T reopens the most recently closed profile as a fresh runtime,
 // Ctrl+Shift+R replaces the active tab's transport without replacing its tab,
+// Ctrl+Shift+N opens an ephemeral local shell without changing saved profiles,
 // Ctrl+Shift+D opens the active profile in an independent runtime tab, and
 // Ctrl+Shift+PageUp/PageDown moves the active runtime without replacing it.
 // Alt+1 through Alt+9 select a runtime tab directly without sending an escape
@@ -49,6 +51,7 @@ func registerDefaultApplicationShortcuts(window, terminal applicationShortcutReg
 	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+int('n'), actions.NewConnection)
 	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+int('o'), actions.OpenConnections)
 	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+int(','), actions.OpenSettings)
+	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+fltk_bridge.SHIFT+int('n'), actions.NewLocalSession)
 	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+fltk_bridge.TAB, actions.NextSession)
 	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+fltk_bridge.SHIFT+fltk_bridge.TAB, actions.PreviousSession)
 	registerApplicationShortcut(window, terminal, fltk_bridge.CTRL+int('w'), actions.CloseSession)

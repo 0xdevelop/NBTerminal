@@ -241,3 +241,24 @@ func TestSessionWorkspaceMoveActiveRejectsEmptyAndUnsupportedDelta(t *testing.T)
 		t.Fatal("unsupported move changed a single-tab workspace")
 	}
 }
+
+func TestQuickLocalSessionProfileStartsAtHomeWithoutPersistedSecrets(t *testing.T) {
+	profile := quickLocalSessionProfile(" /home/tester ")
+	if profile.ID != quickLocalSessionProfileID || profile.Name != "Local Shell" || profile.Type != connectionTypeLocal {
+		t.Fatalf("unexpected quick local profile: %#v", profile)
+	}
+	if profile.WorkingDir != "/home/tester" {
+		t.Fatalf("working directory = %q, want home", profile.WorkingDir)
+	}
+	if profile.PasswordEnc != "" || profile.PrivateKey != "" || profile.Host != "" || profile.Username != "" {
+		t.Fatalf("ephemeral local profile retained remote credentials: %#v", profile)
+	}
+
+	workspace := newSessionWorkspace()
+	workspace.Open(profile)
+	workspace.Open(profile)
+	tabs := workspace.Tabs()
+	if len(tabs) != 2 || tabs[0].ProfileID != quickLocalSessionProfileID || tabs[1].InstanceNumber != 2 {
+		t.Fatalf("quick local sessions are not independent runtimes: %#v", tabs)
+	}
+}

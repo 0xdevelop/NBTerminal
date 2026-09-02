@@ -34,14 +34,15 @@ import (
 )
 
 const (
-	connectionStoreFile = "connections.json"
-	secretKey           = "nbterminal-connections-v1"
-	defaultWindowWidth  = 1440
-	defaultWindowHeight = 900
-	noticeWidth         = 560
-	noticeHeight        = 118
-	noticeTopOffset     = 72
-	screenEdgePadding   = 8
+	connectionStoreFile        = "connections.json"
+	secretKey                  = "nbterminal-connections-v1"
+	defaultWindowWidth         = 1440
+	defaultWindowHeight        = 900
+	noticeWidth                = 560
+	noticeHeight               = 118
+	noticeTopOffset            = 72
+	screenEdgePadding          = 8
+	quickLocalSessionProfileID = "quick-local-shell"
 )
 
 type colorToken struct{ r, g, b uint8 }
@@ -872,6 +873,7 @@ func (a *finalShellApp) build() {
 		NewConnection:      a.newProfile,
 		OpenConnections:    a.openConnectionManager,
 		OpenSettings:       a.openSettings,
+		NewLocalSession:    a.openQuickLocalSession,
 		NextSession:        a.selectNextSession,
 		PreviousSession:    a.selectPreviousSession,
 		CloseSession:       a.closeActiveSession,
@@ -2070,6 +2072,30 @@ func sessionTabTitle(state terminalTabState) string {
 		name = fmt.Sprintf("%s · %d", name, state.InstanceNumber)
 	}
 	return prefix + name
+}
+
+// quickLocalSessionProfile is runtime-only: it deliberately bypasses the saved
+// connection store while still using one stable profile identity so duplicate
+// tab numbering remains deterministic. Starting at the user's home directory
+// avoids inheriting NBTerminal's implementation working directory.
+func quickLocalSessionProfile(home string) connectionProfile {
+	return connectionProfile{
+		ID:         quickLocalSessionProfileID,
+		Name:       "Local Shell",
+		Type:       connectionTypeLocal,
+		WorkingDir: strings.TrimSpace(home),
+	}
+}
+
+func (a *finalShellApp) openQuickLocalSession() {
+	if a == nil {
+		return
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = ""
+	}
+	a.openSession(quickLocalSessionProfile(home))
 }
 
 func (a *finalShellApp) syncActiveSessionView() {
