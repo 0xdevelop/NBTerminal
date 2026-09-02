@@ -760,9 +760,7 @@ func (a *finalShellApp) build() {
 	quickPanel.AddSubview(a.searchLabel)
 	a.searchInput = inputNoLabel(quickLayout.Search.X, quickLayout.Search.Y, quickLayout.Search.Width, quickLayout.Search.Height, "connections.search", tr("connections.search_placeholder")+" · Ctrl+K")
 	a.searchInput.OnChange(a.jumpToSearchMatch)
-	a.searchInput.View().On(fltk_bridge.KEYDOWN, func(fltk_bridge.Event) bool {
-		return a.handleSearchKey(fltk_bridge.EventKey())
-	})
+	a.searchInput.OnNavigation(a.handleSearchKey)
 	quickPanel.AddSubview(a.searchInput)
 	a.findButton = button(quickLayout.Find.X, quickLayout.Find.Y, quickLayout.Find.Width, quickLayout.Find.Height, tr("connections.find"), "connections.find", a.jumpToSearchMatch)
 	quickPanel.AddSubview(a.findButton)
@@ -931,19 +929,19 @@ func (a *finalShellApp) build() {
 	}
 }
 
-func (a *finalShellApp) handleSearchKey(key int) bool {
+func (a *finalShellApp) handleSearchKey(action uikit.InputNavigationAction) bool {
 	if a == nil || a.searchInput == nil {
 		return false
 	}
-	switch key {
-	case fltk_bridge.ENTER_KEY:
+	switch action {
+	case uikit.InputNavigationSubmit:
 		a.activateConnectionRow(a.idx)
 		return true
-	case fltk_bridge.DOWN:
+	case uikit.InputNavigationNext:
 		return a.moveSearchSelection(1)
-	case fltk_bridge.UP:
+	case uikit.InputNavigationPrevious:
 		return a.moveSearchSelection(-1)
-	case fltk_bridge.ESCAPE:
+	case uikit.InputNavigationCancel:
 		if strings.TrimSpace(a.searchInput.Text()) == "" {
 			if a.quickLaunchOverride {
 				a.dismissQuickLauncher()

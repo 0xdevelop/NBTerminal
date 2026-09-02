@@ -98,9 +98,7 @@ func (m *connectionManagerWindow) build() {
 	root.AddSubview(mutedLabel(312, 99, 76, 20, tr("connections.search")))
 	m.search = inputNoLabel(layout.Search.X, layout.Search.Y, layout.Search.Width, layout.Search.Height, "connection_manager.search", tr("connections.search_placeholder"))
 	m.search.OnChange(m.applySearch)
-	m.search.View().On(fltk_bridge.KEYDOWN, func(fltk_bridge.Event) bool {
-		return m.handleSearchKey(fltk_bridge.EventKey())
-	})
+	m.search.OnNavigation(m.handleSearchKey)
 	root.AddSubview(m.search)
 	root.AddSubview(button(layout.Find.X, layout.Find.Y, layout.Find.Width, layout.Find.Height, tr("connections.find"), "connection_manager.find", m.applySearch))
 	m.syncGroupOptions()
@@ -167,19 +165,19 @@ func (m *connectionManagerWindow) build() {
 	}
 }
 
-func (m *connectionManagerWindow) handleSearchKey(key int) bool {
+func (m *connectionManagerWindow) handleSearchKey(action uikit.InputNavigationAction) bool {
 	if m == nil || m.search == nil {
 		return false
 	}
-	switch key {
-	case fltk_bridge.ENTER_KEY:
+	switch action {
+	case uikit.InputNavigationSubmit:
 		m.activate(m.idx)
 		return true
-	case fltk_bridge.DOWN:
+	case uikit.InputNavigationNext:
 		return m.moveSearchSelection(1)
-	case fltk_bridge.UP:
+	case uikit.InputNavigationPrevious:
 		return m.moveSearchSelection(-1)
-	case fltk_bridge.ESCAPE:
+	case uikit.InputNavigationCancel:
 		if strings.TrimSpace(m.search.Text()) == "" {
 			return false
 		}

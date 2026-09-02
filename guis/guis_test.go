@@ -12,7 +12,6 @@ import (
 	"github.com/0xdevelop/NBTerminal/config"
 	"github.com/0xdevelop/NBTerminal/locales"
 	"github.com/0xdevelop/NBTerminal/terminal"
-	"github.com/0xdevelop/fltk2go/fltk_bridge"
 	"github.com/0xdevelop/fltk2go/uikit"
 	"github.com/0xdevelop/fltk2go/uikit/view"
 	"github.com/george012/gtbox"
@@ -1053,17 +1052,17 @@ func TestMainSearchKeyboardMovesSelectionAndEscapeClearsQuery(t *testing.T) {
 	if len(app.rows) != 2 || app.idx != 0 {
 		t.Fatalf("search setup = rows %d idx %d, want 2/0", len(app.rows), app.idx)
 	}
-	if !app.handleSearchKey(fltk_bridge.DOWN) || app.idx != 1 {
+	if !app.handleSearchKey(uikit.InputNavigationNext) || app.idx != 1 {
 		t.Fatalf("Down did not move to second match: idx=%d", app.idx)
 	}
-	if !app.handleSearchKey(fltk_bridge.UP) || app.idx != 0 {
+	if !app.handleSearchKey(uikit.InputNavigationPrevious) || app.idx != 0 {
 		t.Fatalf("Up did not move to first match: idx=%d", app.idx)
 	}
-	if !app.handleSearchKey(fltk_bridge.ESCAPE) || app.searchInput.Text() != "" || len(app.rows) != len(rows) {
+	if !app.handleSearchKey(uikit.InputNavigationCancel) || app.searchInput.Text() != "" || len(app.rows) != len(rows) {
 		t.Fatalf("Escape did not clear and restore quick rows: query=%q rows=%d", app.searchInput.Text(), len(app.rows))
 	}
-	if app.handleSearchKey(fltk_bridge.ESCAPE) || app.handleSearchKey('x') {
-		t.Fatal("empty Escape or unrelated key must remain available to native input handling")
+	if app.handleSearchKey(uikit.InputNavigationCancel) {
+		t.Fatal("empty Escape must remain available to native input handling")
 	}
 }
 
@@ -1085,7 +1084,7 @@ func TestQuickLaunchShortcutOverridesActiveMonitorAndEscapeRestoresIt(t *testing
 	if !app.quickLaunchOverride || !quick.Raw().Visible() || monitor.Raw().Visible() {
 		t.Fatalf("shortcut did not reveal quick launch: override=%v quick=%v monitor=%v", app.quickLaunchOverride, quick.Raw().Visible(), monitor.Raw().Visible())
 	}
-	if !app.handleSearchKey(fltk_bridge.ESCAPE) {
+	if !app.handleSearchKey(uikit.InputNavigationCancel) {
 		t.Fatal("empty Escape must dismiss a shortcut-opened quick launcher")
 	}
 	if app.quickLaunchOverride || quick.Raw().Visible() || !monitor.Raw().Visible() {

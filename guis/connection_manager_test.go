@@ -11,7 +11,6 @@ import (
 
 	"github.com/0xdevelop/NBTerminal/config"
 	"github.com/0xdevelop/NBTerminal/locales"
-	"github.com/0xdevelop/fltk2go/fltk_bridge"
 	"github.com/0xdevelop/fltk2go/uikit"
 	"github.com/george012/gtbox"
 )
@@ -148,17 +147,17 @@ func TestConnectionManagerSearchKeyboardMovesSelectionAndEscapeClearsQuery(t *te
 	if len(manager.rows) != 2 || manager.idx != 0 {
 		t.Fatalf("search setup = rows %d idx %d, want 2/0", len(manager.rows), manager.idx)
 	}
-	if !manager.handleSearchKey(fltk_bridge.DOWN) || manager.idx != 1 {
+	if !manager.handleSearchKey(uikit.InputNavigationNext) || manager.idx != 1 {
 		t.Fatalf("Down did not move to second manager match: idx=%d", manager.idx)
 	}
-	if !manager.handleSearchKey(fltk_bridge.UP) || manager.idx != 0 {
+	if !manager.handleSearchKey(uikit.InputNavigationPrevious) || manager.idx != 0 {
 		t.Fatalf("Up did not move to first manager match: idx=%d", manager.idx)
 	}
-	if !manager.handleSearchKey(fltk_bridge.ESCAPE) || manager.search.Text() != "" || len(manager.rows) != len(rows) {
+	if !manager.handleSearchKey(uikit.InputNavigationCancel) || manager.search.Text() != "" || len(manager.rows) != len(rows) {
 		t.Fatalf("Escape did not clear manager query: query=%q rows=%d", manager.search.Text(), len(manager.rows))
 	}
-	if manager.handleSearchKey(fltk_bridge.ESCAPE) || manager.handleSearchKey('x') {
-		t.Fatal("empty manager Escape or unrelated key must remain available to native input handling")
+	if manager.handleSearchKey(uikit.InputNavigationCancel) {
+		t.Fatal("empty manager Escape must remain available to native input handling")
 	}
 }
 
