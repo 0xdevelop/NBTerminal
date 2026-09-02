@@ -1174,6 +1174,34 @@ func TestSessionShortcutsCycleRuntimeTabsAndWorkspaceTogether(t *testing.T) {
 	}
 }
 
+func TestSessionShortcutMovesActiveRuntimeAndNativeTabTogether(t *testing.T) {
+	workspace := newSessionWorkspace()
+	workspace.Open(connectionProfile{ID: "one", Name: "One", Type: connectionTypeLocal})
+	workspace.Open(connectionProfile{ID: "two", Name: "Two", Type: connectionTypeLocal})
+	workspace.Open(connectionProfile{ID: "three", Name: "Three", Type: connectionTypeLocal})
+	workspace.Select(1)
+	active, _ := workspace.Active()
+
+	tabs := uikit.NewUITabView(rect(0, 0, 480, 180))
+	for _, state := range workspace.Tabs() {
+		tabs.AddTabWithID(state.ID, state.Profile.Name, nil)
+	}
+	tabs.SelectTab(1)
+	app := &finalShellApp{sessions: workspace, sessionTabs: tabs}
+
+	app.moveActiveSession(-1)
+	if workspace.ActiveIndex() != 0 || tabs.ActiveIndex() != 0 {
+		t.Fatalf("move left drifted: workspace=%d tabs=%d", workspace.ActiveIndex(), tabs.ActiveIndex())
+	}
+	if got := workspace.Tabs()[0].ID; got != active.ID || tabs.TabID(0) != active.ID {
+		t.Fatalf("active runtime identity was not moved together: workspace=%q tab=%q want=%q", got, tabs.TabID(0), active.ID)
+	}
+	app.moveActiveSession(-1)
+	if workspace.ActiveIndex() != 0 || tabs.ActiveIndex() != 0 {
+		t.Fatal("boundary move changed active runtime")
+	}
+}
+
 func TestSessionShortcutSelectsExactRuntimeTab(t *testing.T) {
 	workspace := newSessionWorkspace()
 	workspace.Open(connectionProfile{ID: "one", Name: "One", Type: connectionTypeLocal})

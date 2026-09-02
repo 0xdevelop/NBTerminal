@@ -878,6 +878,8 @@ func (a *finalShellApp) build() {
 		ReopenSession:      a.reopenLastClosedSession,
 		ReconnectSession:   a.reconnectActiveSession,
 		DuplicateSession:   a.duplicateActiveSession,
+		MoveSessionLeft:    func() { a.moveActiveSession(-1) },
+		MoveSessionRight:   func() { a.moveActiveSession(1) },
 		SelectSession:      a.selectSessionAt,
 	})
 	a.output.OnResize(a.terminalViewResized)
@@ -2142,6 +2144,32 @@ func (a *finalShellApp) selectNextSession() {
 func (a *finalShellApp) selectPreviousSession() {
 	if a != nil && a.sessionTabs != nil {
 		a.sessionTabs.SelectPrevious()
+	}
+}
+
+func (a *finalShellApp) moveActiveSession(delta int) {
+	if a == nil || a.sessions == nil || a.sessionTabs == nil || (delta != -1 && delta != 1) {
+		return
+	}
+	from := a.sessions.ActiveIndex()
+	to := from + delta
+	if from < 0 || to < 0 || to >= len(a.sessions.Tabs()) {
+		return
+	}
+	a.syncActiveSessionView()
+	if !a.sessionTabs.MoveTab(from, to) {
+		return
+	}
+	if !a.sessions.MoveActive(delta) {
+		a.sessionTabs.MoveTab(to, from)
+		return
+	}
+	if state, ok := a.sessions.Active(); ok {
+		direction := "right"
+		if delta < 0 {
+			direction = "left"
+		}
+		a.setStatus(fmt.Sprintf("Moved %s %s", state.Profile.Name, direction))
 	}
 }
 

@@ -204,3 +204,40 @@ func TestSessionWorkspaceDuplicateRejectsEmptyWorkspace(t *testing.T) {
 		t.Fatalf("empty duplicate = index %d, ok %t", index, ok)
 	}
 }
+
+func TestSessionWorkspaceMovesActiveTabWithoutLosingRuntimeState(t *testing.T) {
+	workspace := newSessionWorkspace()
+	workspace.Open(connectionProfile{ID: "one", Name: "One", Type: connectionTypeLocal})
+	workspace.Open(connectionProfile{ID: "two", Name: "Two", Type: connectionTypeLocal})
+	workspace.SetActiveDraft("keep this draft")
+	workspace.AppendActiveOutput("keep this output")
+	active, _ := workspace.Active()
+
+	if !workspace.MoveActive(-1) {
+		t.Fatal("MoveActive(-1) failed")
+	}
+	states := workspace.Tabs()
+	if workspace.ActiveIndex() != 0 || states[0].ID != active.ID || states[1].ProfileID != "one" {
+		t.Fatalf("runtime order or active identity drifted: active=%d states=%#v", workspace.ActiveIndex(), states)
+	}
+	if states[0].CommandDraft != "keep this draft" || !strings.Contains(states[0].Output, "keep this output") {
+		t.Fatalf("moving active runtime lost tab-local state: %#v", states[0])
+	}
+	if workspace.MoveActive(-1) {
+		t.Fatal("moving beyond the leading boundary should be a no-op")
+	}
+	if !workspace.MoveActive(1) || workspace.ActiveIndex() != 1 || workspace.Tabs()[1].ID != active.ID {
+		t.Fatal("moving active runtime right did not restore its order")
+	}
+}
+
+func TestSessionWorkspaceMoveActiveRejectsEmptyAndUnsupportedDelta(t *testing.T) {
+	workspace := newSessionWorkspace()
+	if workspace.MoveActive(1) {
+		t.Fatal("empty workspace accepted a move")
+	}
+	workspace.Open(connectionProfile{ID: "only", Name: "Only", Type: connectionTypeLocal})
+	if workspace.MoveActive(0) || workspace.MoveActive(2) || workspace.ActiveIndex() != 0 {
+		t.Fatal("unsupported move changed a single-tab workspace")
+	}
+}

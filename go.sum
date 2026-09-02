@@ -1,5 +1,5 @@
-github.com/0xdevelop/fltk2go v0.0.51 h1:dzYfZXAUIhfKD5rQbX3SIR/aipu8AUJ0QoM9gfr1ICs=
-github.com/0xdevelop/fltk2go v0.0.51/go.mod h1:97LNDT3CdRlStowtVLZItAGvtuZnDh3Rt/3IWzrpVmE=
+github.com/0xdevelop/fltk2go v0.0.52 h1:jPO/VvN6k6hvqjJU6XDQn8NyqTGBgR4CtHpNeDv5RrQ=
+github.com/0xdevelop/fltk2go v0.0.52/go.mod h1:97LNDT3CdRlStowtVLZItAGvtuZnDh3Rt/3IWzrpVmE=
 github.com/BurntSushi/toml v1.3.2 h1:o7IhLm0Msx3BaB+n3Ag7L8EVlByGnpq14C4YWiu/gL8=
 github.com/BurntSushi/toml v1.3.2/go.mod h1:CxXYINrC8qIiEnFrOxCa7Jy5BFHlXnUU2pbicEuybxQ=
 github.com/axgle/mahonia v0.0.0-20180208002826-3358181d7394 h1:OYA+5W64v3OgClL+IrOD63t4i/RW7RqrAVl9LTZ9UqQ=

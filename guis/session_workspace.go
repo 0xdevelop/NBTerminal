@@ -91,6 +91,22 @@ func (w *sessionWorkspace) Select(index int) bool {
 	return true
 }
 
+// MoveActive reorders the active runtime by one position while preserving its
+// opaque identity and complete tab-local state. Boundary and unsupported moves
+// are no-ops so keyboard commands cannot wrap or skip sessions unexpectedly.
+func (w *sessionWorkspace) MoveActive(delta int) bool {
+	if w == nil || (delta != -1 && delta != 1) || w.activeIndex < 0 || w.activeIndex >= len(w.tabs) {
+		return false
+	}
+	target := w.activeIndex + delta
+	if target < 0 || target >= len(w.tabs) {
+		return false
+	}
+	w.tabs[w.activeIndex], w.tabs[target] = w.tabs[target], w.tabs[w.activeIndex]
+	w.activeIndex = target
+	return true
+}
+
 func (w *sessionWorkspace) SetProfileSelection(profileID string) {
 	if w != nil {
 		w.profileSelection = strings.TrimSpace(profileID)
