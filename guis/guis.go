@@ -563,6 +563,8 @@ func LoadGUIWithFLTKGO(_ []byte) {
 	if runtime.GOOS == "darwin" || runtime.GOOS == "linux" || runtime.GOOS == "windows" {
 		fltk2go.Lock()
 	}
+	fltk_bridge.EnableTooltips()
+	fltk_bridge.SetTooltipDelay(0.4)
 	configureNativeFonts(runtime.GOOS)
 
 	masterKey, err := security.LoadOrCreateMasterKey(
@@ -707,9 +709,7 @@ func (a *finalShellApp) build() {
 	root.AddSubview(a.mainSubtitle)
 	a.managerButton = button(mainLayout.Manager.X, mainLayout.Manager.Y, mainLayout.Manager.Width, mainLayout.Manager.Height, tr("manager.open_compact"), "app.connection_manager", a.openConnectionManager)
 	a.managerButton.View().SetAutomationName(tr("manager.open") + " · Ctrl+O")
-	if raw := a.managerButton.Raw(); raw != nil {
-		raw.SetTooltip("Open Connection Manager (Ctrl+O)")
-	}
+	a.managerButton.View().SetTooltip("Open Connection Manager (Ctrl+O)")
 	root.AddSubview(a.managerButton)
 	a.settingsButton = button(mainLayout.Settings.X, mainLayout.Settings.Y, mainLayout.Settings.Width, mainLayout.Settings.Height, tr("setting.title"), "app.settings", a.openSettings)
 	root.AddSubview(a.settingsButton)
@@ -822,9 +822,7 @@ func (a *finalShellApp) build() {
 	rightPanel.AddSubview(a.terminalSubtitle)
 	a.closeTabButton = button(terminalLayout.CloseTab.X, terminalLayout.CloseTab.Y, terminalLayout.CloseTab.Width, terminalLayout.CloseTab.Height, tr("session.close"), "terminal.session_close", a.closeActiveSession)
 	a.closeTabButton.View().SetAutomationName(tr("session.close") + " · Ctrl+W")
-	if raw := a.closeTabButton.Raw(); raw != nil {
-		raw.SetTooltip("Close Active Session (Ctrl+W)")
-	}
+	a.closeTabButton.View().SetTooltip("Close Active Session (Ctrl+W)")
 	rightPanel.AddSubview(a.closeTabButton)
 
 	if a.sessions == nil {
@@ -905,9 +903,7 @@ func (a *finalShellApp) build() {
 	rightPanel.AddSubview(a.lastButton)
 	a.clearButton = button(terminalLayout.Clear.X, terminalLayout.Clear.Y, terminalLayout.Clear.Width, terminalLayout.Clear.Height, tr("terminal.clear_compact"), "terminal.clear", a.clearTerminalOutput)
 	a.clearButton.View().SetAutomationName(tr("terminal.clear") + " · Ctrl+Shift+L")
-	if raw := a.clearButton.Raw(); raw != nil {
-		raw.SetTooltip("Clear Active Terminal (Ctrl+Shift+L)")
-	}
+	a.clearButton.View().SetTooltip("Clear Active Terminal (Ctrl+Shift+L)")
 	rightPanel.AddSubview(a.clearButton)
 	a.commandLabel = mutedLabel(terminalLayout.CommandLabel.X, terminalLayout.CommandLabel.Y, terminalLayout.CommandLabel.Width, terminalLayout.CommandLabel.Height, tr("terminal.command"))
 	rightPanel.AddSubview(a.commandLabel)
