@@ -874,6 +874,9 @@ func (a *finalShellApp) build() {
 		OpenConnections:    a.openConnectionManager,
 		OpenSettings:       a.openSettings,
 		NewLocalSession:    a.openQuickLocalSession,
+		ZoomTerminalIn:     func() { a.zoomTerminal(1) },
+		ZoomTerminalOut:    func() { a.zoomTerminal(-1) },
+		ResetTerminalZoom:  func() { a.zoomTerminal(0) },
 		NextSession:        a.selectNextSession,
 		PreviousSession:    a.selectPreviousSession,
 		CloseSession:       a.closeActiveSession,
@@ -1487,6 +1490,47 @@ func (a *finalShellApp) applyTerminalFontSize(size int) {
 	if a.cmdInput != nil {
 		a.cmdInput.SetFontSize(size)
 	}
+}
+
+func terminalZoomTarget(current, direction int) int {
+	if direction == 0 {
+		return config.TerminalFontSizeDefault
+	}
+	target := current + direction
+	if target < config.TerminalFontSizeMin {
+		return config.TerminalFontSizeMin
+	}
+	if target > config.TerminalFontSizeMax {
+		return config.TerminalFontSizeMax
+	}
+	return target
+}
+
+// zoomTerminal persists before publishing the live size, so a failed atomic
+// write cannot leave the running terminal out of sync with restart state.
+func (a *finalShellApp) zoomTerminal(direction int) {
+	if a == nil {
+		return
+	}
+	current := terminalFontSize()
+	target := terminalZoomTarget(current, direction)
+	if target == current {
+		a.setStatus(fmt.Sprintf("Terminal zoom: %d px", target))
+		return
+	}
+	if err := persistTerminalFontSize(target); err != nil {
+		a.setStatus(tr("settings.save_failed"))
+		a.showTopNotice(tr("settings.save_failed"), err.Error(), true)
+		return
+	}
+	a.applyTerminalFontSize(target)
+	if a.settings != nil && a.settings.terminalFont != nil {
+		if strings.TrimSpace(a.settings.terminalFont.Text()) == fmt.Sprintf("%d", current) {
+			a.settings.terminalFont.SetText(fmt.Sprintf("%d", target))
+		}
+		a.settings.initial.TerminalFontSize = target
+	}
+	a.setStatus(fmt.Sprintf("Terminal zoom: %d px", target))
 }
 
 func terminalScrollbackRows() int {

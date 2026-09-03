@@ -98,6 +98,18 @@ func persistSettingsDraft(draft settingsDraft) error {
 	return nil
 }
 
+// persistTerminalFontSize uses the complete current draft so a keyboard zoom
+// changes only the terminal preference and keeps the same atomic rollback
+// contract as the native Settings window.
+func persistTerminalFontSize(size int) error {
+	if size < config.TerminalFontSizeMin || size > config.TerminalFontSizeMax {
+		return fmt.Errorf("terminal font size must be between %d and %d", config.TerminalFontSizeMin, config.TerminalFontSizeMax)
+	}
+	draft := currentSettingsDraft()
+	draft.TerminalFontSize = size
+	return persistSettingsDraft(draft)
+}
+
 type settingsWindow struct {
 	owner          *finalShellApp
 	window         *uikit.UIWindow

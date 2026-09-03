@@ -85,3 +85,52 @@ func TestPersistSettingsDraftRollsBackOnWriteFailure(t *testing.T) {
 		t.Fatalf("failed save leaked into live settings: %#v", config.GlobalConfig)
 	}
 }
+
+func TestPersistTerminalFontSizeUpdatesOnlyFontPreference(t *testing.T) {
+	oldGlobal := config.GlobalConfig
+	oldApp := config.CurrentApp
+	t.Cleanup(func() { config.GlobalConfig, config.CurrentApp = oldGlobal, oldApp })
+
+	path := filepath.Join(t.TempDir(), "config.json")
+	config.GlobalConfig = &config.FileConfig{
+		Language:                 "en",
+		Terminal:                 &config.TerminalSettings{CommandTimeoutSeconds: 37, FontSize: 14, ScrollbackRows: 9000},
+		ResetWorkspaceOnStart:    true,
+		StartWithFirstConnection: true,
+	}
+	config.GlobalConfig.Normalize()
+	config.CurrentApp = config.NewApp("NBTerminal-test", "test.nbterminal", "test", gtbox.RunModeTest, 0)
+	config.CurrentApp.AppConfigFilePath = path
+
+	if err := persistTerminalFontSize(17); err != nil {
+		t.Fatalf("persist font size: %v", err)
+	}
+	if got := config.GlobalConfig.Terminal; got.FontSize != 17 || got.CommandTimeoutSeconds != 37 || got.ScrollbackRows != 9000 {
+		t.Fatalf("terminal settings changed unexpectedly: %#v", got)
+	}
+	if config.GlobalConfig.Language != "en" || !config.GlobalConfig.ResetWorkspaceOnStart || !config.GlobalConfig.StartWithFirstConnection {
+		t.Fatalf("unrelated settings changed: %#v", config.GlobalConfig)
+	}
+
+	config.GlobalConfig = nil
+	if err := config.LoadConfig(path); err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	if config.GlobalConfig.Terminal.FontSize != 17 {
+		t.Fatalf("reloaded font size = %d, want 17", config.GlobalConfig.Terminal.FontSize)
+	}
+}
+
+func TestPersistTerminalFontSizeRejectsOutOfRangeWithoutMutation(t *testing.T) {
+	oldGlobal := config.GlobalConfig
+	t.Cleanup(func() { config.GlobalConfig = oldGlobal })
+	config.GlobalConfig = &config.FileConfig{Language: "en", Terminal: &config.TerminalSettings{CommandTimeoutSeconds: 60, FontSize: 14, ScrollbackRows: 4000}}
+	config.GlobalConfig.Normalize()
+
+	if err := persistTerminalFontSize(config.TerminalFontSizeMax + 1); err == nil {
+		t.Fatal("out-of-range terminal font size was accepted")
+	}
+	if config.GlobalConfig.Terminal.FontSize != 14 {
+		t.Fatalf("failed persistence mutated font size to %d", config.GlobalConfig.Terminal.FontSize)
+	}
+}

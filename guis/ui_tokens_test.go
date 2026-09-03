@@ -57,6 +57,24 @@ func TestApplyTerminalFontSizeUpdatesLiveTerminalSurfaces(t *testing.T) {
 	}
 }
 
+func TestTerminalZoomTargetClampsAndResets(t *testing.T) {
+	if got := terminalZoomTarget(config.TerminalFontSizeMax, 1); got != config.TerminalFontSizeMax {
+		t.Fatalf("zoom above maximum = %d", got)
+	}
+	if got := terminalZoomTarget(config.TerminalFontSizeMin, -1); got != config.TerminalFontSizeMin {
+		t.Fatalf("zoom below minimum = %d", got)
+	}
+	if got := terminalZoomTarget(14, 1); got != 15 {
+		t.Fatalf("zoom in = %d, want 15", got)
+	}
+	if got := terminalZoomTarget(14, -1); got != 13 {
+		t.Fatalf("zoom out = %d, want 13", got)
+	}
+	if got := terminalZoomTarget(21, 0); got != config.TerminalFontSizeDefault {
+		t.Fatalf("zoom reset = %d, want %d", got, config.TerminalFontSizeDefault)
+	}
+}
+
 func TestNativeDesktopDesignTokensMatchProductBaseline(t *testing.T) {
 	if nativeTypography.WindowTitle != 20 || nativeTypography.SectionTitle != 15 ||
 		nativeTypography.Body != 13 || nativeTypography.Supporting != 12 || nativeTypography.Terminal != 14 {
