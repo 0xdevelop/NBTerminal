@@ -877,6 +877,7 @@ func (a *finalShellApp) build() {
 		ZoomTerminalIn:     func() { a.zoomTerminal(1) },
 		ZoomTerminalOut:    func() { a.zoomTerminal(-1) },
 		ResetTerminalZoom:  func() { a.zoomTerminal(0) },
+		ClearTerminal:      a.clearTerminalOutput,
 		NextSession:        a.selectNextSession,
 		PreviousSession:    a.selectPreviousSession,
 		CloseSession:       a.closeActiveSession,
@@ -903,7 +904,10 @@ func (a *finalShellApp) build() {
 	a.lastButton.View().SetAutomationName(tr("terminal.last"))
 	rightPanel.AddSubview(a.lastButton)
 	a.clearButton = button(terminalLayout.Clear.X, terminalLayout.Clear.Y, terminalLayout.Clear.Width, terminalLayout.Clear.Height, tr("terminal.clear_compact"), "terminal.clear", a.clearTerminalOutput)
-	a.clearButton.View().SetAutomationName(tr("terminal.clear"))
+	a.clearButton.View().SetAutomationName(tr("terminal.clear") + " · Ctrl+Shift+L")
+	if raw := a.clearButton.Raw(); raw != nil {
+		raw.SetTooltip("Clear Active Terminal (Ctrl+Shift+L)")
+	}
 	rightPanel.AddSubview(a.clearButton)
 	a.commandLabel = mutedLabel(terminalLayout.CommandLabel.X, terminalLayout.CommandLabel.Y, terminalLayout.CommandLabel.Width, terminalLayout.CommandLabel.Height, tr("terminal.command"))
 	rightPanel.AddSubview(a.commandLabel)
