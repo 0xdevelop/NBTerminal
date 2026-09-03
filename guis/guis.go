@@ -428,6 +428,7 @@ type finalShellApp struct {
 	mainTitle        *uikit.UILabel
 	mainSubtitle     *uikit.UILabel
 	managerButton    *uikit.UIButton
+	shortcutsButton  *uikit.UIButton
 	settingsButton   *uikit.UIButton
 	quickTitle       *uikit.UILabel
 	quickSubtitle    *uikit.UILabel
@@ -457,6 +458,7 @@ type finalShellApp struct {
 	runButton        *uikit.UIButton
 	stopButton       *uikit.UIButton
 	settings         *settingsWindow
+	shortcuts        *shortcutGuideWindow
 	editor           *connectionEditor
 	manager          *connectionManagerWindow
 	monitorPanel     *uikit.UIGroup
@@ -711,6 +713,10 @@ func (a *finalShellApp) build() {
 	a.managerButton.View().SetAutomationName(tr("manager.open") + " · Ctrl+O")
 	a.managerButton.View().SetTooltip("Open Connection Manager (Ctrl+O)")
 	root.AddSubview(a.managerButton)
+	a.shortcutsButton = button(mainLayout.Shortcuts.X, mainLayout.Shortcuts.Y, mainLayout.Shortcuts.Width, mainLayout.Shortcuts.Height, "?", "app.shortcuts", a.openShortcutGuide)
+	a.shortcutsButton.View().SetAutomationName("Keyboard Shortcuts · F1")
+	a.shortcutsButton.View().SetTooltip("Open Keyboard Shortcuts (F1)")
+	root.AddSubview(a.shortcutsButton)
 	a.settingsButton = button(mainLayout.Settings.X, mainLayout.Settings.Y, mainLayout.Settings.Width, mainLayout.Settings.Height, tr("setting.title"), "app.settings", a.openSettings)
 	root.AddSubview(a.settingsButton)
 	a.status = pillLabel(mainLayout.Status.X, mainLayout.Status.Y, mainLayout.Status.Width, mainLayout.Status.Height, tr("app.ready"))
@@ -871,6 +877,7 @@ func (a *finalShellApp) build() {
 		NewConnection:      a.newProfile,
 		OpenConnections:    a.openConnectionManager,
 		OpenSettings:       a.openSettings,
+		OpenShortcutGuide:  a.openShortcutGuide,
 		NewLocalSession:    a.openQuickLocalSession,
 		ZoomTerminalIn:     func() { a.zoomTerminal(1) },
 		ZoomTerminalOut:    func() { a.zoomTerminal(-1) },
@@ -1185,6 +1192,9 @@ func (a *finalShellApp) layoutMainWindow() {
 	}
 	if a.managerButton != nil && a.managerButton.Raw() != nil {
 		a.managerButton.Raw().Resize(layout.Manager.X, layout.Manager.Y, layout.Manager.Width, layout.Manager.Height)
+	}
+	if a.shortcutsButton != nil && a.shortcutsButton.Raw() != nil {
+		a.shortcutsButton.Raw().Resize(layout.Shortcuts.X, layout.Shortcuts.Y, layout.Shortcuts.Width, layout.Shortcuts.Height)
 	}
 	if a.settingsButton != nil && a.settingsButton.Raw() != nil {
 		a.settingsButton.Raw().Resize(layout.Settings.X, layout.Settings.Y, layout.Settings.Width, layout.Settings.Height)

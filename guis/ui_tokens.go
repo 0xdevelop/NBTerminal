@@ -62,7 +62,7 @@ type layoutRect struct {
 func (r layoutRect) Bottom() int { return r.Y + r.Height }
 
 type mainWindowLayout struct {
-	Title, Subtitle, Manager, Settings, Status, Workspace layoutRect
+	Title, Subtitle, Manager, Shortcuts, Settings, Status, Workspace layoutRect
 }
 
 func mainWindowLayoutFor(bounds layoutRect, tokens controlMetricSet) mainWindowLayout {
@@ -71,20 +71,23 @@ func mainWindowLayoutFor(bounds layoutRect, tokens controlMetricSet) mainWindowL
 		workspaceTop    = 72
 		workspaceBottom = 42
 		managerWidth    = 174
+		shortcutsWidth  = 44
 		settingsWidth   = 124
 		controlGap      = 12
-		statusGap       = 14
+		statusGap       = 12
 	)
 	managerX := bounds.X + bounds.Width - 900
 	if minimum := bounds.X + 420; managerX < minimum {
 		managerX = minimum
 	}
-	settingsX := managerX + managerWidth + controlGap
+	shortcutsX := managerX + managerWidth + controlGap
+	settingsX := shortcutsX + shortcutsWidth + controlGap
 	statusX := settingsX + settingsWidth + statusGap
 	return mainWindowLayout{
 		Title:     layoutRect{X: bounds.X + margin, Y: bounds.Y + 14, Width: managerX - (bounds.X + margin) - 18, Height: 28},
 		Subtitle:  layoutRect{X: bounds.X + margin + 2, Y: bounds.Y + 38, Width: managerX - (bounds.X + margin) - 22, Height: 22},
 		Manager:   layoutRect{X: managerX, Y: bounds.Y + 16, Width: managerWidth, Height: tokens.ButtonHeight},
+		Shortcuts: layoutRect{X: shortcutsX, Y: bounds.Y + 16, Width: shortcutsWidth, Height: tokens.ButtonHeight},
 		Settings:  layoutRect{X: settingsX, Y: bounds.Y + 16, Width: settingsWidth, Height: tokens.ButtonHeight},
 		Status:    layoutRect{X: statusX, Y: bounds.Y + 16, Width: bounds.X + bounds.Width - margin - statusX, Height: tokens.ButtonHeight},
 		Workspace: layoutRect{X: bounds.X + margin, Y: bounds.Y + workspaceTop, Width: bounds.Width - margin*2, Height: bounds.Height - workspaceTop - workspaceBottom},

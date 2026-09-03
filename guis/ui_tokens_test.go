@@ -176,7 +176,7 @@ func TestQuickPanelLayoutKeepsMainWindowFocusedOnQuickLaunchAtMinimumSize(t *tes
 func TestMainWindowLayoutPreservesHeaderAndWorkspaceAtMinimumSize(t *testing.T) {
 	layout := mainWindowLayoutFor(layoutRect{Width: 1120, Height: 720}, nativeControls)
 	for name, control := range map[string]layoutRect{
-		"manager": layout.Manager, "settings": layout.Settings, "status": layout.Status,
+		"manager": layout.Manager, "shortcuts": layout.Shortcuts, "settings": layout.Settings, "status": layout.Status,
 	} {
 		if control.Height != nativeControls.ButtonHeight {
 			t.Fatalf("%s header control was proportionally crushed: %#v", name, control)
