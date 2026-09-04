@@ -335,6 +335,12 @@ func (a *finalShellApp) rebuildForLanguage(language locales.Language) {
 	if a.manager != nil && a.manager.window != nil {
 		a.manager.window.Close()
 	}
+	if a.shortcuts != nil && a.shortcuts.window != nil {
+		a.shortcuts.window.Close()
+	}
+	if a.terminalFind != nil && a.terminalFind.window != nil {
+		a.terminalFind.window.Close()
+	}
 	oldWindow := a.window
 	a.syncActiveSessionView()
 	// Rebuild the native surface on the same application owner. Long-lived PTY,

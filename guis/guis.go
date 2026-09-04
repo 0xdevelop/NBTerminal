@@ -460,6 +460,7 @@ type finalShellApp struct {
 	stopButton          *uikit.UIButton
 	settings            *settingsWindow
 	shortcuts           *shortcutGuideWindow
+	terminalFind        *terminalFindWindow
 	editor              *connectionEditor
 	manager             *connectionManagerWindow
 	monitorPanel        *uikit.UIGroup
@@ -886,6 +887,7 @@ func (a *finalShellApp) build() {
 		ResetTerminalZoom:  func() { a.zoomTerminal(0) },
 		ClearTerminal:      a.clearTerminalOutput,
 		CopyAllTerminal:    func() { a.output.CopyAllText() },
+		FindTerminal:       a.openTerminalFind,
 		NextSession:        a.selectNextSession,
 		PreviousSession:    a.selectPreviousSession,
 		CloseSession:       a.closeActiveSession,

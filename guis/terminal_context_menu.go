@@ -5,7 +5,7 @@ import (
 	"github.com/0xdevelop/fltk2go/uikit"
 )
 
-func terminalContextMenuItems(terminal *uikit.UITerminalView, state uikit.ContextMenuState, clear func()) []uikit.MenuItem {
+func terminalContextMenuItems(terminal *uikit.UITerminalView, state uikit.ContextMenuState, find, clear func()) []uikit.MenuItem {
 	copyFlags := 0
 	if !state.HasSelection {
 		copyFlags = fltk_bridge.MENU_INACTIVE
@@ -37,7 +37,8 @@ func terminalContextMenuItems(terminal *uikit.UITerminalView, state uikit.Contex
 				}
 			},
 		},
-		{Title: "Clear Terminal\tCtrl+Shift+L", Callback: clear},
+		{Title: "Find in Terminal	Ctrl+Shift+F", Callback: find},
+		{Title: "Clear Terminal	Ctrl+Shift+L", Callback: clear},
 	}
 }
 
@@ -49,7 +50,7 @@ func (a *finalShellApp) installTerminalContextMenu(parent *uikit.UIGroup) {
 	parent.AddSubview(menu)
 	a.terminalContextMenu = menu
 	a.output.OnContextMenu(func(state uikit.ContextMenuState) {
-		menu.SetMenu(terminalContextMenuItems(a.output, state, a.clearTerminalOutput))
+		menu.SetMenu(terminalContextMenuItems(a.output, state, a.openTerminalFind, a.clearTerminalOutput))
 		menu.Popup()
 	})
 }
