@@ -156,7 +156,7 @@ func (m *connectionManagerWindow) build() {
 	root.AddSubview(button(layout.Favorite.X, layout.Favorite.Y, layout.Favorite.Width, layout.Favorite.Height, tr("manager.favorite"), "connection_manager.favorite", m.toggleFavorite))
 	root.AddSubview(primaryButton(layout.Connect.X, layout.Connect.Y, layout.Connect.Width, layout.Connect.Height, tr("action.connect"), "connection_manager.connect", m.connectSelected))
 
-	m.reload("")
+	m.reload(m.owner.store.ActiveID())
 	m.window.Show()
 	if m.search != nil && m.search.View() != nil && m.search.View().Raw() != nil {
 		if focusable, ok := m.search.View().Raw().(interface{ TakeFocus() int }); ok {
@@ -550,8 +550,8 @@ func (m *connectionManagerWindow) deleteProfileConfirmed(profile connectionProfi
 	if m.owner.searchInput != nil {
 		query = m.owner.searchInput.Text()
 	}
-	m.owner.rows = navigatorRows(nextAll, query, quickConnectionLimit)
-	m.owner.idx = activeConnectionIndex(m.owner.rows)
+	m.owner.rows = navigatorRowsWithSelection(nextAll, query, quickConnectionLimit, m.owner.store.ActiveID())
+	m.owner.idx = activeConnectionIndex(m.owner.rows, m.owner.store.ActiveID())
 	m.owner.refreshTable()
 	if m.owner.table != nil && m.owner.idx >= 0 {
 		m.owner.table.SelectRow(m.owner.idx)

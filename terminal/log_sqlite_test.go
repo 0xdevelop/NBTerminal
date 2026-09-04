@@ -121,6 +121,40 @@ func TestSQLiteHistoryMigrationRetriesCleanupAfterCommittedMarker(t *testing.T) 
 	}
 }
 
+func TestSQLiteHistoryFiltersByDecryptedConnectionAssociation(t *testing.T) {
+	dir := t.TempDir()
+	db, err := database.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	master, err := security.LoadOrCreateMasterKey(filepath.Join(t.TempDir(), "config"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := security.PurposeKey(master, "sqlite-history-v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := NewSQLiteHistoryStore(db, filepath.Join(dir, "terminal-history.jsonl"), key)
+	for _, entry := range []HistoryEntry{
+		{Time: time.Unix(1, 0), ConnectionID: "one", Command: "one-old"},
+		{Time: time.Unix(2, 0), ConnectionID: "two", Command: "two"},
+		{Time: time.Unix(3, 0), ConnectionID: "one", Command: "one-new"},
+	} {
+		if err := store.Append(entry); err != nil {
+			t.Fatal(err)
+		}
+	}
+	entries, err := store.LoadForConnection("one", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Command != "one-new" {
+		t.Fatalf("filtered history=%#v", entries)
+	}
+}
+
 func TestSQLiteHistoryRejectsMismatchedEncryptedConnectionIndex(t *testing.T) {
 	dir := t.TempDir()
 	db, err := database.Open(dir)

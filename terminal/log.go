@@ -380,11 +380,14 @@ func (s *HistoryStore) loadSQLiteLocked(connectionID string, limit int) ([]Histo
 	if strings.TrimSpace(s.encryptionKey) == "" {
 		return nil, errors.New("history encryption key is required")
 	}
-	storageConnectionID, err := encryptedHistoryConnectionID(connectionID, s.encryptionKey)
-	if err != nil {
-		return nil, err
+	// GTEnc produces opaque ciphertext rather than a deterministic lookup token.
+	// Keep connection associations encrypted in SQLite, then decrypt and filter
+	// candidate rows in memory instead of comparing a fresh encryption result.
+	databaseLimit := limit
+	if connectionID != "" {
+		databaseLimit = 0
 	}
-	rows, err := s.db.LoadHistory(context.Background(), storageConnectionID, limit)
+	rows, err := s.db.LoadHistory(context.Background(), "", databaseLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -398,14 +401,21 @@ func (s *HistoryStore) loadSQLiteLocked(connectionID string, limit int) ([]Histo
 		if err := json.Unmarshal([]byte(plaintext), &entry); err != nil {
 			return nil, fmt.Errorf("decode command history: %w", err)
 		}
-		expectedStorageID, err := encryptedHistoryConnectionID(entry.ConnectionID, s.encryptionKey)
-		if err != nil || expectedStorageID != row.ConnectionID {
+		storedConnectionID, err := decryptedHistoryConnectionID(row.ConnectionID, s.encryptionKey)
+		if err != nil || storedConnectionID != entry.ConnectionID {
 			return nil, errors.New("decrypted command history connection id does not match its encrypted storage id")
 		}
 		if entry.Time.UTC().UnixNano() != row.RecordedAtNS {
 			return nil, errors.New("decrypted command history timestamp does not match its storage index")
 		}
+		if connectionID != "" && entry.ConnectionID != connectionID {
+			continue
+		}
 		entries = append(entries, entry)
+		if limit > 0 && len(entries) > limit {
+			copy(entries, entries[1:])
+			entries = entries[:limit]
+		}
 	}
 	return entries, nil
 }
@@ -419,6 +429,17 @@ func encryptedHistoryConnectionID(connectionID, encryptionKey string) (string, e
 		return "", fmt.Errorf("encrypt history connection id: %w", err)
 	}
 	return storageID, nil
+}
+
+func decryptedHistoryConnectionID(storageID, encryptionKey string) (string, error) {
+	if storageID == "" {
+		return "", nil
+	}
+	connectionID, err := security.DecryptPayloadGT(storageID, encryptionKey)
+	if err != nil {
+		return "", fmt.Errorf("decrypt history connection id: %w", err)
+	}
+	return connectionID, nil
 }
 
 // LastCommand returns the most recent non-empty command for a connection. An

@@ -117,6 +117,37 @@ func TestSQLiteConnectionStoreSaveReloadAndDeleteAllWithoutReseeding(t *testing.
 	}
 }
 
+func TestSQLiteConnectionStoreRestoresEncryptedActiveSelection(t *testing.T) {
+	oldGlobal := config.GlobalConfig
+	oldApp := config.CurrentApp
+	t.Cleanup(func() { config.GlobalConfig, config.CurrentApp = oldGlobal, oldApp })
+	config.CurrentApp = nil
+	config.GlobalConfig = &config.FileConfig{}
+
+	dir := t.TempDir()
+	db, err := database.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	key := sqliteProfileTestKey(t)
+	profiles := []connectionProfile{
+		{ID: "first", Name: "First", Type: connectionTypeLocal},
+		{ID: "selected", Name: "Selected", Type: connectionTypeLocal},
+	}
+	store := newSQLiteConnectionStore(dir, db, key)
+	if err := store.SaveActive(profiles, "selected"); err != nil {
+		t.Fatal(err)
+	}
+	reloaded := newSQLiteConnectionStore(dir, db, key)
+	if err := reloaded.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.ActiveID() != "selected" {
+		t.Fatalf("active connection = %q, want selected", reloaded.ActiveID())
+	}
+}
+
 func TestSQLiteConnectionMigrationMergesIntoNonEmptyDatabaseWithoutOverwriting(t *testing.T) {
 	oldGlobal := config.GlobalConfig
 	oldApp := config.CurrentApp

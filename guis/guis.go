@@ -165,6 +165,7 @@ type connectionStore struct {
 	encryptionKey string
 	mu            sync.Mutex
 	list          []connectionProfile
+	activeID      string
 }
 
 func newConnectionStore(dataDir string) *connectionStore {
@@ -265,6 +266,18 @@ func (s *connectionStore) List() []connectionProfile {
 	out := append([]connectionProfile(nil), s.list...)
 	sortConnectionsForNavigator(out)
 	return out
+}
+
+func (s *connectionStore) ActiveID() string {
+	if s == nil {
+		return ""
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.activeID != "" {
+		return s.activeID
+	}
+	return configuredActiveProfileID()
 }
 
 func sortConnectionsForNavigator(rows []connectionProfile) {
@@ -617,7 +630,7 @@ func LoadGUIWithFLTKGO(_ []byte) {
 		return
 	}
 	app.allRows = app.store.List()
-	app.rows = navigatorRows(app.allRows, "", quickConnectionLimit)
+	app.rows = navigatorRowsWithSelection(app.allRows, "", quickConnectionLimit, app.store.ActiveID())
 	app.build()
 	if automation.Enabled() {
 		addr := strings.TrimSpace(os.Getenv("FLTK2GO_AUTOMATION_ADDR"))
@@ -945,7 +958,7 @@ func (a *finalShellApp) build() {
 
 	a.window.Show()
 	if len(a.rows) > 0 {
-		a.table.SelectRow(activeConnectionIndex(a.rows))
+		a.table.SelectRow(activeConnectionIndex(a.rows, a.store.ActiveID()))
 	}
 }
 
@@ -1056,16 +1069,21 @@ func (a *finalShellApp) changeLanguage(index int) {
 	a.rebuildForLanguage(lang)
 }
 
-func activeConnectionIndex(rows []connectionProfile) int {
+func activeConnectionIndex(rows []connectionProfile, storedActiveID ...string) int {
 	if len(rows) == 0 {
 		return -1
 	}
 	activeID := ""
+	if len(storedActiveID) > 0 {
+		activeID = strings.TrimSpace(storedActiveID[0])
+	}
 	if config.GlobalConfig != nil {
 		if config.GlobalConfig.StartWithFirstConnection {
 			return 0
 		}
-		activeID = strings.TrimSpace(config.GlobalConfig.ActiveConnectionID)
+		if activeID == "" {
+			activeID = strings.TrimSpace(config.GlobalConfig.ActiveConnectionID)
+		}
 	}
 	if activeID != "" {
 		for i, row := range rows {
@@ -1720,10 +1738,14 @@ func (a *finalShellApp) refreshNavigator(preferredID string) {
 	if a.searchInput != nil {
 		query = strings.TrimSpace(a.searchInput.Text())
 	}
-	a.rows = navigatorRows(a.allRows, query, quickConnectionLimit)
-	a.idx = indexProfileByID(a.rows, preferredID)
+	selectedID := preferredID
+	if strings.TrimSpace(selectedID) == "" {
+		selectedID = a.store.ActiveID()
+	}
+	a.rows = navigatorRowsWithSelection(a.allRows, query, quickConnectionLimit, selectedID)
+	a.idx = indexProfileByID(a.rows, selectedID)
 	if a.idx < 0 {
-		a.idx = activeConnectionIndex(a.rows)
+		a.idx = activeConnectionIndex(a.rows, a.store.ActiveID())
 	}
 }
 
@@ -1770,6 +1792,33 @@ func navigatorRows(rows []connectionProfile, query string, limit int) []connecti
 		return filterConnections(rows, query)
 	}
 	return quickConnectionProjection(rows, limit)
+}
+
+// navigatorRowsWithSelection keeps the active saved connection visible in the
+// compact launcher even when it is neither a favorite nor recently used. This
+// prevents startup table selection from silently replacing the persisted active
+// profile with the first quick-launch row.
+func navigatorRowsWithSelection(rows []connectionProfile, query string, limit int, selectedID string) []connectionProfile {
+	projected := navigatorRows(rows, query, limit)
+	if strings.TrimSpace(query) != "" || indexProfileByID(projected, selectedID) >= 0 {
+		return projected
+	}
+	selectedIndex := indexProfileByID(rows, selectedID)
+	if selectedIndex < 0 {
+		return projected
+	}
+	selected := rows[selectedIndex]
+	out := make([]connectionProfile, 0, len(projected)+1)
+	out = append(out, selected)
+	for _, profile := range projected {
+		if profile.ID != selected.ID {
+			out = append(out, profile)
+		}
+	}
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out
 }
 
 func quickConnectionProjection(rows []connectionProfile, limit int) []connectionProfile {

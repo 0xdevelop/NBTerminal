@@ -74,9 +74,7 @@ func (s *connectionStore) loadSQLiteLocked() error {
 	if err != nil {
 		return err
 	}
-	if config.GlobalConfig != nil {
-		config.GlobalConfig.ActiveConnectionID = normalizedActiveProfileID(s.list, activeID)
-	}
+	s.activeID = normalizedActiveProfileID(s.list, activeID)
 	return syncSQLiteConfig()
 }
 
@@ -157,6 +155,7 @@ func (s *connectionStore) saveActiveSQLiteLocked(list []connectionProfile, activ
 		s.list = previous
 		return err
 	}
+	s.activeID = activeID
 	if err := syncSQLiteConfig(); err != nil {
 		return fmt.Errorf("clean deprecated connection fields from app config: %w", err)
 	}
@@ -173,6 +172,7 @@ func (s *connectionStore) setActiveSQLiteLocked(activeID string) error {
 	if err := s.db.SetActiveConnection(ctx, activeStorageID); err != nil {
 		return err
 	}
+	s.activeID = activeID
 	if err := syncSQLiteConfig(); err != nil {
 		return fmt.Errorf("clean deprecated active connection from app config: %w", err)
 	}
@@ -219,8 +219,8 @@ func decryptConnectionRows(rows []database.ConnectionRow, encryptionKey string) 
 		if profile.ID == "" {
 			return nil, errors.New("decrypted connection profile id is empty")
 		}
-		storageID, err := encryptedProfileStorageID(profile.ID, encryptionKey)
-		if err != nil || storageID != row.ID {
+		storageID, err := decryptedProfileStorageID(row.ID, encryptionKey)
+		if err != nil || storageID != profile.ID {
 			return nil, errors.New("decrypted connection profile id does not match its encrypted storage id")
 		}
 		profiles = append(profiles, profile)
@@ -239,20 +239,26 @@ func encryptedProfileStorageID(profileID, encryptionKey string) (string, error) 
 	return storageID, nil
 }
 
+func decryptedProfileStorageID(storageID, encryptionKey string) (string, error) {
+	if storageID == "" {
+		return "", nil
+	}
+	profileID, err := security.DecryptPayloadGT(storageID, encryptionKey)
+	if err != nil {
+		return "", fmt.Errorf("decrypt connection profile id: %w", err)
+	}
+	return profileID, nil
+}
+
 func decryptedActiveProfileID(profiles []connectionProfile, activeStorageID, encryptionKey string) (string, error) {
 	if activeStorageID == "" {
 		return normalizedActiveProfileID(profiles, ""), nil
 	}
-	for _, profile := range profiles {
-		storageID, err := encryptedProfileStorageID(profile.ID, encryptionKey)
-		if err != nil {
-			return "", err
-		}
-		if storageID == activeStorageID {
-			return profile.ID, nil
-		}
+	activeID, err := decryptedProfileStorageID(activeStorageID, encryptionKey)
+	if err != nil {
+		return "", err
 	}
-	return normalizedActiveProfileID(profiles, ""), nil
+	return normalizedActiveProfileID(profiles, activeID), nil
 }
 
 func normalizedActiveProfileID(profiles []connectionProfile, activeID string) string {

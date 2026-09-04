@@ -391,6 +391,23 @@ func TestQuickConnectionProjectionSearchesAllSavedConnections(t *testing.T) {
 	}
 }
 
+func TestNavigatorRowsKeepPersistedSelectionVisibleWithoutExpandingLimit(t *testing.T) {
+	rows := []connectionProfile{
+		{ID: "favorite", Name: "Favorite", Favorite: true},
+		{ID: "recent", Name: "Recent", LastUsed: "2026-08-04T10:00:00Z"},
+		{ID: "selected", Name: "Selected but not recent"},
+	}
+
+	got := navigatorRowsWithSelection(rows, "", 2, "selected")
+	if len(got) != 2 || got[0].ID != "selected" || got[1].ID != "favorite" {
+		t.Fatalf("selected quick projection = %#v, want selected then favorite", got)
+	}
+	got = navigatorRowsWithSelection(rows, "favorite", 2, "selected")
+	if len(got) != 1 || got[0].ID != "favorite" {
+		t.Fatalf("search should not inject a non-matching selection, got %#v", got)
+	}
+}
+
 func TestToggleFavoritePreservesProfileAndChangesOnlyFavorite(t *testing.T) {
 	profile := connectionProfile{ID: "prod", Name: "生产", Host: "example.com", PasswordEnc: "encrypted", LastUsed: "2026-08-04T10:00:00Z"}
 	got := toggledFavorite(profile)
