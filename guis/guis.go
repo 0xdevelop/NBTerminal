@@ -885,6 +885,7 @@ func (a *finalShellApp) build() {
 		ZoomTerminalOut:    func() { a.zoomTerminal(-1) },
 		ResetTerminalZoom:  func() { a.zoomTerminal(0) },
 		ClearTerminal:      a.clearTerminalOutput,
+		CopyAllTerminal:    func() { a.output.CopyAllText() },
 		NextSession:        a.selectNextSession,
 		PreviousSession:    a.selectPreviousSession,
 		CloseSession:       a.closeActiveSession,

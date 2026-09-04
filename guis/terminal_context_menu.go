@@ -12,7 +12,7 @@ func terminalContextMenuItems(terminal *uikit.UITerminalView, state uikit.Contex
 	}
 	return []uikit.MenuItem{
 		{
-			Title: "Copy\tCtrl+Shift+C",
+			Title: "Copy	Ctrl+Shift+C",
 			Flags: copyFlags,
 			Callback: func() {
 				if terminal != nil {
@@ -21,7 +21,15 @@ func terminalContextMenuItems(terminal *uikit.UITerminalView, state uikit.Contex
 			},
 		},
 		{
-			Title: "Paste\tCtrl+Shift+V",
+			Title: "Copy All Output	Ctrl+Shift+A",
+			Callback: func() {
+				if terminal != nil {
+					terminal.CopyAllText()
+				}
+			},
+		},
+		{
+			Title: "Paste	Ctrl+Shift+V",
 			Flags: fltk_bridge.MENU_DIVIDER,
 			Callback: func() {
 				if terminal != nil {
