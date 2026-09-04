@@ -17,7 +17,7 @@ func TestShortcutGuideListsEveryProductCommandWithoutDuplicateKeys(t *testing.T)
 		}
 		seen[item.Shortcut] = item.Action
 	}
-	for _, required := range []string{"F1", "Ctrl+K", "Ctrl+Shift+N", "Ctrl+W", "Ctrl+Shift+T", "Ctrl+Shift+R", "Ctrl+Shift+D", "Alt+1…Alt+9"} {
+	for _, required := range []string{"F1", "Ctrl+K", "Ctrl+Shift+N", "Ctrl+W", "Ctrl+Shift+T", "Ctrl+Shift+R", "Ctrl+Shift+D", "Ctrl+Shift+C", "Ctrl+Shift+V", "Alt+1…Alt+9"} {
 		if seen[required] == "" {
 			t.Fatalf("shortcut guide is missing %q", required)
 		}
@@ -37,5 +37,12 @@ func TestShortcutGuideCellTextKeepsGroupActionAndKeySeparate(t *testing.T) {
 	}
 	if got := shortcutGuideCellText(item, 3); got != "" {
 		t.Fatalf("unknown cell = %q", got)
+	}
+}
+
+func TestShortcutGuideViewportFitsEveryRowWithoutScrolling(t *testing.T) {
+	available := shortcutGuideTableHeight - nativeControls.TableHeaderHeight
+	if capacity := available / shortcutGuideNativeRowPitch; capacity < len(shortcutGuideItems()) {
+		t.Fatalf("shortcut viewport capacity = %d rows, want at least %d", capacity, len(shortcutGuideItems()))
 	}
 }

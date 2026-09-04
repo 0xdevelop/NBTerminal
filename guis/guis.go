@@ -425,52 +425,53 @@ type finalShellApp struct {
 	table               *uikit.UITableView
 	model               *tableModel
 
-	mainTitle        *uikit.UILabel
-	mainSubtitle     *uikit.UILabel
-	managerButton    *uikit.UIButton
-	shortcutsButton  *uikit.UIButton
-	settingsButton   *uikit.UIButton
-	quickTitle       *uikit.UILabel
-	quickSubtitle    *uikit.UILabel
-	searchLabel      *uikit.UILabel
-	searchInput      *uikit.Input
-	findButton       *uikit.UIButton
-	summaryTitle     *uikit.UILabel
-	selectedName     *uikit.UILabel
-	selectedDetail   *uikit.UILabel
-	selectedRecent   *uikit.UILabel
-	connectButton    *uikit.UIButton
-	cmdInput         *uikit.UITextView
-	commandHistory   map[string]*commandHistoryCursor
-	output           *uikit.UITerminalView
-	terminalColumns  int
-	sessionTabs      *uikit.UITabView
-	terminalPanel    *uikit.UIGroup
-	terminalTitle    *uikit.UILabel
-	terminalSubtitle *uikit.UILabel
-	commandLabel     *uikit.UILabel
-	closeTabButton   *uikit.UIButton
-	historyButton    *uikit.UIButton
-	lastButton       *uikit.UIButton
-	clearButton      *uikit.UIButton
-	status           *uikit.UILabel
-	notice           *uikit.UIWindow
-	runButton        *uikit.UIButton
-	stopButton       *uikit.UIButton
-	settings         *settingsWindow
-	shortcuts        *shortcutGuideWindow
-	editor           *connectionEditor
-	manager          *connectionManagerWindow
-	monitorPanel     *uikit.UIGroup
-	monitorTitle     *uikit.UILabel
-	monitorStatus    *uikit.UILabel
-	monitorUptime    *uikit.UILabel
-	monitorLoad      *uikit.UILabel
-	monitorCPU       *uikit.UILabel
-	monitorMemory    *uikit.UILabel
-	monitorNetwork   *uikit.UILabel
-	monitorCPUBar    *progress.UIProgressView
-	monitorMemBar    *progress.UIProgressView
+	mainTitle           *uikit.UILabel
+	mainSubtitle        *uikit.UILabel
+	managerButton       *uikit.UIButton
+	shortcutsButton     *uikit.UIButton
+	settingsButton      *uikit.UIButton
+	quickTitle          *uikit.UILabel
+	quickSubtitle       *uikit.UILabel
+	searchLabel         *uikit.UILabel
+	searchInput         *uikit.Input
+	findButton          *uikit.UIButton
+	summaryTitle        *uikit.UILabel
+	selectedName        *uikit.UILabel
+	selectedDetail      *uikit.UILabel
+	selectedRecent      *uikit.UILabel
+	connectButton       *uikit.UIButton
+	cmdInput            *uikit.UITextView
+	commandHistory      map[string]*commandHistoryCursor
+	output              *uikit.UITerminalView
+	terminalContextMenu *uikit.UIContextMenu
+	terminalColumns     int
+	sessionTabs         *uikit.UITabView
+	terminalPanel       *uikit.UIGroup
+	terminalTitle       *uikit.UILabel
+	terminalSubtitle    *uikit.UILabel
+	commandLabel        *uikit.UILabel
+	closeTabButton      *uikit.UIButton
+	historyButton       *uikit.UIButton
+	lastButton          *uikit.UIButton
+	clearButton         *uikit.UIButton
+	status              *uikit.UILabel
+	notice              *uikit.UIWindow
+	runButton           *uikit.UIButton
+	stopButton          *uikit.UIButton
+	settings            *settingsWindow
+	shortcuts           *shortcutGuideWindow
+	editor              *connectionEditor
+	manager             *connectionManagerWindow
+	monitorPanel        *uikit.UIGroup
+	monitorTitle        *uikit.UILabel
+	monitorStatus       *uikit.UILabel
+	monitorUptime       *uikit.UILabel
+	monitorLoad         *uikit.UILabel
+	monitorCPU          *uikit.UILabel
+	monitorMemory       *uikit.UILabel
+	monitorNetwork      *uikit.UILabel
+	monitorCPUBar       *progress.UIProgressView
+	monitorMemBar       *progress.UIProgressView
 
 	runMu       sync.Mutex
 	runID       uint64
@@ -872,6 +873,7 @@ func (a *finalShellApp) build() {
 	a.output.SetHistoryRows(terminalScrollbackRows())
 	a.output.SetRedrawRate(0.016)
 	a.output.OnInput(a.writeActiveTerminalInput)
+	a.installTerminalContextMenu(rightPanel)
 	registerDefaultApplicationShortcuts(a.window, a.output, applicationShortcutActions{
 		FocusQuickLauncher: a.focusQuickLauncher,
 		NewConnection:      a.newProfile,

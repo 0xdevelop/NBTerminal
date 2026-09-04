@@ -6,8 +6,10 @@ import (
 )
 
 const (
-	shortcutGuideWidth  = 760
-	shortcutGuideHeight = 680
+	shortcutGuideWidth          = 760
+	shortcutGuideHeight         = 740
+	shortcutGuideTableHeight    = 574
+	shortcutGuideNativeRowPitch = 25
 )
 
 type shortcutGuideItem struct {
@@ -33,6 +35,8 @@ func shortcutGuideItems() []shortcutGuideItem {
 		{Group: "Sessions", Action: "Reconnect Session", Shortcut: "Ctrl+Shift+R"},
 		{Group: "Sessions", Action: "Reopen Closed Session", Shortcut: "Ctrl+Shift+T"},
 		{Group: "Sessions", Action: "Close Session", Shortcut: "Ctrl+W"},
+		{Group: "Terminal", Action: "Copy Selection", Shortcut: "Ctrl+Shift+C"},
+		{Group: "Terminal", Action: "Paste Clipboard", Shortcut: "Ctrl+Shift+V"},
 		{Group: "Terminal", Action: "Increase Terminal Text", Shortcut: "Ctrl+="},
 		{Group: "Terminal", Action: "Decrease Terminal Text", Shortcut: "Ctrl+-"},
 		{Group: "Terminal", Action: "Reset Terminal Text", Shortcut: "Ctrl+0"},
@@ -112,7 +116,7 @@ func (g *shortcutGuideWindow) build() {
 
 	root.AddSubview(titleLabel(28, 20, 500, 30, "Keyboard Shortcuts"))
 	root.AddSubview(mutedLabel(30, 52, 690, 22, "Work faster without sending application commands to the active terminal."))
-	table, err := uikit.NewUITableView(28, 92, 704, 514)
+	table, err := uikit.NewUITableView(28, 92, 704, shortcutGuideTableHeight)
 	if err == nil {
 		g.table = table
 		g.table.SetHeaderHeight(nativeControls.TableHeaderHeight)
@@ -127,6 +131,6 @@ func (g *shortcutGuideWindow) build() {
 		g.table.ReloadData()
 		root.AddSubview(g.table)
 	}
-	root.AddSubview(button(620, 622, 112, nativeControls.PrimaryButtonHeight, "Close", "shortcuts.close", g.window.Close))
+	root.AddSubview(button(620, 682, 112, nativeControls.PrimaryButtonHeight, "Close", "shortcuts.close", g.window.Close))
 	g.window.Show()
 }
