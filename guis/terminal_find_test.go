@@ -59,3 +59,18 @@ func TestTerminalFindStateRefreshesLiveOutputWithoutLosingCurrentMatch(t *testin
 		t.Fatalf("refreshed search = matches:%d index:%d status:%q", len(state.matches), state.index, state.Status())
 	}
 }
+
+func TestTerminalFindStateMatchesUnicodeSimpleFoldEquivalents(t *testing.T) {
+	terminal := uikit.NewUITerminalView(rect(0, 0, 420, 180))
+	terminal.Append("SIGMA · ΟΣ / ος / οσ")
+	state := terminalFindState{}
+
+	state.Search(terminal, "οσ")
+	if len(state.matches) != 3 || state.Status() != "1 of 3" {
+		t.Fatalf("Unicode folded search = matches:%d status:%q", len(state.matches), state.Status())
+	}
+	state.Move(1)
+	if state.Status() != "2 of 3" {
+		t.Fatalf("Unicode folded navigation status = %q", state.Status())
+	}
+}
