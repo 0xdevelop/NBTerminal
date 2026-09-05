@@ -37,3 +37,25 @@ func TestTerminalFindStateCyclesMatchesAndTracksQueryChanges(t *testing.T) {
 		t.Fatalf("empty search status = %q", state.Status())
 	}
 }
+
+func TestTerminalFindStateRefreshesLiveOutputWithoutLosingCurrentMatch(t *testing.T) {
+	terminal := uikit.NewUITerminalView(rect(0, 0, 420, 180))
+	terminal.Append("first needle\r\nsecond needle")
+	state := terminalFindState{}
+	state.Search(terminal, "needle")
+	state.Move(1)
+	wantCurrent, ok := state.Current()
+	if !ok {
+		t.Fatal("expected current match before refresh")
+	}
+
+	terminal.Append("\r\nthird needle")
+	state.Refresh(terminal)
+	gotCurrent, ok := state.Current()
+	if !ok || gotCurrent != wantCurrent {
+		t.Fatalf("current match after refresh = %#v, %t; want %#v, true", gotCurrent, ok, wantCurrent)
+	}
+	if len(state.matches) != 3 || state.Status() != "2 of 3" {
+		t.Fatalf("refreshed search = matches:%d index:%d status:%q", len(state.matches), state.index, state.Status())
+	}
+}

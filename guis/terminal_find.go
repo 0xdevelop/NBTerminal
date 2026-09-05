@@ -32,6 +32,30 @@ func (s *terminalFindState) Search(terminal *uikit.UITerminalView, query string)
 	}
 }
 
+func (s *terminalFindState) Refresh(terminal *uikit.UITerminalView) {
+	if s == nil {
+		return
+	}
+	current, hadCurrent := s.Current()
+	previousIndex := s.index
+	query := s.query
+	s.Search(terminal, query)
+	if len(s.matches) == 0 {
+		return
+	}
+	if hadCurrent {
+		for i, match := range s.matches {
+			if match == current {
+				s.index = i
+				return
+			}
+		}
+	}
+	if previousIndex >= 0 && previousIndex < len(s.matches) {
+		s.index = previousIndex
+	}
+}
+
 func (s *terminalFindState) Move(delta int) {
 	if len(s.matches) == 0 {
 		s.index = -1
@@ -62,11 +86,12 @@ func (s terminalFindState) Status() string {
 }
 
 type terminalFindWindow struct {
-	owner  *finalShellApp
-	window *uikit.UIWindow
-	input  *uikit.Input
-	status *uikit.UILabel
-	state  terminalFindState
+	owner         *finalShellApp
+	window        *uikit.UIWindow
+	input         *uikit.Input
+	status        *uikit.UILabel
+	state         terminalFindState
+	stopObserving func()
 }
 
 func (a *finalShellApp) openTerminalFind() {
@@ -99,6 +124,10 @@ func (f *terminalFindWindow) build() {
 	root := f.window.RootView()
 	root.SetAutomationID("terminal_find.window").SetAutomationRole("window").SetAutomationName("Find in Terminal")
 	f.window.OnClose(func() {
+		if f.stopObserving != nil {
+			f.stopObserving()
+			f.stopObserving = nil
+		}
 		root.SetAutomationID("")
 		if f.owner != nil && f.owner.terminalFind == f {
 			f.owner.terminalFind = nil
@@ -122,6 +151,9 @@ func (f *terminalFindWindow) build() {
 	f.status.View().SetAutomationID("terminal_find.status")
 	root.AddSubview(f.status)
 	root.AddSubview(button(422, 148, 112, nativeControls.PrimaryButtonHeight, "Close", "terminal_find.close", f.close))
+	if f.owner != nil && f.owner.output != nil {
+		f.stopObserving = f.owner.output.ObserveTextChanged(f.refreshLiveSearch)
+	}
 
 	f.window.Show()
 	f.focusInput()
@@ -144,6 +176,16 @@ func (f *terminalFindWindow) search() {
 	}
 	f.state.Search(f.owner.output, f.input.Text())
 	f.revealCurrent()
+}
+
+func (f *terminalFindWindow) refreshLiveSearch() {
+	if f == nil || f.owner == nil || f.owner.output == nil {
+		return
+	}
+	f.state.Refresh(f.owner.output)
+	if f.status != nil {
+		f.status.SetText(f.state.Status())
+	}
 }
 
 func (f *terminalFindWindow) navigate(delta int) {
