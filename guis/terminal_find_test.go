@@ -90,3 +90,18 @@ func TestTerminalFindStateCanMatchCaseExactly(t *testing.T) {
 		t.Fatalf("case-sensitive search = matches:%d match:%#v current:%t status:%q", len(state.matches), match, ok, state.Status())
 	}
 }
+
+func TestTerminalFindStateCanMatchWholeWords(t *testing.T) {
+	terminal := uikit.NewUITerminalView(rect(0, 0, 420, 180))
+	terminal.Append("prod production PROD prod_1 prod-prod")
+	state := terminalFindState{}
+	state.Search(terminal, "prod")
+	if len(state.matches) != 6 {
+		t.Fatalf("substring matches = %d, want 6", len(state.matches))
+	}
+
+	state.SetWholeWord(terminal, true)
+	if len(state.matches) != 4 || state.Status() != "1 of 4" {
+		t.Fatalf("whole-word search = matches:%d status:%q", len(state.matches), state.Status())
+	}
+}

@@ -17,6 +17,7 @@ const (
 type terminalFindState struct {
 	query         string
 	caseSensitive bool
+	wholeWord     bool
 	matches       []uikit.TerminalTextMatch
 	index         int
 }
@@ -28,7 +29,10 @@ func (s *terminalFindState) Search(terminal *uikit.UITerminalView, query string)
 	if terminal == nil || strings.TrimSpace(query) == "" {
 		return
 	}
-	s.matches = terminal.SearchTextWithOptions(query, uikit.TerminalTextSearchOptions{CaseSensitive: s.caseSensitive})
+	s.matches = terminal.SearchTextWithOptions(query, uikit.TerminalTextSearchOptions{
+		CaseSensitive: s.caseSensitive,
+		WholeWord:     s.wholeWord,
+	})
 	if len(s.matches) > 0 {
 		s.index = 0
 	}
@@ -39,6 +43,14 @@ func (s *terminalFindState) SetCaseSensitive(terminal *uikit.UITerminalView, ena
 		return
 	}
 	s.caseSensitive = enabled
+	s.Search(terminal, s.query)
+}
+
+func (s *terminalFindState) SetWholeWord(terminal *uikit.UITerminalView, enabled bool) {
+	if s == nil || s.wholeWord == enabled {
+		return
+	}
+	s.wholeWord = enabled
 	s.Search(terminal, s.query)
 }
 
@@ -100,6 +112,7 @@ type terminalFindWindow struct {
 	window        *uikit.UIWindow
 	input         *uikit.Input
 	matchCase     *checkbox.UICheckbox
+	wholeWord     *checkbox.UICheckbox
 	status        *uikit.UILabel
 	state         terminalFindState
 	stopObserving func()
@@ -165,6 +178,10 @@ func (f *terminalFindWindow) build() {
 	f.matchCase.View().SetAutomationID("terminal_find.match_case").SetAutomationName("Match case")
 	f.matchCase.OnValueChanged(f.setCaseSensitive)
 	root.AddSubview(f.matchCase)
+	f.wholeWord = checkbox.NewUICheckboxWithOptions(rect(218, 126, 180, 30), "Whole word", checkStyle)
+	f.wholeWord.View().SetAutomationID("terminal_find.whole_word").SetAutomationName("Whole word")
+	f.wholeWord.OnValueChanged(f.setWholeWord)
+	root.AddSubview(f.wholeWord)
 
 	f.status = mutedLabel(26, 174, 330, 28, "Type to search")
 	f.status.SetFrame(fltk_bridge.FLAT_BOX)
@@ -214,6 +231,14 @@ func (f *terminalFindWindow) setCaseSensitive(enabled bool) {
 		return
 	}
 	f.state.SetCaseSensitive(f.owner.output, enabled)
+	f.revealCurrent()
+}
+
+func (f *terminalFindWindow) setWholeWord(enabled bool) {
+	if f == nil || f.owner == nil {
+		return
+	}
+	f.state.SetWholeWord(f.owner.output, enabled)
 	f.revealCurrent()
 }
 
