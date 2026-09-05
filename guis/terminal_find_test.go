@@ -74,3 +74,19 @@ func TestTerminalFindStateMatchesUnicodeSimpleFoldEquivalents(t *testing.T) {
 		t.Fatalf("Unicode folded navigation status = %q", state.Status())
 	}
 }
+
+func TestTerminalFindStateCanMatchCaseExactly(t *testing.T) {
+	terminal := uikit.NewUITerminalView(rect(0, 0, 420, 180))
+	terminal.Append("Needle needle NEEDLE")
+	state := terminalFindState{}
+	state.Search(terminal, "needle")
+	if len(state.matches) != 3 {
+		t.Fatalf("case-insensitive matches = %d, want 3", len(state.matches))
+	}
+
+	state.SetCaseSensitive(terminal, true)
+	match, ok := state.Current()
+	if len(state.matches) != 1 || !ok || match.Column != 7 || state.Status() != "1 of 1" {
+		t.Fatalf("case-sensitive search = matches:%d match:%#v current:%t status:%q", len(state.matches), match, ok, state.Status())
+	}
+}

@@ -6,17 +6,19 @@ import (
 
 	"github.com/0xdevelop/fltk2go/fltk_bridge"
 	"github.com/0xdevelop/fltk2go/uikit"
+	"github.com/0xdevelop/fltk2go/uikit/checkbox"
 )
 
 const (
 	terminalFindWidth  = 560
-	terminalFindHeight = 202
+	terminalFindHeight = 224
 )
 
 type terminalFindState struct {
-	query   string
-	matches []uikit.TerminalTextMatch
-	index   int
+	query         string
+	caseSensitive bool
+	matches       []uikit.TerminalTextMatch
+	index         int
 }
 
 func (s *terminalFindState) Search(terminal *uikit.UITerminalView, query string) {
@@ -26,10 +28,18 @@ func (s *terminalFindState) Search(terminal *uikit.UITerminalView, query string)
 	if terminal == nil || strings.TrimSpace(query) == "" {
 		return
 	}
-	s.matches = terminal.SearchText(query)
+	s.matches = terminal.SearchTextWithOptions(query, uikit.TerminalTextSearchOptions{CaseSensitive: s.caseSensitive})
 	if len(s.matches) > 0 {
 		s.index = 0
 	}
+}
+
+func (s *terminalFindState) SetCaseSensitive(terminal *uikit.UITerminalView, enabled bool) {
+	if s == nil || s.caseSensitive == enabled {
+		return
+	}
+	s.caseSensitive = enabled
+	s.Search(terminal, s.query)
 }
 
 func (s *terminalFindState) Refresh(terminal *uikit.UITerminalView) {
@@ -89,6 +99,7 @@ type terminalFindWindow struct {
 	owner         *finalShellApp
 	window        *uikit.UIWindow
 	input         *uikit.Input
+	matchCase     *checkbox.UICheckbox
 	status        *uikit.UILabel
 	state         terminalFindState
 	stopObserving func()
@@ -145,12 +156,22 @@ func (f *terminalFindWindow) build() {
 	root.AddSubview(button(340, 82, 82, nativeControls.ButtonHeight, "Previous", "terminal_find.previous", func() { f.navigate(-1) }))
 	root.AddSubview(primaryButton(432, 82, 102, nativeControls.ButtonHeight, "Next", "terminal_find.next", func() { f.navigate(1) }))
 
-	f.status = mutedLabel(26, 132, 330, 28, "Type to search")
+	checkStyle := checkbox.DefaultCheckboxStyle()
+	checkStyle.Font = fltk_bridge.HELVETICA
+	checkStyle.FontSize = nativeTypography.Body
+	checkStyle.TextColor = uint(tokenColor(modernTheme.foreground))
+	checkStyle.Color = uint(tokenColor(modernTheme.background))
+	f.matchCase = checkbox.NewUICheckboxWithOptions(rect(26, 126, 180, 30), "Match case", checkStyle)
+	f.matchCase.View().SetAutomationID("terminal_find.match_case").SetAutomationName("Match case")
+	f.matchCase.OnValueChanged(f.setCaseSensitive)
+	root.AddSubview(f.matchCase)
+
+	f.status = mutedLabel(26, 174, 330, 28, "Type to search")
 	f.status.SetFrame(fltk_bridge.FLAT_BOX)
 	f.status.SetBackgroundColor(uint(tokenColor(modernTheme.background)))
 	f.status.View().SetAutomationID("terminal_find.status")
 	root.AddSubview(f.status)
-	root.AddSubview(button(422, 148, 112, nativeControls.PrimaryButtonHeight, "Close", "terminal_find.close", f.close))
+	root.AddSubview(button(422, 170, 112, nativeControls.PrimaryButtonHeight, "Close", "terminal_find.close", f.close))
 	if f.owner != nil && f.owner.output != nil {
 		f.stopObserving = f.owner.output.ObserveTextChanged(f.refreshLiveSearch)
 	}
@@ -186,6 +207,14 @@ func (f *terminalFindWindow) refreshLiveSearch() {
 	if f.status != nil {
 		f.status.SetText(f.state.Status())
 	}
+}
+
+func (f *terminalFindWindow) setCaseSensitive(enabled bool) {
+	if f == nil || f.owner == nil {
+		return
+	}
+	f.state.SetCaseSensitive(f.owner.output, enabled)
+	f.revealCurrent()
 }
 
 func (f *terminalFindWindow) navigate(delta int) {
