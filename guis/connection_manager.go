@@ -41,11 +41,29 @@ type connectionManagerWindow struct {
 	groupOptions      []connectionGroupOption
 	selectedGroup     string
 	groupRename       *groupRenameWindow
+	sort              connectionManagerSort
 }
 
 type connectionGroupOption struct {
 	Path  string
 	Label string
+}
+
+type connectionManagerSortColumn int
+
+const (
+	managerSortFavorite connectionManagerSortColumn = iota
+	managerSortGroup
+	managerSortName
+	managerSortType
+	managerSortEndpoint
+	managerSortLastUsed
+)
+
+type connectionManagerSort struct {
+	Column     connectionManagerSortColumn
+	Descending bool
+	Active     bool
 }
 
 func (a *finalShellApp) openConnectionManager() {
@@ -128,6 +146,7 @@ func (m *connectionManagerWindow) build() {
 		m.table.SetDataSource(m.model)
 		m.table.SetDelegate(tableDelegate{onSelect: m.selectRow})
 		m.table.OnActivate(m.activate)
+		m.table.OnColumnHeaderClick(m.sortByColumn)
 		m.installContextMenu(root)
 		m.table.SetBackgroundColor(tokenColor(modernTheme.card))
 		m.table.SetCustomDraw(m.drawCell)
@@ -211,7 +230,7 @@ func (m *connectionManagerWindow) reload(preferredID string) {
 	}
 	m.syncGroupOptions()
 	favoritesOnly := m.favoritesOnly != nil && m.favoritesOnly.Value()
-	m.rows = connectionManagerRowsFiltered(m.owner.allRows, m.selectedGroup, query, favoritesOnly)
+	m.rows = sortConnectionManagerRows(connectionManagerRowsFiltered(m.owner.allRows, m.selectedGroup, query, favoritesOnly), m.sort)
 	m.idx = indexProfileByID(m.rows, preferredID)
 	if m.idx < 0 && len(m.rows) > 0 {
 		m.idx = 0
@@ -226,6 +245,26 @@ func (m *connectionManagerWindow) reload(preferredID string) {
 		}
 	}
 	m.updateStatus()
+}
+
+func (m *connectionManagerWindow) sortByColumn(column int) {
+	if m == nil || column < int(managerSortFavorite) || column > int(managerSortLastUsed) {
+		return
+	}
+	preferredID := ""
+	if profile, ok := m.selectedProfile(); ok {
+		preferredID = profile.ID
+	}
+	m.sort = nextConnectionManagerSort(m.sort, connectionManagerSortColumn(column))
+	if m.table != nil && m.table.View() != nil {
+		m.table.View().SetAutomationProperty("sortColumn", managerSortColumnName(m.sort.Column))
+		direction := "ascending"
+		if m.sort.Descending {
+			direction = "descending"
+		}
+		m.table.View().SetAutomationProperty("sortDirection", direction)
+	}
+	m.reload(preferredID)
 }
 
 func (m *connectionManagerWindow) syncGroupOptions() {
@@ -344,6 +383,77 @@ func connectionManagerRowsFiltered(rows []connectionProfile, group, query string
 		groupRows = append(groupRows, row)
 	}
 	return filterConnections(groupRows, query)
+}
+
+func nextConnectionManagerSort(current connectionManagerSort, column connectionManagerSortColumn) connectionManagerSort {
+	if current.Active && current.Column == column {
+		current.Descending = !current.Descending
+		return current
+	}
+	return connectionManagerSort{
+		Column:     column,
+		Descending: column == managerSortFavorite || column == managerSortLastUsed,
+		Active:     true,
+	}
+}
+
+func sortConnectionManagerRows(rows []connectionProfile, state connectionManagerSort) []connectionProfile {
+	out := append([]connectionProfile(nil), rows...)
+	if !state.Active {
+		return out
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		comparison := compareConnectionManagerProfiles(out[i], out[j], state.Column)
+		if comparison == 0 {
+			comparison = strings.Compare(strings.ToLower(out[i].ID), strings.ToLower(out[j].ID))
+		}
+		if state.Descending {
+			return comparison > 0
+		}
+		return comparison < 0
+	})
+	return out
+}
+
+func compareConnectionManagerProfiles(left, right connectionProfile, column connectionManagerSortColumn) int {
+	leftValue, rightValue := "", ""
+	switch column {
+	case managerSortFavorite:
+		if left.Favorite == right.Favorite {
+			return 0
+		}
+		if left.Favorite {
+			return 1
+		}
+		return -1
+	case managerSortGroup:
+		leftValue, rightValue = normalizeConnectionGroup(left.Group), normalizeConnectionGroup(right.Group)
+	case managerSortName:
+		leftValue, rightValue = left.Name, right.Name
+	case managerSortType:
+		leftValue, rightValue = string(left.Type), string(right.Type)
+	case managerSortEndpoint:
+		leftValue, rightValue = left.tableEndpoint(), right.tableEndpoint()
+	case managerSortLastUsed:
+		leftValue, rightValue = strings.TrimSpace(left.LastUsed), strings.TrimSpace(right.LastUsed)
+	default:
+		return 0
+	}
+	return strings.Compare(strings.ToLower(strings.TrimSpace(leftValue)), strings.ToLower(strings.TrimSpace(rightValue)))
+}
+
+func managerSortColumnName(column connectionManagerSortColumn) string {
+	return [...]string{"favorite", "group", "name", "type", "endpoint", "last_used"}[column]
+}
+
+func connectionManagerHeaderTitle(title string, column connectionManagerSortColumn, state connectionManagerSort) string {
+	if !state.Active || state.Column != column {
+		return title
+	}
+	if state.Descending {
+		return title + " ▼"
+	}
+	return title + " ▲"
 }
 
 func (m *connectionManagerWindow) applySearch() {
@@ -600,7 +710,8 @@ func (m *connectionManagerWindow) drawCell(ctx fltk_bridge.TableContext, row, co
 		fltk_bridge.SetDrawColor(tokenColor(modernTheme.foreground))
 		fltk_bridge.SetDrawFont(fltk_bridge.HELVETICA, nativeTypography.Body)
 		if col >= 0 && col < len(headers) {
-			fltk_bridge.Draw(headers[col], x+nativeControls.TextInset, y, w-nativeControls.TextInset*2, h, fltk_bridge.ALIGN_CENTER|fltk_bridge.ALIGN_CLIP)
+			title := connectionManagerHeaderTitle(headers[col], connectionManagerSortColumn(col), m.sort)
+			fltk_bridge.Draw(title, x+nativeControls.TextInset, y, w-nativeControls.TextInset*2, h, fltk_bridge.ALIGN_CENTER|fltk_bridge.ALIGN_CLIP)
 		}
 		fltk_bridge.SetDrawColor(tokenColor(modernTheme.border))
 		fltk_bridge.DrawRect(x, y, w, h)

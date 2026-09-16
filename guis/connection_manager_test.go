@@ -211,6 +211,60 @@ func TestConnectionManagerFavoritesFilterComposesWithGroupAndSearch(t *testing.T
 	}
 }
 
+func TestConnectionManagerColumnSortingTogglesAndPreservesSource(t *testing.T) {
+	rows := []connectionProfile{
+		{ID: "zeta", Name: "Zeta", Group: "Production", LastUsed: "2026-08-01T10:00:00Z"},
+		{ID: "alpha", Name: "Alpha", Group: "Development", LastUsed: ""},
+		{ID: "beta", Name: "Beta", Group: "Production", LastUsed: "2026-08-03T10:00:00Z"},
+	}
+
+	state := nextConnectionManagerSort(connectionManagerSort{}, managerSortName)
+	got := sortConnectionManagerRows(rows, state)
+	if state.Descending || got[0].ID != "alpha" || got[1].ID != "beta" || got[2].ID != "zeta" {
+		t.Fatalf("ascending name sort = state %#v rows %#v", state, got)
+	}
+	state = nextConnectionManagerSort(state, managerSortName)
+	got = sortConnectionManagerRows(rows, state)
+	if !state.Descending || got[0].ID != "zeta" || got[2].ID != "alpha" {
+		t.Fatalf("descending name sort = state %#v rows %#v", state, got)
+	}
+	if rows[0].ID != "zeta" || rows[1].ID != "alpha" || rows[2].ID != "beta" {
+		t.Fatalf("sorting mutated source rows: %#v", rows)
+	}
+}
+
+func TestConnectionManagerRecencyAndFavoriteSortDefaultToMostUsefulFirst(t *testing.T) {
+	rows := []connectionProfile{
+		{ID: "never", Name: "Never"},
+		{ID: "favorite-old", Name: "Favorite old", Favorite: true, LastUsed: "2026-08-01T10:00:00Z"},
+		{ID: "recent", Name: "Recent", LastUsed: "2026-08-03T10:00:00Z"},
+	}
+	lastState := nextConnectionManagerSort(connectionManagerSort{}, managerSortLastUsed)
+	last := sortConnectionManagerRows(rows, lastState)
+	if !lastState.Descending || last[0].ID != "recent" || last[2].ID != "never" {
+		t.Fatalf("default recency sort = state %#v rows %#v", lastState, last)
+	}
+	favoriteState := nextConnectionManagerSort(connectionManagerSort{}, managerSortFavorite)
+	favorites := sortConnectionManagerRows(rows, favoriteState)
+	if !favoriteState.Descending || favorites[0].ID != "favorite-old" {
+		t.Fatalf("default favorite sort = state %#v rows %#v", favoriteState, favorites)
+	}
+}
+
+func TestConnectionManagerSortHeaderTitleShowsDirection(t *testing.T) {
+	state := connectionManagerSort{Column: managerSortGroup, Active: true}
+	if got := connectionManagerHeaderTitle("Group", managerSortGroup, state); got != "Group ▲" {
+		t.Fatalf("ascending header = %q", got)
+	}
+	state.Descending = true
+	if got := connectionManagerHeaderTitle("Group", managerSortGroup, state); got != "Group ▼" {
+		t.Fatalf("descending header = %q", got)
+	}
+	if got := connectionManagerHeaderTitle("Name", managerSortName, state); got != "Name" {
+		t.Fatalf("inactive header = %q", got)
+	}
+}
+
 func TestConnectionManagerSearchRanksMultiTermMatchesWithinSelectedGroup(t *testing.T) {
 	rows := []connectionProfile{
 		{ID: "metadata", Name: "Primary", Group: "Production/Database", Host: "db.internal"},
