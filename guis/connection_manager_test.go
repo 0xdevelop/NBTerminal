@@ -641,3 +641,47 @@ func TestCloseAfterConnectPreferencePersistsAndRollsBackOnFailure(t *testing.T) 
 		t.Fatal("failed save did not roll preference back")
 	}
 }
+
+func TestConnectionManagerViewPreferencesPersistAndRestore(t *testing.T) {
+	oldGlobal := config.GlobalConfig
+	oldApp := config.CurrentApp
+	t.Cleanup(func() { config.GlobalConfig, config.CurrentApp = oldGlobal, oldApp })
+
+	config.GlobalConfig = &config.FileConfig{Language: "en"}
+	config.GlobalConfig.Normalize()
+	config.CurrentApp = config.NewApp("NBTerminal-test", "test.nbterminal", "test", gtbox.RunModeTest, 0)
+	config.CurrentApp.AppConfigFilePath = filepath.Join(t.TempDir(), "config.json")
+
+	manager := &connectionManagerWindow{}
+	if !manager.persistViewPreferences(true, connectionManagerSort{Column: managerSortName, Descending: true, Active: true}) {
+		t.Fatal("persistViewPreferences failed")
+	}
+	buf, err := os.ReadFile(config.CurrentApp.AppConfigFilePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved config.FileConfig
+	if err := json.Unmarshal(buf, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if saved.ConnectionManager == nil || !saved.ConnectionManager.FavoritesOnly || saved.ConnectionManager.SortColumn != "name" || !saved.ConnectionManager.SortDescending {
+		t.Fatalf("saved manager preferences = %#v", saved.ConnectionManager)
+	}
+	restored := connectionManagerSortFromConfig(&saved)
+	if !restored.Active || restored.Column != managerSortName || !restored.Descending {
+		t.Fatalf("restored sort = %#v", restored)
+	}
+
+	previous := *config.GlobalConfig.ConnectionManager
+	blocker := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blocker, []byte("block"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config.CurrentApp.AppConfigFilePath = filepath.Join(blocker, "config.json")
+	if manager.persistViewPreferences(false, connectionManagerSort{Column: managerSortEndpoint, Active: true}) {
+		t.Fatal("blocked manager preference save unexpectedly succeeded")
+	}
+	if got := *config.GlobalConfig.ConnectionManager; got != previous {
+		t.Fatalf("failed save did not roll preferences back: got %#v want %#v", got, previous)
+	}
+}

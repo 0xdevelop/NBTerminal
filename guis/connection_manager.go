@@ -77,7 +77,7 @@ func (a *finalShellApp) openConnectionManager() {
 		}
 		return
 	}
-	m := &connectionManagerWindow{owner: a, idx: -1}
+	m := &connectionManagerWindow{owner: a, idx: -1, sort: connectionManagerSortFromConfig(config.GlobalConfig)}
 	a.manager = m
 	m.build()
 }
@@ -147,6 +147,7 @@ func (m *connectionManagerWindow) build() {
 		m.table.SetDelegate(tableDelegate{onSelect: m.selectRow})
 		m.table.OnActivate(m.activate)
 		m.table.OnColumnHeaderClick(m.sortByColumn)
+		m.publishSortAutomation()
 		m.installContextMenu(root)
 		m.table.SetBackgroundColor(tokenColor(modernTheme.card))
 		m.table.SetCustomDraw(m.drawCell)
@@ -170,8 +171,17 @@ func (m *connectionManagerWindow) build() {
 	m.closeAfterConnect.OnValueChanged(m.persistCloseAfterConnect)
 	root.AddSubview(m.closeAfterConnect)
 	m.favoritesOnly = checkbox.NewUICheckboxWithOptions(rect(layout.FavoritesOnly.X, layout.FavoritesOnly.Y, layout.FavoritesOnly.Width, layout.FavoritesOnly.Height), "Favorites only", checkStyle)
+	if config.GlobalConfig != nil && config.GlobalConfig.ConnectionManager != nil {
+		m.favoritesOnly.SetValue(config.GlobalConfig.ConnectionManager.FavoritesOnly)
+	}
 	m.favoritesOnly.View().SetAutomationID("connection_manager.favorites_only").SetAutomationName("Show favorite connections only")
-	m.favoritesOnly.OnValueChanged(func(bool) {
+	m.favoritesOnly.OnValueChanged(func(value bool) {
+		if !m.persistViewPreferences(value, m.sort) {
+			if config.GlobalConfig != nil && config.GlobalConfig.ConnectionManager != nil {
+				m.favoritesOnly.SetValue(config.GlobalConfig.ConnectionManager.FavoritesOnly)
+			}
+			return
+		}
 		preferredID := ""
 		if profile, ok := m.selectedProfile(); ok {
 			preferredID = profile.ID
@@ -255,16 +265,26 @@ func (m *connectionManagerWindow) sortByColumn(column int) {
 	if profile, ok := m.selectedProfile(); ok {
 		preferredID = profile.ID
 	}
-	m.sort = nextConnectionManagerSort(m.sort, connectionManagerSortColumn(column))
-	if m.table != nil && m.table.View() != nil {
-		m.table.View().SetAutomationProperty("sortColumn", managerSortColumnName(m.sort.Column))
-		direction := "ascending"
-		if m.sort.Descending {
-			direction = "descending"
-		}
-		m.table.View().SetAutomationProperty("sortDirection", direction)
+	next := nextConnectionManagerSort(m.sort, connectionManagerSortColumn(column))
+	favoritesOnly := m.favoritesOnly != nil && m.favoritesOnly.Value()
+	if !m.persistViewPreferences(favoritesOnly, next) {
+		return
 	}
+	m.sort = next
+	m.publishSortAutomation()
 	m.reload(preferredID)
+}
+
+func (m *connectionManagerWindow) publishSortAutomation() {
+	if m == nil || m.table == nil || m.table.View() == nil || !m.sort.Active {
+		return
+	}
+	m.table.View().SetAutomationProperty("sortColumn", managerSortColumnName(m.sort.Column))
+	direction := "ascending"
+	if m.sort.Descending {
+		direction = "descending"
+	}
+	m.table.View().SetAutomationProperty("sortDirection", direction)
 }
 
 func (m *connectionManagerWindow) syncGroupOptions() {
@@ -444,6 +464,25 @@ func compareConnectionManagerProfiles(left, right connectionProfile, column conn
 
 func managerSortColumnName(column connectionManagerSortColumn) string {
 	return [...]string{"favorite", "group", "name", "type", "endpoint", "last_used"}[column]
+}
+
+func connectionManagerSortFromConfig(cfg *config.FileConfig) connectionManagerSort {
+	if cfg == nil || cfg.ConnectionManager == nil || cfg.ConnectionManager.SortColumn == "" {
+		return connectionManagerSort{}
+	}
+	columns := map[string]connectionManagerSortColumn{
+		"favorite":  managerSortFavorite,
+		"group":     managerSortGroup,
+		"name":      managerSortName,
+		"type":      managerSortType,
+		"endpoint":  managerSortEndpoint,
+		"last_used": managerSortLastUsed,
+	}
+	column, ok := columns[cfg.ConnectionManager.SortColumn]
+	if !ok {
+		return connectionManagerSort{}
+	}
+	return connectionManagerSort{Column: column, Descending: cfg.ConnectionManager.SortDescending, Active: true}
 }
 
 func connectionManagerHeaderTitle(title string, column connectionManagerSortColumn, state connectionManagerSort) string {
@@ -626,6 +665,32 @@ func (m *connectionManagerWindow) persistCloseAfterConnect(value bool) {
 			m.owner.showTopNotice(tr("status.save_failed"), err.Error(), true)
 		}
 	}
+}
+
+func (m *connectionManagerWindow) persistViewPreferences(favoritesOnly bool, sortState connectionManagerSort) bool {
+	if config.GlobalConfig == nil {
+		config.GlobalConfig = &config.FileConfig{}
+	}
+	config.GlobalConfig.Normalize()
+	previous := *config.GlobalConfig.ConnectionManager
+	next := config.ConnectionManagerSettings{FavoritesOnly: favoritesOnly}
+	if sortState.Active {
+		next.SortColumn = managerSortColumnName(sortState.Column)
+		next.SortDescending = sortState.Descending
+	}
+	*config.GlobalConfig.ConnectionManager = next
+	if config.CurrentApp == nil || config.CurrentApp.AppConfigFilePath == "" {
+		return true
+	}
+	if err := config.SaveConfig(config.CurrentApp.AppConfigFilePath); err != nil {
+		*config.GlobalConfig.ConnectionManager = previous
+		if m != nil && m.owner != nil {
+			m.owner.setStatus(tr("status.save_failed"))
+			m.owner.showTopNotice(tr("status.save_failed"), err.Error(), true)
+		}
+		return false
+	}
+	return true
 }
 
 func (m *connectionManagerWindow) toggleFavorite() {

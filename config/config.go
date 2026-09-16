@@ -51,17 +51,24 @@ type TerminalSettings struct {
 	ScrollbackRows        int `yaml:"scrollback_rows" json:"scrollback_rows"`
 }
 
+type ConnectionManagerSettings struct {
+	FavoritesOnly  bool   `yaml:"favorites_only" json:"favorites_only"`
+	SortColumn     string `yaml:"sort_column" json:"sort_column"`
+	SortDescending bool   `yaml:"sort_descending" json:"sort_descending"`
+}
+
 type FileConfig struct {
-	Api                      *api_config.ApiConfig `yaml:"api" json:"api"`
-	Auth                     *Auth                 `yaml:"auth" json:"auth"`
-	Language                 string                `yaml:"language" json:"language"`
-	Terminal                 *TerminalSettings     `yaml:"terminal" json:"terminal"`
-	Connections              []terminal.Connection `yaml:"connections" json:"connections"`
-	ActiveConnectionID       string                `yaml:"active_connection_id" json:"active_connection_id"`
-	WorkspaceSplitRatio      float64               `yaml:"workspace_split_ratio" json:"workspace_split_ratio"`
-	ResetWorkspaceOnStart    bool                  `yaml:"reset_workspace_on_start" json:"reset_workspace_on_start"`
-	StartWithFirstConnection bool                  `yaml:"start_with_first_connection" json:"start_with_first_connection"`
-	CloseManagerAfterConnect bool                  `yaml:"close_manager_after_connect" json:"close_manager_after_connect"`
+	Api                      *api_config.ApiConfig      `yaml:"api" json:"api"`
+	Auth                     *Auth                      `yaml:"auth" json:"auth"`
+	Language                 string                     `yaml:"language" json:"language"`
+	Terminal                 *TerminalSettings          `yaml:"terminal" json:"terminal"`
+	Connections              []terminal.Connection      `yaml:"connections" json:"connections"`
+	ActiveConnectionID       string                     `yaml:"active_connection_id" json:"active_connection_id"`
+	WorkspaceSplitRatio      float64                    `yaml:"workspace_split_ratio" json:"workspace_split_ratio"`
+	ResetWorkspaceOnStart    bool                       `yaml:"reset_workspace_on_start" json:"reset_workspace_on_start"`
+	StartWithFirstConnection bool                       `yaml:"start_with_first_connection" json:"start_with_first_connection"`
+	CloseManagerAfterConnect bool                       `yaml:"close_manager_after_connect" json:"close_manager_after_connect"`
+	ConnectionManager        *ConnectionManagerSettings `yaml:"connection_manager" json:"connection_manager"`
 }
 
 func (fc *FileConfig) Normalize() {
@@ -98,6 +105,15 @@ func (fc *FileConfig) Normalize() {
 		fc.Terminal.ScrollbackRows = TerminalScrollbackRowsMin
 	} else if fc.Terminal.ScrollbackRows > TerminalScrollbackRowsMax {
 		fc.Terminal.ScrollbackRows = TerminalScrollbackRowsMax
+	}
+	if fc.ConnectionManager == nil {
+		fc.ConnectionManager = &ConnectionManagerSettings{}
+	}
+	switch fc.ConnectionManager.SortColumn {
+	case "", "favorite", "group", "name", "type", "endpoint", "last_used":
+	default:
+		fc.ConnectionManager.SortColumn = ""
+		fc.ConnectionManager.SortDescending = false
 	}
 
 	if fc.WorkspaceSplitRatio == 0 {

@@ -182,6 +182,11 @@ func TestSaveConfigAtomicallyPersistsUTF8WithPrivatePermissions(t *testing.T) {
 	GlobalConfig = &FileConfig{
 		Language:                 "zh-CN",
 		CloseManagerAfterConnect: true,
+		ConnectionManager: &ConnectionManagerSettings{
+			FavoritesOnly:  true,
+			SortColumn:     "name",
+			SortDescending: true,
+		},
 		Connections: []terminal.Connection{
 			{ID: "本地-🚀", Name: "中文 · 日本語 · 한국어 · 🚀 · é", Type: terminal.ConnectionTypeLocal},
 		},
@@ -213,11 +218,26 @@ func TestSaveConfigAtomicallyPersistsUTF8WithPrivatePermissions(t *testing.T) {
 	if !decoded.CloseManagerAfterConnect {
 		t.Fatal("close-manager preference did not round-trip")
 	}
+	if decoded.ConnectionManager == nil || !decoded.ConnectionManager.FavoritesOnly ||
+		decoded.ConnectionManager.SortColumn != "name" || !decoded.ConnectionManager.SortDescending {
+		t.Fatalf("connection-manager view preferences did not round-trip: %#v", decoded.ConnectionManager)
+	}
 	matches, err := filepath.Glob(filepath.Join(filepath.Dir(path), ".config.json.tmp-*"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(matches) != 0 {
 		t.Fatalf("temporary files left behind: %v", matches)
+	}
+}
+
+func TestNormalizeConnectionManagerSettingsRejectsUnknownSortColumn(t *testing.T) {
+	cfg := &FileConfig{ConnectionManager: &ConnectionManagerSettings{SortColumn: "password", SortDescending: true}}
+	cfg.Normalize()
+	if cfg.ConnectionManager == nil {
+		t.Fatal("connection-manager settings were not initialized")
+	}
+	if cfg.ConnectionManager.SortColumn != "" || cfg.ConnectionManager.SortDescending {
+		t.Fatalf("unsafe sort settings survived normalization: %#v", cfg.ConnectionManager)
 	}
 }
