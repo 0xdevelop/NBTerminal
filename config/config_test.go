@@ -186,6 +186,7 @@ func TestSaveConfigAtomicallyPersistsUTF8WithPrivatePermissions(t *testing.T) {
 			FavoritesOnly:  true,
 			SortColumn:     "name",
 			SortDescending: true,
+			SelectedGroup:  "Infrastructure/Production",
 		},
 		Connections: []terminal.Connection{
 			{ID: "本地-🚀", Name: "中文 · 日本語 · 한국어 · 🚀 · é", Type: terminal.ConnectionTypeLocal},
@@ -219,7 +220,8 @@ func TestSaveConfigAtomicallyPersistsUTF8WithPrivatePermissions(t *testing.T) {
 		t.Fatal("close-manager preference did not round-trip")
 	}
 	if decoded.ConnectionManager == nil || !decoded.ConnectionManager.FavoritesOnly ||
-		decoded.ConnectionManager.SortColumn != "name" || !decoded.ConnectionManager.SortDescending {
+		decoded.ConnectionManager.SortColumn != "name" || !decoded.ConnectionManager.SortDescending ||
+		decoded.ConnectionManager.SelectedGroup != "Infrastructure/Production" {
 		t.Fatalf("connection-manager view preferences did not round-trip: %#v", decoded.ConnectionManager)
 	}
 	matches, err := filepath.Glob(filepath.Join(filepath.Dir(path), ".config.json.tmp-*"))

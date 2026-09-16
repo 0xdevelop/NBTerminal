@@ -653,7 +653,7 @@ func TestConnectionManagerViewPreferencesPersistAndRestore(t *testing.T) {
 	config.CurrentApp.AppConfigFilePath = filepath.Join(t.TempDir(), "config.json")
 
 	manager := &connectionManagerWindow{}
-	if !manager.persistViewPreferences(true, connectionManagerSort{Column: managerSortName, Descending: true, Active: true}) {
+	if !manager.persistViewPreferences(true, connectionManagerSort{Column: managerSortName, Descending: true, Active: true}, " Infrastructure / Production ") {
 		t.Fatal("persistViewPreferences failed")
 	}
 	buf, err := os.ReadFile(config.CurrentApp.AppConfigFilePath)
@@ -664,7 +664,7 @@ func TestConnectionManagerViewPreferencesPersistAndRestore(t *testing.T) {
 	if err := json.Unmarshal(buf, &saved); err != nil {
 		t.Fatal(err)
 	}
-	if saved.ConnectionManager == nil || !saved.ConnectionManager.FavoritesOnly || saved.ConnectionManager.SortColumn != "name" || !saved.ConnectionManager.SortDescending {
+	if saved.ConnectionManager == nil || !saved.ConnectionManager.FavoritesOnly || saved.ConnectionManager.SortColumn != "name" || !saved.ConnectionManager.SortDescending || saved.ConnectionManager.SelectedGroup != "Infrastructure/Production" {
 		t.Fatalf("saved manager preferences = %#v", saved.ConnectionManager)
 	}
 	restored := connectionManagerSortFromConfig(&saved)
@@ -678,10 +678,22 @@ func TestConnectionManagerViewPreferencesPersistAndRestore(t *testing.T) {
 		t.Fatal(err)
 	}
 	config.CurrentApp.AppConfigFilePath = filepath.Join(blocker, "config.json")
-	if manager.persistViewPreferences(false, connectionManagerSort{Column: managerSortEndpoint, Active: true}) {
+	if manager.persistViewPreferences(false, connectionManagerSort{Column: managerSortEndpoint, Active: true}, "Other") {
 		t.Fatal("blocked manager preference save unexpectedly succeeded")
 	}
 	if got := *config.GlobalConfig.ConnectionManager; got != previous {
 		t.Fatalf("failed save did not roll preferences back: got %#v want %#v", got, previous)
+	}
+}
+
+func TestConnectionManagerRestoresAvailableGroupAndFallsBackFromStaleGroup(t *testing.T) {
+	rows := []connectionProfile{{ID: "prod", Group: "Infrastructure/Production"}}
+	cfg := &config.FileConfig{ConnectionManager: &config.ConnectionManagerSettings{SelectedGroup: " Infrastructure / Production "}}
+	if got := restoredConnectionManagerGroup(cfg, rows); got != "Infrastructure/Production" {
+		t.Fatalf("restored group = %q", got)
+	}
+	cfg.ConnectionManager.SelectedGroup = "Deleted/Group"
+	if got := restoredConnectionManagerGroup(cfg, rows); got != "" {
+		t.Fatalf("stale group = %q, want all groups", got)
 	}
 }

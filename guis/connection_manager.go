@@ -77,7 +77,12 @@ func (a *finalShellApp) openConnectionManager() {
 		}
 		return
 	}
-	m := &connectionManagerWindow{owner: a, idx: -1, sort: connectionManagerSortFromConfig(config.GlobalConfig)}
+	m := &connectionManagerWindow{
+		owner:         a,
+		idx:           -1,
+		sort:          connectionManagerSortFromConfig(config.GlobalConfig),
+		selectedGroup: restoredConnectionManagerGroup(config.GlobalConfig, a.allRows),
+	}
 	a.manager = m
 	m.build()
 }
@@ -126,7 +131,14 @@ func (m *connectionManagerWindow) build() {
 		if index < 0 || index >= len(m.groupOptions) {
 			return
 		}
-		m.selectedGroup = m.groupOptions[index].Path
+		previous := m.selectedGroup
+		next := m.groupOptions[index].Path
+		favoritesOnly := m.favoritesOnly != nil && m.favoritesOnly.Value()
+		if !m.persistViewPreferences(favoritesOnly, m.sort, next) {
+			m.selectGroupOption(previous)
+			return
+		}
+		m.selectedGroup = next
 		m.reload("")
 	})
 
@@ -176,7 +188,7 @@ func (m *connectionManagerWindow) build() {
 	}
 	m.favoritesOnly.View().SetAutomationID("connection_manager.favorites_only").SetAutomationName("Show favorite connections only")
 	m.favoritesOnly.OnValueChanged(func(value bool) {
-		if !m.persistViewPreferences(value, m.sort) {
+		if !m.persistViewPreferences(value, m.sort, m.selectedGroup) {
 			if config.GlobalConfig != nil && config.GlobalConfig.ConnectionManager != nil {
 				m.favoritesOnly.SetValue(config.GlobalConfig.ConnectionManager.FavoritesOnly)
 			}
@@ -267,7 +279,7 @@ func (m *connectionManagerWindow) sortByColumn(column int) {
 	}
 	next := nextConnectionManagerSort(m.sort, connectionManagerSortColumn(column))
 	favoritesOnly := m.favoritesOnly != nil && m.favoritesOnly.Value()
-	if !m.persistViewPreferences(favoritesOnly, next) {
+	if !m.persistViewPreferences(favoritesOnly, next, m.selectedGroup) {
 		return
 	}
 	m.sort = next
@@ -332,6 +344,35 @@ func connectionManagerGroupOptions(rows []connectionProfile) []connectionGroupOp
 		})
 	}
 	return options
+}
+
+func restoredConnectionManagerGroup(cfg *config.FileConfig, rows []connectionProfile) string {
+	if cfg == nil || cfg.ConnectionManager == nil {
+		return ""
+	}
+	want := normalizeConnectionGroup(cfg.ConnectionManager.SelectedGroup)
+	if want == "" {
+		return ""
+	}
+	for _, option := range connectionManagerGroupOptions(rows) {
+		if option.Path == want {
+			return want
+		}
+	}
+	return ""
+}
+
+func (m *connectionManagerWindow) selectGroupOption(path string) {
+	if m == nil || m.group == nil {
+		return
+	}
+	for index, option := range m.groupOptions {
+		if option.Path == path {
+			m.group.SetSelectedIndex(index)
+			return
+		}
+	}
+	m.group.SetSelectedIndex(0)
 }
 
 func normalizeConnectionGroup(group string) string {
@@ -667,13 +708,13 @@ func (m *connectionManagerWindow) persistCloseAfterConnect(value bool) {
 	}
 }
 
-func (m *connectionManagerWindow) persistViewPreferences(favoritesOnly bool, sortState connectionManagerSort) bool {
+func (m *connectionManagerWindow) persistViewPreferences(favoritesOnly bool, sortState connectionManagerSort, selectedGroup string) bool {
 	if config.GlobalConfig == nil {
 		config.GlobalConfig = &config.FileConfig{}
 	}
 	config.GlobalConfig.Normalize()
 	previous := *config.GlobalConfig.ConnectionManager
-	next := config.ConnectionManagerSettings{FavoritesOnly: favoritesOnly}
+	next := config.ConnectionManagerSettings{FavoritesOnly: favoritesOnly, SelectedGroup: normalizeConnectionGroup(selectedGroup)}
 	if sortState.Active {
 		next.SortColumn = managerSortColumnName(sortState.Column)
 		next.SortDescending = sortState.Descending

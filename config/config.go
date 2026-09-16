@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/0xdevelop/NBTerminal/api/api_config"
 	"github.com/0xdevelop/NBTerminal/internal/persistence"
@@ -55,6 +56,7 @@ type ConnectionManagerSettings struct {
 	FavoritesOnly  bool   `yaml:"favorites_only" json:"favorites_only"`
 	SortColumn     string `yaml:"sort_column" json:"sort_column"`
 	SortDescending bool   `yaml:"sort_descending" json:"sort_descending"`
+	SelectedGroup  string `yaml:"selected_group" json:"selected_group"`
 }
 
 type FileConfig struct {
@@ -109,6 +111,14 @@ func (fc *FileConfig) Normalize() {
 	if fc.ConnectionManager == nil {
 		fc.ConnectionManager = &ConnectionManagerSettings{}
 	}
+	groupParts := strings.Split(fc.ConnectionManager.SelectedGroup, "/")
+	normalizedGroupParts := make([]string, 0, len(groupParts))
+	for _, part := range groupParts {
+		if part = strings.TrimSpace(part); part != "" {
+			normalizedGroupParts = append(normalizedGroupParts, part)
+		}
+	}
+	fc.ConnectionManager.SelectedGroup = strings.Join(normalizedGroupParts, "/")
 	switch fc.ConnectionManager.SortColumn {
 	case "", "favorite", "group", "name", "type", "endpoint", "last_used":
 	default:
