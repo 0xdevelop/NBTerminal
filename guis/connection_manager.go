@@ -37,6 +37,7 @@ type connectionManagerWindow struct {
 	idx               int
 	status            *uikit.UILabel
 	closeAfterConnect *checkbox.UICheckbox
+	favoritesOnly     *checkbox.UICheckbox
 	groupOptions      []connectionGroupOption
 	selectedGroup     string
 	groupRename       *groupRenameWindow
@@ -149,6 +150,16 @@ func (m *connectionManagerWindow) build() {
 	m.closeAfterConnect.View().SetAutomationID("connection_manager.close_after_connect").SetAutomationName(tr("manager.close_after_connect"))
 	m.closeAfterConnect.OnValueChanged(m.persistCloseAfterConnect)
 	root.AddSubview(m.closeAfterConnect)
+	m.favoritesOnly = checkbox.NewUICheckboxWithOptions(rect(layout.FavoritesOnly.X, layout.FavoritesOnly.Y, layout.FavoritesOnly.Width, layout.FavoritesOnly.Height), "Favorites only", checkStyle)
+	m.favoritesOnly.View().SetAutomationID("connection_manager.favorites_only").SetAutomationName("Show favorite connections only")
+	m.favoritesOnly.OnValueChanged(func(bool) {
+		preferredID := ""
+		if profile, ok := m.selectedProfile(); ok {
+			preferredID = profile.ID
+		}
+		m.reload(preferredID)
+	})
+	root.AddSubview(m.favoritesOnly)
 	root.AddSubview(button(layout.New.X, layout.New.Y, layout.New.Width, layout.New.Height, tr("action.new"), "connection_manager.new", m.newProfile))
 	root.AddSubview(button(layout.Edit.X, layout.Edit.Y, layout.Edit.Width, layout.Edit.Height, tr("action.edit"), "connection_manager.edit", m.editSelected))
 	root.AddSubview(button(layout.Duplicate.X, layout.Duplicate.Y, layout.Duplicate.Width, layout.Duplicate.Height, "Duplicate", "connection_manager.duplicate", m.duplicateSelected))
@@ -199,7 +210,8 @@ func (m *connectionManagerWindow) reload(preferredID string) {
 		query = m.search.Text()
 	}
 	m.syncGroupOptions()
-	m.rows = connectionManagerRows(m.owner.allRows, m.selectedGroup, query)
+	favoritesOnly := m.favoritesOnly != nil && m.favoritesOnly.Value()
+	m.rows = connectionManagerRowsFiltered(m.owner.allRows, m.selectedGroup, query, favoritesOnly)
 	m.idx = indexProfileByID(m.rows, preferredID)
 	if m.idx < 0 && len(m.rows) > 0 {
 		m.idx = 0
@@ -315,9 +327,16 @@ func renameConnectionGroup(rows []connectionProfile, oldPath, newPath string) ([
 }
 
 func connectionManagerRows(rows []connectionProfile, group, query string) []connectionProfile {
+	return connectionManagerRowsFiltered(rows, group, query, false)
+}
+
+func connectionManagerRowsFiltered(rows []connectionProfile, group, query string, favoritesOnly bool) []connectionProfile {
 	group = normalizeConnectionGroup(group)
 	groupRows := make([]connectionProfile, 0, len(rows))
 	for _, row := range rows {
+		if favoritesOnly && !row.Favorite {
+			continue
+		}
 		rowGroup := normalizeConnectionGroup(row.Group)
 		if group != "" && rowGroup != group && !strings.HasPrefix(rowGroup, group+"/") {
 			continue

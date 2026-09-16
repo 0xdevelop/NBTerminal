@@ -189,6 +189,28 @@ func TestConnectionManagerRowsCombineGroupAndSearchWithoutMutatingSource(t *test
 	}
 }
 
+func TestConnectionManagerFavoritesFilterComposesWithGroupAndSearch(t *testing.T) {
+	rows := []connectionProfile{
+		{ID: "prod-db", Name: "Database", Group: "Production", Host: "db.internal", Favorite: true},
+		{ID: "prod-web", Name: "Web", Group: "Production", Host: "web.internal"},
+		{ID: "dev-db", Name: "Database", Group: "Development", Host: "db.dev", Favorite: true},
+	}
+
+	got := connectionManagerRowsFiltered(rows, "Production", "database", true)
+	if len(got) != 1 || got[0].ID != "prod-db" {
+		t.Fatalf("favorite group/search filter = %#v, want prod-db", got)
+	}
+	if got := connectionManagerRowsFiltered(rows, "Production", "", true); len(got) != 1 || got[0].ID != "prod-db" {
+		t.Fatalf("favorite group filter = %#v, want prod-db", got)
+	}
+	if got := connectionManagerRowsFiltered(rows, "", "database", false); len(got) != 2 {
+		t.Fatalf("disabled favorites filter returned %d rows, want 2", len(got))
+	}
+	if len(rows) != 3 || !rows[0].Favorite || rows[1].Favorite {
+		t.Fatalf("favorites filter mutated source rows: %#v", rows)
+	}
+}
+
 func TestConnectionManagerSearchRanksMultiTermMatchesWithinSelectedGroup(t *testing.T) {
 	rows := []connectionProfile{
 		{ID: "metadata", Name: "Primary", Group: "Production/Database", Host: "db.internal"},

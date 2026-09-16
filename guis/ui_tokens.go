@@ -210,8 +210,8 @@ func quickPanelLayoutFor(panel layoutRect, tokens controlMetricSet) quickPanelLa
 }
 
 type connectionManagerLayout struct {
-	Group, Search, Find, Table, Status, CloseAfterConnect              layoutRect
-	New, Edit, Duplicate, RenameGroup, Delete, Test, Favorite, Connect layoutRect
+	Group, Search, Find, Table, Status, CloseAfterConnect, FavoritesOnly layoutRect
+	New, Edit, Duplicate, RenameGroup, Delete, Test, Favorite, Connect   layoutRect
 }
 
 func connectionManagerLayoutFor(tokens controlMetricSet) connectionManagerLayout {
@@ -222,6 +222,7 @@ func connectionManagerLayoutFor(tokens controlMetricSet) connectionManagerLayout
 		Table:             layoutRect{X: 28, Y: 143, Width: 864, Height: 382},
 		Status:            layoutRect{X: 30, Y: 530, Width: 862, Height: 18},
 		CloseAfterConnect: layoutRect{X: 28, Y: 554, Width: 420, Height: tokens.InputHeight},
+		FavoritesOnly:     layoutRect{X: 460, Y: 554, Width: 220, Height: tokens.InputHeight},
 		New:               layoutRect{X: 28, Y: 594, Width: 64, Height: tokens.ButtonHeight},
 		Edit:              layoutRect{X: 100, Y: 594, Width: 64, Height: tokens.ButtonHeight},
 		Duplicate:         layoutRect{X: 172, Y: 594, Width: 90, Height: tokens.ButtonHeight},

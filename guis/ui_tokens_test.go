@@ -267,7 +267,7 @@ func TestSettingsEditorAndManagerLayoutsUseSemanticControlMetrics(t *testing.T) 
 
 	manager := connectionManagerLayoutFor(nativeControls)
 	if manager.Group.Height != nativeControls.InputHeight || manager.Search.Height != nativeControls.InputHeight || manager.Find.Height != nativeControls.ButtonHeight ||
-		manager.CloseAfterConnect.Height != nativeControls.InputHeight || manager.New.Height != nativeControls.ButtonHeight ||
+		manager.CloseAfterConnect.Height != nativeControls.InputHeight || manager.FavoritesOnly.Height != nativeControls.InputHeight || manager.New.Height != nativeControls.ButtonHeight ||
 		manager.Edit.Height != nativeControls.ButtonHeight || manager.Duplicate.Height != nativeControls.ButtonHeight || manager.RenameGroup.Height != nativeControls.ButtonHeight ||
 		manager.Delete.Height != nativeControls.ButtonHeight || manager.Test.Height != nativeControls.ButtonHeight || manager.Favorite.Height != nativeControls.ButtonHeight || manager.Connect.Height != nativeControls.PrimaryButtonHeight {
 		t.Fatalf("manager controls do not use semantic heights: %#v", manager)
@@ -278,6 +278,9 @@ func TestSettingsEditorAndManagerLayoutsUseSemanticControlMetrics(t *testing.T) 
 	if manager.CloseAfterConnect.Y-manager.Status.Bottom() < nativeControls.FieldLabelGap ||
 		manager.New.Y-manager.CloseAfterConnect.Bottom() < nativeControls.FieldLabelGap {
 		t.Fatalf("manager footer spacing is too tight: %#v", manager)
+	}
+	if manager.CloseAfterConnect.X+manager.CloseAfterConnect.Width > manager.FavoritesOnly.X-nativeControls.FieldLabelGap {
+		t.Fatalf("manager footer filters overlap: %#v", manager)
 	}
 	for left, right := range map[layoutRect]layoutRect{
 		manager.New: manager.Edit, manager.Edit: manager.Duplicate, manager.Duplicate: manager.RenameGroup,
