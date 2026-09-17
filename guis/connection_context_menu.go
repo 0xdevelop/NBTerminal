@@ -11,7 +11,7 @@ import (
 )
 
 type connectionContextMenuActions struct {
-	connect, copyAddress, edit, duplicate, test, favorite, delete func()
+	connect, copyAddress, copyCommand, edit, duplicate, test, favorite, delete func()
 }
 
 func connectionContextMenuItems(profile connectionProfile, actions connectionContextMenuActions) []uikit.MenuItem {
@@ -21,7 +21,10 @@ func connectionContextMenuItems(profile connectionProfile, actions connectionCon
 	}
 	items := []uikit.MenuItem{{Title: "Connect", Callback: actions.connect}}
 	if profile.Type == connectionTypeSSH {
-		items = append(items, uikit.MenuItem{Title: "Copy Address", Callback: actions.copyAddress})
+		items = append(items,
+			uikit.MenuItem{Title: "Copy Address", Callback: actions.copyAddress},
+			uikit.MenuItem{Title: "Copy SSH Command", Callback: actions.copyCommand},
+		)
 	}
 	return append(items,
 		uikit.MenuItem{Title: "Edit…", Callback: actions.edit},
@@ -54,6 +57,47 @@ func connectionClipboardAddress(profile connectionProfile) (string, bool) {
 		address = username + "@" + address
 	}
 	return address, true
+}
+
+// connectionClipboardSSHCommand builds a command that can be pasted into a
+// POSIX shell without allowing profile-controlled fields to become extra shell
+// words or options. Credentials, key paths, descriptions, and working
+// directories are deliberately excluded from this user-visible projection.
+func connectionClipboardSSHCommand(profile connectionProfile) (string, bool) {
+	if profile.Type != connectionTypeSSH {
+		return "", false
+	}
+	host := strings.TrimSpace(profile.Host)
+	if host == "" {
+		return "", false
+	}
+	port := profile.Port
+	if port == 0 {
+		port = 22
+	}
+	if port < 1 || port > 65535 {
+		return "", false
+	}
+	target := host
+	if username := strings.TrimSpace(profile.Username); username != "" {
+		target = username + "@" + host
+	}
+	return "ssh -p " + strconv.Itoa(port) + " -- " + shellClipboardWord(target), true
+}
+
+func shellClipboardWord(value string) string {
+	safe := value != ""
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || strings.ContainsRune("@%_+=,./-", r) {
+			continue
+		}
+		safe = false
+		break
+	}
+	if safe {
+		return value
+	}
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }
 
 // selectContextProfile resolves a menu's stable profile identity at action
@@ -96,6 +140,7 @@ func (m *connectionManagerWindow) installContextMenu(parent interface{ AddSubvie
 		menu.SetMenu(connectionContextMenuItems(profile, connectionContextMenuActions{
 			connect:     run(m.connectSelected),
 			copyAddress: run(m.copySelectedAddress),
+			copyCommand: run(m.copySelectedSSHCommand),
 			edit:        run(m.editSelected),
 			duplicate:   run(m.duplicateSelected),
 			test:        run(m.testSelected),
@@ -118,6 +163,21 @@ func (m *connectionManagerWindow) copySelectedAddress() {
 	fltk_bridge.CopyToClipboard(address)
 	if m.owner != nil {
 		m.owner.setStatus("Copied address for " + profile.Name)
+	}
+}
+
+func (m *connectionManagerWindow) copySelectedSSHCommand() {
+	profile, ok := m.selectedProfile()
+	if !ok {
+		return
+	}
+	command, ok := connectionClipboardSSHCommand(profile)
+	if !ok {
+		return
+	}
+	fltk_bridge.CopyToClipboard(command)
+	if m.owner != nil {
+		m.owner.setStatus("Copied SSH command for " + profile.Name)
 	}
 }
 
@@ -185,6 +245,19 @@ func (a *finalShellApp) copySelectedProfileAddress() {
 	a.setStatus("Copied address for " + profile.Name)
 }
 
+func (a *finalShellApp) copySelectedProfileSSHCommand() {
+	profile, ok := a.selectedProfile()
+	if !ok {
+		return
+	}
+	command, ok := connectionClipboardSSHCommand(profile)
+	if !ok {
+		return
+	}
+	fltk_bridge.CopyToClipboard(command)
+	a.setStatus("Copied SSH command for " + profile.Name)
+}
+
 func (a *finalShellApp) installQuickConnectionContextMenu(parent interface{ AddSubview(viewable uikit.Viewable) }) {
 	if a == nil || a.table == nil || parent == nil {
 		return
@@ -207,6 +280,7 @@ func (a *finalShellApp) installQuickConnectionContextMenu(parent interface{ AddS
 		menu.SetMenu(connectionContextMenuItems(profile, connectionContextMenuActions{
 			connect:     run(a.connectSelected),
 			copyAddress: run(a.copySelectedProfileAddress),
+			copyCommand: run(a.copySelectedProfileSSHCommand),
 			edit:        run(a.editSelectedProfile),
 			duplicate:   run(a.duplicateSelectedProfile),
 			test:        run(a.testSelectedProfile),

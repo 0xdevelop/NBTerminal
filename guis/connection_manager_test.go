@@ -20,13 +20,14 @@ func TestConnectionManagerRowContextMenuReflectsFavoriteAndRoutesCommands(t *tes
 	items := connectionContextMenuItems(connectionProfile{Type: connectionTypeSSH}, connectionContextMenuActions{
 		connect:     func() { invocations["connect"]++ },
 		copyAddress: func() { invocations["copy_address"]++ },
+		copyCommand: func() { invocations["copy_command"]++ },
 		edit:        func() { invocations["edit"]++ },
 		duplicate:   func() { invocations["duplicate"]++ },
 		test:        func() { invocations["test"]++ },
 		favorite:    func() { invocations["favorite"]++ },
 		delete:      func() { invocations["delete"]++ },
 	})
-	want := []string{"Connect", "Copy Address", "Edit…", "Duplicate…", "Test Connection", "Add to Favorites", "Delete…"}
+	want := []string{"Connect", "Copy Address", "Copy SSH Command", "Edit…", "Duplicate…", "Test Connection", "Add to Favorites", "Delete…"}
 	if len(items) != len(want) {
 		t.Fatalf("context menu item count = %d, want %d", len(items), len(want))
 	}
@@ -36,7 +37,7 @@ func TestConnectionManagerRowContextMenuReflectsFavoriteAndRoutesCommands(t *tes
 		}
 		items[index].Callback()
 	}
-	for _, action := range []string{"connect", "copy_address", "edit", "duplicate", "test", "favorite", "delete"} {
+	for _, action := range []string{"connect", "copy_address", "copy_command", "edit", "duplicate", "test", "favorite", "delete"} {
 		if invocations[action] != 1 {
 			t.Fatalf("%s callback count = %d, want 1", action, invocations[action])
 		}
@@ -77,6 +78,42 @@ func TestConnectionClipboardAddressIsExplicitAndSecretFree(t *testing.T) {
 	} {
 		if got, ok := connectionClipboardAddress(profile); ok || got != "" {
 			t.Fatalf("unsupported clipboard address = %q/%t", got, ok)
+		}
+	}
+}
+
+func TestConnectionClipboardSSHCommandIsPasteReadyAndSecretFree(t *testing.T) {
+	tests := []struct {
+		name    string
+		profile connectionProfile
+		want    string
+	}{
+		{name: "default port", profile: connectionProfile{Type: connectionTypeSSH, Username: "deploy", Host: "db.internal"}, want: "ssh -p 22 -- deploy@db.internal"},
+		{name: "custom port and ipv6", profile: connectionProfile{Type: connectionTypeSSH, Host: "2001:db8::10", Port: 2222}, want: "ssh -p 2222 -- '2001:db8::10'"},
+		{name: "shell metacharacters are quoted", profile: connectionProfile{Type: connectionTypeSSH, Username: "release bot", Host: "build host"}, want: "ssh -p 22 -- 'release bot@build host'"},
+		{name: "single quote is escaped", profile: connectionProfile{Type: connectionTypeSSH, Username: "o'reilly", Host: "host"}, want: "ssh -p 22 -- 'o'\"'\"'reilly@host'"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			test.profile.PasswordEnc = "gtenc-secret-marker"
+			test.profile.PrivateKey = "/private/key-marker"
+			got, ok := connectionClipboardSSHCommand(test.profile)
+			if !ok || got != test.want {
+				t.Fatalf("clipboard command = %q/%t, want %q/true", got, ok, test.want)
+			}
+			if strings.Contains(got, "secret-marker") || strings.Contains(got, "key-marker") {
+				t.Fatalf("clipboard command exposed secret-bearing data: %q", got)
+			}
+		})
+	}
+	for _, profile := range []connectionProfile{
+		{Type: connectionTypeLocal},
+		{Type: connectionTypeSSH, Host: "  "},
+		{Type: connectionTypeSSH, Host: "db.internal", Port: -1},
+		{Type: connectionTypeSSH, Host: "db.internal", Port: 65536},
+	} {
+		if got, ok := connectionClipboardSSHCommand(profile); ok || got != "" {
+			t.Fatalf("unsupported clipboard command = %q/%t", got, ok)
 		}
 	}
 }
