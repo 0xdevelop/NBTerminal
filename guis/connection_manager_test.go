@@ -17,15 +17,16 @@ import (
 
 func TestConnectionManagerRowContextMenuReflectsFavoriteAndRoutesCommands(t *testing.T) {
 	invocations := map[string]int{}
-	items := connectionContextMenuItems(false, connectionContextMenuActions{
-		connect:   func() { invocations["connect"]++ },
-		edit:      func() { invocations["edit"]++ },
-		duplicate: func() { invocations["duplicate"]++ },
-		test:      func() { invocations["test"]++ },
-		favorite:  func() { invocations["favorite"]++ },
-		delete:    func() { invocations["delete"]++ },
+	items := connectionContextMenuItems(connectionProfile{Type: connectionTypeSSH}, connectionContextMenuActions{
+		connect:     func() { invocations["connect"]++ },
+		copyAddress: func() { invocations["copy_address"]++ },
+		edit:        func() { invocations["edit"]++ },
+		duplicate:   func() { invocations["duplicate"]++ },
+		test:        func() { invocations["test"]++ },
+		favorite:    func() { invocations["favorite"]++ },
+		delete:      func() { invocations["delete"]++ },
 	})
-	want := []string{"Connect", "Edit…", "Duplicate…", "Test Connection", "Add to Favorites", "Delete…"}
+	want := []string{"Connect", "Copy Address", "Edit…", "Duplicate…", "Test Connection", "Add to Favorites", "Delete…"}
 	if len(items) != len(want) {
 		t.Fatalf("context menu item count = %d, want %d", len(items), len(want))
 	}
@@ -35,14 +36,48 @@ func TestConnectionManagerRowContextMenuReflectsFavoriteAndRoutesCommands(t *tes
 		}
 		items[index].Callback()
 	}
-	for _, action := range []string{"connect", "edit", "duplicate", "test", "favorite", "delete"} {
+	for _, action := range []string{"connect", "copy_address", "edit", "duplicate", "test", "favorite", "delete"} {
 		if invocations[action] != 1 {
 			t.Fatalf("%s callback count = %d, want 1", action, invocations[action])
 		}
 	}
-	items = connectionContextMenuItems(true, connectionContextMenuActions{})
-	if items[4].Title != "Remove from Favorites" {
-		t.Fatalf("favorite menu title = %q", items[4].Title)
+	items = connectionContextMenuItems(connectionProfile{Favorite: true}, connectionContextMenuActions{})
+	if len(items) != 6 || items[4].Title != "Remove from Favorites" {
+		t.Fatalf("local favorite menu = %#v", items)
+	}
+}
+
+func TestConnectionClipboardAddressIsExplicitAndSecretFree(t *testing.T) {
+	tests := []struct {
+		name    string
+		profile connectionProfile
+		want    string
+	}{
+		{name: "username and default port", profile: connectionProfile{Type: connectionTypeSSH, Username: "deploy", Host: "db.internal"}, want: "deploy@db.internal:22"},
+		{name: "ipv6 and custom port", profile: connectionProfile{Type: connectionTypeSSH, Host: "2001:db8::10", Port: 2222}, want: "[2001:db8::10]:2222"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			test.profile.PasswordEnc = "gtenc-secret-marker"
+			test.profile.PrivateKey = "/private/key-marker"
+			got, ok := connectionClipboardAddress(test.profile)
+			if !ok || got != test.want {
+				t.Fatalf("clipboard address = %q/%t, want %q/true", got, ok, test.want)
+			}
+			if strings.Contains(got, "secret-marker") || strings.Contains(got, "key-marker") {
+				t.Fatalf("clipboard address exposed secret-bearing data: %q", got)
+			}
+		})
+	}
+	for _, profile := range []connectionProfile{
+		{Type: connectionTypeLocal, WorkingDir: "/srv/private"},
+		{Type: connectionTypeSSH, Host: "  "},
+		{Type: connectionTypeSSH, Host: "db.internal", Port: -1},
+		{Type: connectionTypeSSH, Host: "db.internal", Port: 65536},
+	} {
+		if got, ok := connectionClipboardAddress(profile); ok || got != "" {
+			t.Fatalf("unsupported clipboard address = %q/%t", got, ok)
+		}
 	}
 }
 

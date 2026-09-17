@@ -1,28 +1,59 @@
 package guis
 
 import (
+	"net"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/0xdevelop/fltk2go/fltk_bridge"
 	"github.com/0xdevelop/fltk2go/uikit"
 )
 
 type connectionContextMenuActions struct {
-	connect, edit, duplicate, test, favorite, delete func()
+	connect, copyAddress, edit, duplicate, test, favorite, delete func()
 }
 
-func connectionContextMenuItems(favorite bool, actions connectionContextMenuActions) []uikit.MenuItem {
+func connectionContextMenuItems(profile connectionProfile, actions connectionContextMenuActions) []uikit.MenuItem {
 	favoriteTitle := "Add to Favorites"
-	if favorite {
+	if profile.Favorite {
 		favoriteTitle = "Remove from Favorites"
 	}
-	return []uikit.MenuItem{
-		{Title: "Connect", Callback: actions.connect},
-		{Title: "Edit…", Callback: actions.edit},
-		{Title: "Duplicate…", Callback: actions.duplicate},
-		{Title: "Test Connection", Callback: actions.test},
-		{Title: favoriteTitle, Callback: actions.favorite},
-		{Title: "Delete…", Callback: actions.delete},
+	items := []uikit.MenuItem{{Title: "Connect", Callback: actions.connect}}
+	if profile.Type == connectionTypeSSH {
+		items = append(items, uikit.MenuItem{Title: "Copy Address", Callback: actions.copyAddress})
 	}
+	return append(items,
+		uikit.MenuItem{Title: "Edit…", Callback: actions.edit},
+		uikit.MenuItem{Title: "Duplicate…", Callback: actions.duplicate},
+		uikit.MenuItem{Title: "Test Connection", Callback: actions.test},
+		uikit.MenuItem{Title: favoriteTitle, Callback: actions.favorite},
+		uikit.MenuItem{Title: "Delete…", Callback: actions.delete},
+	)
+}
+
+// connectionClipboardAddress returns a paste-ready SSH address while excluding
+// passwords, private-key paths, descriptions, and every other persisted field.
+func connectionClipboardAddress(profile connectionProfile) (string, bool) {
+	if profile.Type != connectionTypeSSH {
+		return "", false
+	}
+	host := strings.TrimSpace(profile.Host)
+	if host == "" {
+		return "", false
+	}
+	port := profile.Port
+	if port == 0 {
+		port = 22
+	}
+	if port < 1 || port > 65535 {
+		return "", false
+	}
+	address := net.JoinHostPort(host, strconv.Itoa(port))
+	if username := strings.TrimSpace(profile.Username); username != "" {
+		address = username + "@" + address
+	}
+	return address, true
 }
 
 // selectContextProfile resolves a menu's stable profile identity at action
@@ -62,16 +93,32 @@ func (m *connectionManagerWindow) installContextMenu(parent interface{ AddSubvie
 				}
 			}
 		}
-		menu.SetMenu(connectionContextMenuItems(profile.Favorite, connectionContextMenuActions{
-			connect:   run(m.connectSelected),
-			edit:      run(m.editSelected),
-			duplicate: run(m.duplicateSelected),
-			test:      run(m.testSelected),
-			favorite:  run(m.toggleFavorite),
-			delete:    run(m.deleteSelected),
+		menu.SetMenu(connectionContextMenuItems(profile, connectionContextMenuActions{
+			connect:     run(m.connectSelected),
+			copyAddress: run(m.copySelectedAddress),
+			edit:        run(m.editSelected),
+			duplicate:   run(m.duplicateSelected),
+			test:        run(m.testSelected),
+			favorite:    run(m.toggleFavorite),
+			delete:      run(m.deleteSelected),
 		}))
 		menu.Popup()
 	})
+}
+
+func (m *connectionManagerWindow) copySelectedAddress() {
+	profile, ok := m.selectedProfile()
+	if !ok {
+		return
+	}
+	address, ok := connectionClipboardAddress(profile)
+	if !ok {
+		return
+	}
+	fltk_bridge.CopyToClipboard(address)
+	if m.owner != nil {
+		m.owner.setStatus("Copied address for " + profile.Name)
+	}
 }
 
 // selectQuickContextProfile resolves the profile again when the menu command
@@ -125,6 +172,19 @@ func (a *finalShellApp) toggleSelectedProfileFavorite() {
 	}
 }
 
+func (a *finalShellApp) copySelectedProfileAddress() {
+	profile, ok := a.selectedProfile()
+	if !ok {
+		return
+	}
+	address, ok := connectionClipboardAddress(profile)
+	if !ok {
+		return
+	}
+	fltk_bridge.CopyToClipboard(address)
+	a.setStatus("Copied address for " + profile.Name)
+}
+
 func (a *finalShellApp) installQuickConnectionContextMenu(parent interface{ AddSubview(viewable uikit.Viewable) }) {
 	if a == nil || a.table == nil || parent == nil {
 		return
@@ -144,13 +204,14 @@ func (a *finalShellApp) installQuickConnectionContextMenu(parent interface{ AddS
 				}
 			}
 		}
-		menu.SetMenu(connectionContextMenuItems(profile.Favorite, connectionContextMenuActions{
-			connect:   run(a.connectSelected),
-			edit:      run(a.editSelectedProfile),
-			duplicate: run(a.duplicateSelectedProfile),
-			test:      run(a.testSelectedProfile),
-			favorite:  run(a.toggleSelectedProfileFavorite),
-			delete:    run(a.deleteProfile),
+		menu.SetMenu(connectionContextMenuItems(profile, connectionContextMenuActions{
+			connect:     run(a.connectSelected),
+			copyAddress: run(a.copySelectedProfileAddress),
+			edit:        run(a.editSelectedProfile),
+			duplicate:   run(a.duplicateSelectedProfile),
+			test:        run(a.testSelectedProfile),
+			favorite:    run(a.toggleSelectedProfileFavorite),
+			delete:      run(a.deleteProfile),
 		}))
 		menu.Popup()
 	})
