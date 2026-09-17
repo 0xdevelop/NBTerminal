@@ -472,6 +472,72 @@ func TestRenameConnectionGroupRejectsInvalidMoves(t *testing.T) {
 	}
 }
 
+func TestRemoveConnectionGroupMovesProfilesToParentWithoutDeletingThem(t *testing.T) {
+	rows := []connectionProfile{
+		{ID: "prod", Group: "Infrastructure/Production", PasswordEnc: "gtenc-prod"},
+		{ID: "db", Group: "Infrastructure/Production/Database", PrivateKey: "/keys/db"},
+		{ID: "lab", Group: "Infrastructure/Production-Lab"},
+		{ID: "dev", Group: "Infrastructure/Development"},
+	}
+
+	got, changed, err := removeConnectionGroup(rows, " Infrastructure / Production ", "Local")
+	if err != nil {
+		t.Fatalf("remove group: %v", err)
+	}
+	if changed != 2 || len(got) != len(rows) {
+		t.Fatalf("remove result = changed %d rows %#v", changed, got)
+	}
+	wantGroups := []string{"Infrastructure", "Infrastructure/Database", "Infrastructure/Production-Lab", "Infrastructure/Development"}
+	for index, want := range wantGroups {
+		if got[index].Group != want {
+			t.Fatalf("row %d group = %q, want %q", index, got[index].Group, want)
+		}
+	}
+	if got[0].PasswordEnc != "gtenc-prod" || got[1].PrivateKey != "/keys/db" {
+		t.Fatal("remove group changed encrypted profile payload")
+	}
+	if rows[0].Group != "Infrastructure/Production" || rows[1].Group != "Infrastructure/Production/Database" {
+		t.Fatalf("remove group mutated source: %#v", rows)
+	}
+}
+
+func TestRemoveTopLevelConnectionGroupUsesDedicatedFallbackGroup(t *testing.T) {
+	rows := []connectionProfile{{ID: "prod", Group: "Production"}, {ID: "db", Group: "Production/Database"}}
+	got, changed, err := removeConnectionGroup(rows, "Production", removedGroupFallback)
+	if err != nil || changed != 2 {
+		t.Fatalf("remove top-level group = changed %d err %v", changed, err)
+	}
+	if got[0].Group != "Ungrouped" || got[1].Group != "Database" {
+		t.Fatalf("top-level reassignment = %#v", got)
+	}
+	if _, _, err := removeConnectionGroup(rows, "Missing", "Local"); err == nil {
+		t.Fatal("missing group removal should fail closed")
+	}
+}
+
+func TestRemoveGroupConfirmationDefaultsToCancelAndNamesAffectedProfiles(t *testing.T) {
+	prompt := groupRemovePromptFor("Infrastructure/Production", 3)
+	if prompt.Title != "Remove Group" || !strings.Contains(prompt.Message, "Infrastructure/Production") || !strings.Contains(prompt.Message, "3 saved connection(s)") {
+		t.Fatalf("remove prompt = %#v", prompt)
+	}
+	var options []string
+	if confirmGroupRemove("Infrastructure/Production", 3, func(_, _ string, values ...string) int {
+		options = append([]string(nil), values...)
+		return 1
+	}) {
+		t.Fatal("default cancel result removed group")
+	}
+	if !reflect.DeepEqual(options, []string{"Remove Group", "Cancel"}) {
+		t.Fatalf("remove options = %#v", options)
+	}
+	if !confirmGroupRemove("Infrastructure/Production", 3, func(_, _ string, _ ...string) int { return 0 }) {
+		t.Fatal("explicit remove result was rejected")
+	}
+	if confirmGroupRemove("Infrastructure/Production", 3, nil) {
+		t.Fatal("unavailable dialog must fail closed")
+	}
+}
+
 func TestCompactNavigatorUsesLeafGroupName(t *testing.T) {
 	if got := compactConnectionGroup("Infrastructure/Production/Database"); got != "Database" {
 		t.Fatalf("compact group = %q, want leaf name", got)

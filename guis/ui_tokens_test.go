@@ -268,7 +268,7 @@ func TestSettingsEditorAndManagerLayoutsUseSemanticControlMetrics(t *testing.T) 
 	manager := connectionManagerLayoutFor(nativeControls)
 	if manager.Group.Height != nativeControls.InputHeight || manager.Search.Height != nativeControls.InputHeight || manager.Find.Height != nativeControls.ButtonHeight ||
 		manager.CloseAfterConnect.Height != nativeControls.InputHeight || manager.FavoritesOnly.Height != nativeControls.InputHeight || manager.New.Height != nativeControls.ButtonHeight ||
-		manager.Edit.Height != nativeControls.ButtonHeight || manager.Duplicate.Height != nativeControls.ButtonHeight || manager.RenameGroup.Height != nativeControls.ButtonHeight ||
+		manager.Edit.Height != nativeControls.ButtonHeight || manager.Duplicate.Height != nativeControls.ButtonHeight || manager.RenameGroup.Height != nativeControls.ButtonHeight || manager.RemoveGroup.Height != nativeControls.ButtonHeight ||
 		manager.Delete.Height != nativeControls.ButtonHeight || manager.Test.Height != nativeControls.ButtonHeight || manager.Favorite.Height != nativeControls.ButtonHeight || manager.Connect.Height != nativeControls.PrimaryButtonHeight {
 		t.Fatalf("manager controls do not use semantic heights: %#v", manager)
 	}
@@ -284,7 +284,7 @@ func TestSettingsEditorAndManagerLayoutsUseSemanticControlMetrics(t *testing.T) 
 	}
 	for left, right := range map[layoutRect]layoutRect{
 		manager.New: manager.Edit, manager.Edit: manager.Duplicate, manager.Duplicate: manager.RenameGroup,
-		manager.RenameGroup: manager.Delete, manager.Delete: manager.Test, manager.Test: manager.Favorite, manager.Favorite: manager.Connect,
+		manager.RenameGroup: manager.RemoveGroup, manager.RemoveGroup: manager.Delete, manager.Delete: manager.Test, manager.Test: manager.Favorite, manager.Favorite: manager.Connect,
 	} {
 		if left.X+left.Width > right.X-nativeControls.FieldLabelGap {
 			t.Fatalf("manager actions overlap or lose semantic spacing: left=%#v right=%#v", left, right)

@@ -205,6 +205,7 @@ func (m *connectionManagerWindow) build() {
 	root.AddSubview(button(layout.Edit.X, layout.Edit.Y, layout.Edit.Width, layout.Edit.Height, tr("action.edit"), "connection_manager.edit", m.editSelected))
 	root.AddSubview(button(layout.Duplicate.X, layout.Duplicate.Y, layout.Duplicate.Width, layout.Duplicate.Height, "Duplicate", "connection_manager.duplicate", m.duplicateSelected))
 	root.AddSubview(button(layout.RenameGroup.X, layout.RenameGroup.Y, layout.RenameGroup.Width, layout.RenameGroup.Height, "Rename Group", "connection_manager.rename_group", m.renameSelectedGroup))
+	root.AddSubview(button(layout.RemoveGroup.X, layout.RemoveGroup.Y, layout.RemoveGroup.Width, layout.RemoveGroup.Height, "Remove Group", "connection_manager.remove_group", m.removeSelectedGroup))
 	root.AddSubview(button(layout.Delete.X, layout.Delete.Y, layout.Delete.Width, layout.Delete.Height, tr("action.delete"), "connection_manager.delete", m.deleteSelected))
 	root.AddSubview(button(layout.Test.X, layout.Test.Y, layout.Test.Width, layout.Test.Height, tr("action.test"), "connection_manager.test", m.testSelected))
 	root.AddSubview(button(layout.Favorite.X, layout.Favorite.Y, layout.Favorite.Width, layout.Favorite.Height, tr("manager.favorite"), "connection_manager.favorite", m.toggleFavorite))
