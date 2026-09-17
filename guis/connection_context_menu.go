@@ -12,9 +12,10 @@ import (
 
 type connectionContextMenuActions struct {
 	connect, copyAddress, copyCommand, edit, duplicate, test, favorite, delete func()
+	moveToGroup                                                                func(string)
 }
 
-func connectionContextMenuItems(profile connectionProfile, actions connectionContextMenuActions) []uikit.MenuItem {
+func connectionContextMenuItems(profile connectionProfile, groups []connectionGroupOption, actions connectionContextMenuActions) []uikit.MenuItem {
 	favoriteTitle := "Add to Favorites"
 	if profile.Favorite {
 		favoriteTitle = "Remove from Favorites"
@@ -31,8 +32,60 @@ func connectionContextMenuItems(profile connectionProfile, actions connectionCon
 		uikit.MenuItem{Title: "Duplicate…", Callback: actions.duplicate},
 		uikit.MenuItem{Title: "Test Connection", Callback: actions.test},
 		uikit.MenuItem{Title: favoriteTitle, Callback: actions.favorite},
+		uikit.MenuItem{Title: "Move to Group", Children: connectionMoveGroupItems(profile, groups, actions.moveToGroup)},
 		uikit.MenuItem{Title: "Delete…", Callback: actions.delete},
 	)
+}
+
+func connectionMoveGroupItems(profile connectionProfile, groups []connectionGroupOption, move func(string)) []uikit.MenuItem {
+	current := normalizeConnectionGroup(profile.Group)
+	if current == "" {
+		current = removedGroupFallback
+	}
+	destinations := []string{removedGroupFallback}
+	seen := map[string]struct{}{strings.ToLower(removedGroupFallback): {}}
+	for _, option := range groups {
+		path := normalizeConnectionGroup(option.Path)
+		if path == "" {
+			continue
+		}
+		key := strings.ToLower(path)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		destinations = append(destinations, path)
+	}
+	items := make([]uikit.MenuItem, 0, len(destinations))
+	for _, destination := range destinations {
+		destination := destination
+		item := uikit.MenuItem{Title: strings.ReplaceAll(destination, "/", " › ")}
+		if strings.EqualFold(destination, current) {
+			item.Flags = fltk_bridge.MENU_INACTIVE
+		} else if move != nil {
+			item.Callback = func() { move(destination) }
+		}
+		items = append(items, item)
+	}
+	return items
+}
+
+// moveConnectionProfileGroup changes only the non-sensitive group projection.
+// Credentials and every other persisted field stay byte-for-byte unchanged.
+func moveConnectionProfileGroup(profile connectionProfile, destination string) (connectionProfile, bool) {
+	destination = normalizeConnectionGroup(destination)
+	if destination == "" {
+		destination = removedGroupFallback
+	}
+	current := normalizeConnectionGroup(profile.Group)
+	if current == "" {
+		current = removedGroupFallback
+	}
+	if strings.EqualFold(current, destination) {
+		return profile, false
+	}
+	profile.Group = destination
+	return profile, true
 }
 
 // connectionClipboardAddress returns a paste-ready SSH address while excluding
@@ -137,7 +190,7 @@ func (m *connectionManagerWindow) installContextMenu(parent interface{ AddSubvie
 				}
 			}
 		}
-		menu.SetMenu(connectionContextMenuItems(profile, connectionContextMenuActions{
+		menu.SetMenu(connectionContextMenuItems(profile, connectionManagerGroupOptions(m.owner.allRows), connectionContextMenuActions{
 			connect:     run(m.connectSelected),
 			copyAddress: run(m.copySelectedAddress),
 			copyCommand: run(m.copySelectedSSHCommand),
@@ -145,7 +198,12 @@ func (m *connectionManagerWindow) installContextMenu(parent interface{ AddSubvie
 			duplicate:   run(m.duplicateSelected),
 			test:        run(m.testSelected),
 			favorite:    run(m.toggleFavorite),
-			delete:      run(m.deleteSelected),
+			moveToGroup: func(destination string) {
+				if m.selectContextProfile(profile.ID) {
+					m.moveSelectedToGroup(destination)
+				}
+			},
+			delete: run(m.deleteSelected),
 		}))
 		menu.Popup()
 	})
@@ -179,6 +237,34 @@ func (m *connectionManagerWindow) copySelectedSSHCommand() {
 	if m.owner != nil {
 		m.owner.setStatus("Copied SSH command for " + profile.Name)
 	}
+}
+
+func (m *connectionManagerWindow) moveSelectedToGroup(destination string) {
+	profile, ok := m.selectedProfile()
+	if !ok || m.owner == nil {
+		return
+	}
+	if editor := m.owner.editor; editor != nil && editor.profile.ID == profile.ID {
+		if editor.queueAfterCloseForProfile(profile.ID, func() {
+			if m.selectContextProfile(profile.ID) {
+				m.moveSelectedToGroup(destination)
+			}
+		}) {
+			editor.window.RequestClose()
+			return
+		}
+	}
+	moved, changed := moveConnectionProfileGroup(profile, destination)
+	if !changed {
+		return
+	}
+	if err := m.owner.persistProfile(moved); err != nil {
+		m.owner.showTopNotice("Move Connection", err.Error(), true)
+		return
+	}
+	m.owner.refreshTable()
+	m.reload(moved.ID)
+	m.owner.setStatus("Moved " + moved.Name + " to " + moved.Group)
 }
 
 // selectQuickContextProfile resolves the profile again when the menu command
@@ -258,6 +344,37 @@ func (a *finalShellApp) copySelectedProfileSSHCommand() {
 	a.setStatus("Copied SSH command for " + profile.Name)
 }
 
+func (a *finalShellApp) moveSelectedProfileToGroup(destination string) {
+	profile, ok := a.selectedProfile()
+	if !ok {
+		return
+	}
+	if editor := a.editor; editor != nil && editor.profile.ID == profile.ID {
+		if editor.queueAfterCloseForProfile(profile.ID, func() {
+			if a.selectQuickContextProfile(profile.ID) {
+				a.moveSelectedProfileToGroup(destination)
+			}
+		}) {
+			editor.window.RequestClose()
+			return
+		}
+	}
+	moved, changed := moveConnectionProfileGroup(profile, destination)
+	if !changed {
+		return
+	}
+	if err := a.persistProfile(moved); err != nil {
+		a.showTopNotice("Move Connection", err.Error(), true)
+		return
+	}
+	a.refreshTable()
+	a.updateSelectedSummary()
+	a.setStatus("Moved " + moved.Name + " to " + moved.Group)
+	if a.manager != nil {
+		a.manager.reload(moved.ID)
+	}
+}
+
 func (a *finalShellApp) installQuickConnectionContextMenu(parent interface{ AddSubview(viewable uikit.Viewable) }) {
 	if a == nil || a.table == nil || parent == nil {
 		return
@@ -277,7 +394,7 @@ func (a *finalShellApp) installQuickConnectionContextMenu(parent interface{ AddS
 				}
 			}
 		}
-		menu.SetMenu(connectionContextMenuItems(profile, connectionContextMenuActions{
+		menu.SetMenu(connectionContextMenuItems(profile, connectionManagerGroupOptions(a.allRows), connectionContextMenuActions{
 			connect:     run(a.connectSelected),
 			copyAddress: run(a.copySelectedProfileAddress),
 			copyCommand: run(a.copySelectedProfileSSHCommand),
@@ -285,7 +402,12 @@ func (a *finalShellApp) installQuickConnectionContextMenu(parent interface{ AddS
 			duplicate:   run(a.duplicateSelectedProfile),
 			test:        run(a.testSelectedProfile),
 			favorite:    run(a.toggleSelectedProfileFavorite),
-			delete:      run(a.deleteProfile),
+			moveToGroup: func(destination string) {
+				if a.selectQuickContextProfile(profile.ID) {
+					a.moveSelectedProfileToGroup(destination)
+				}
+			},
+			delete: run(a.deleteProfile),
 		}))
 		menu.Popup()
 	})

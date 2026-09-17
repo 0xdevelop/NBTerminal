@@ -17,7 +17,12 @@ import (
 
 func TestConnectionManagerRowContextMenuReflectsFavoriteAndRoutesCommands(t *testing.T) {
 	invocations := map[string]int{}
-	items := connectionContextMenuItems(connectionProfile{Type: connectionTypeSSH}, connectionContextMenuActions{
+	movedTo := ""
+	items := connectionContextMenuItems(connectionProfile{Type: connectionTypeSSH, Group: "Production"}, []connectionGroupOption{
+		{},
+		{Path: "Development", Label: "Development"},
+		{Path: "Production", Label: "Production"},
+	}, connectionContextMenuActions{
 		connect:     func() { invocations["connect"]++ },
 		copyAddress: func() { invocations["copy_address"]++ },
 		copyCommand: func() { invocations["copy_command"]++ },
@@ -25,15 +30,22 @@ func TestConnectionManagerRowContextMenuReflectsFavoriteAndRoutesCommands(t *tes
 		duplicate:   func() { invocations["duplicate"]++ },
 		test:        func() { invocations["test"]++ },
 		favorite:    func() { invocations["favorite"]++ },
+		moveToGroup: func(group string) { movedTo = group },
 		delete:      func() { invocations["delete"]++ },
 	})
-	want := []string{"Connect", "Copy Address", "Copy SSH Command", "Edit…", "Duplicate…", "Test Connection", "Add to Favorites", "Delete…"}
+	want := []string{"Connect", "Copy Address", "Copy SSH Command", "Edit…", "Duplicate…", "Test Connection", "Add to Favorites", "Move to Group", "Delete…"}
 	if len(items) != len(want) {
 		t.Fatalf("context menu item count = %d, want %d", len(items), len(want))
 	}
 	for index, title := range want {
-		if items[index].Title != title || items[index].Callback == nil {
+		if items[index].Title != title {
 			t.Fatalf("context menu item %d = %#v", index, items[index])
+		}
+		if title == "Move to Group" {
+			continue
+		}
+		if items[index].Callback == nil {
+			t.Fatalf("context menu item %d has no callback: %#v", index, items[index])
 		}
 		items[index].Callback()
 	}
@@ -42,9 +54,67 @@ func TestConnectionManagerRowContextMenuReflectsFavoriteAndRoutesCommands(t *tes
 			t.Fatalf("%s callback count = %d, want 1", action, invocations[action])
 		}
 	}
-	items = connectionContextMenuItems(connectionProfile{Favorite: true}, connectionContextMenuActions{})
-	if len(items) != 6 || items[4].Title != "Remove from Favorites" {
+	move := items[7]
+	if len(move.Children) != 3 || move.Children[0].Title != "Ungrouped" || move.Children[1].Title != "Development" || move.Children[2].Title != "Production" {
+		t.Fatalf("move submenu = %#v", move.Children)
+	}
+	if move.Children[2].Flags == 0 {
+		t.Fatalf("current group is not disabled: %#v", move.Children[2])
+	}
+	move.Children[1].Callback()
+	if movedTo != "Development" {
+		t.Fatalf("move callback destination = %q, want Development", movedTo)
+	}
+	items = connectionContextMenuItems(connectionProfile{Favorite: true}, nil, connectionContextMenuActions{})
+	if len(items) != 7 || items[4].Title != "Remove from Favorites" {
 		t.Fatalf("local favorite menu = %#v", items)
+	}
+}
+
+func TestMoveConnectionProfileGroupPreservesSensitiveFields(t *testing.T) {
+	profile := connectionProfile{
+		ID: "prod", Name: "Production", Group: "Old/Group", Type: connectionTypeSSH,
+		PasswordEnc: "gtenc-password-marker", PrivateKey: "gtenc-key-marker",
+	}
+	moved, changed := moveConnectionProfileGroup(profile, " New / Nested ")
+	if !changed || moved.Group != "New/Nested" {
+		t.Fatalf("moved profile = %#v changed=%t", moved, changed)
+	}
+	if moved.PasswordEnc != profile.PasswordEnc || moved.PrivateKey != profile.PrivateKey || moved.ID != profile.ID {
+		t.Fatalf("move changed sensitive or stable fields: %#v", moved)
+	}
+	if _, changed := moveConnectionProfileGroup(moved, "New/Nested"); changed {
+		t.Fatal("same-group move should be a no-op")
+	}
+	ungrouped, changed := moveConnectionProfileGroup(moved, "")
+	if !changed || ungrouped.Group != removedGroupFallback {
+		t.Fatalf("ungrouped move = %#v changed=%t", ungrouped, changed)
+	}
+}
+
+func TestQuickLauncherMoveToGroupPersistsOnlyGroupChange(t *testing.T) {
+	store := newConnectionStore(t.TempDir())
+	profile := connectionProfile{
+		ID: "prod", Name: "Production", Group: "Old/Group", Type: connectionTypeSSH,
+		Host: "prod.internal", Username: "deploy", PasswordEnc: "gtenc-password-marker", PrivateKey: "gtenc-key-marker",
+	}
+	if err := store.SaveActive([]connectionProfile{profile}, profile.ID); err != nil {
+		t.Fatalf("seed store: %v", err)
+	}
+	app := &finalShellApp{store: store, allRows: []connectionProfile{profile}, rows: []connectionProfile{profile}, idx: 0}
+	app.moveSelectedProfileToGroup("Production/Database")
+
+	reloaded := newConnectionStore(filepath.Dir(store.path))
+	if err := reloaded.Load(); err != nil {
+		t.Fatalf("reload store: %v", err)
+	}
+	rows := reloaded.List()
+	if len(rows) != 1 || rows[0].Group != "Production/Database" {
+		t.Fatalf("persisted moved rows = %#v", rows)
+	}
+	got := rows[0]
+	if got.ID != profile.ID || got.Host != profile.Host || got.Username != profile.Username || got.PasswordEnc != profile.PasswordEnc || got.PrivateKey != profile.PrivateKey {
+		t.Fatalf("move changed non-group profile data: %#v", got)
 	}
 }
 
