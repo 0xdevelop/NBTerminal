@@ -13,6 +13,7 @@ import (
 	"github.com/0xdevelop/NBTerminal/locales"
 	"github.com/0xdevelop/fltk2go/fltk_bridge"
 	"github.com/0xdevelop/fltk2go/uikit"
+	"github.com/0xdevelop/fltk2go/uikit/checkbox"
 	"github.com/0xdevelop/fltk2go/uikit/tableview"
 	"github.com/george012/gtbox"
 )
@@ -438,6 +439,84 @@ func TestConnectionManagerSelectionStatusIncludesVisibleDescriptionOnly(t *testi
 	profile.Description = ""
 	if got := managerSelectionStatus(profile); strings.Contains(got, "Description:") {
 		t.Fatalf("empty description left a status suffix: %q", got)
+	}
+}
+
+func TestConnectionManagerResultStatusMakesActiveFiltersVisible(t *testing.T) {
+	profile := connectionProfile{Name: "Production DB", Group: "Infrastructure"}
+	manager := &connectionManagerWindow{
+		rows:          []connectionProfile{profile},
+		idx:           0,
+		selectedGroup: "Infrastructure",
+		owner: &finalShellApp{allRows: []connectionProfile{
+			profile,
+			{Name: "Development"},
+		}},
+	}
+	if got := manager.resultStatus(); got != "Showing 1 of 2 connections · "+managerSelectionStatus(profile) {
+		t.Fatalf("filtered result status = %q", got)
+	}
+
+	manager.rows = nil
+	manager.idx = -1
+	if got := manager.resultStatus(); got != "Showing 0 of 2 connections · No matching connections" {
+		t.Fatalf("empty filtered result status = %q", got)
+	}
+
+	manager.selectedGroup = ""
+	manager.rows = []connectionProfile{profile}
+	manager.idx = 0
+	if got := manager.resultStatus(); got != managerSelectionStatus(profile) {
+		t.Fatalf("unfiltered result status = %q", got)
+	}
+}
+
+func TestConnectionManagerResetViewClearsAndPersistsEveryViewFilter(t *testing.T) {
+	oldGlobal := config.GlobalConfig
+	oldApp := config.CurrentApp
+	t.Cleanup(func() { config.GlobalConfig, config.CurrentApp = oldGlobal, oldApp })
+
+	config.GlobalConfig = &config.FileConfig{Language: "en"}
+	config.GlobalConfig.Normalize()
+	config.GlobalConfig.ConnectionManager = &config.ConnectionManagerSettings{
+		FavoritesOnly: true, SortColumn: "name", SortDescending: true, SelectedGroup: "Production",
+	}
+	config.CurrentApp = config.NewApp("NBTerminal-test", "test.nbterminal", "test", gtbox.RunModeTest, 0)
+	config.CurrentApp.AppConfigFilePath = filepath.Join(t.TempDir(), "config.json")
+
+	rows := []connectionProfile{
+		{ID: "prod", Name: "Production", Group: "Production", Favorite: true},
+		{ID: "dev", Name: "Development", Group: "Development"},
+	}
+	manager := &connectionManagerWindow{
+		owner:         &finalShellApp{allRows: rows},
+		rows:          rows[:1],
+		idx:           0,
+		search:        uikit.NewInput(0, 0, 200, nativeControls.InputHeight, ""),
+		favoritesOnly: checkbox.NewUICheckbox(rect(0, 0, 200, nativeControls.CheckboxHeight), "Favorites only"),
+		selectedGroup: "Production",
+		sort:          connectionManagerSort{Column: managerSortName, Descending: true, Active: true},
+	}
+	manager.search.SetText("prod")
+	manager.favoritesOnly.SetValue(true)
+	manager.resetView()
+
+	if manager.search.Text() != "" || manager.favoritesOnly.Value() || manager.selectedGroup != "" || manager.sort.Active {
+		t.Fatalf("manager filters were not reset: query=%q favorite=%t group=%q sort=%#v", manager.search.Text(), manager.favoritesOnly.Value(), manager.selectedGroup, manager.sort)
+	}
+	if len(manager.rows) != 2 || manager.idx != 0 || manager.rows[manager.idx].ID != "prod" {
+		t.Fatalf("reset rows/selection = %#v idx=%d", manager.rows, manager.idx)
+	}
+	buf, err := os.ReadFile(config.CurrentApp.AppConfigFilePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved config.FileConfig
+	if err := json.Unmarshal(buf, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if saved.ConnectionManager == nil || saved.ConnectionManager.FavoritesOnly || saved.ConnectionManager.SortColumn != "" || saved.ConnectionManager.SelectedGroup != "" {
+		t.Fatalf("persisted manager view was not reset: %#v", saved.ConnectionManager)
 	}
 }
 

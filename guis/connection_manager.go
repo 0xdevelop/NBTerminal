@@ -217,6 +217,7 @@ func (m *connectionManagerWindow) build() {
 		m.reload(preferredID)
 	})
 	root.AddSubview(m.favoritesOnly)
+	root.AddSubview(button(layout.ResetView.X, layout.ResetView.Y, layout.ResetView.Width, layout.ResetView.Height, "Reset View", "connection_manager.reset_view", m.resetView))
 	root.AddSubview(button(layout.New.X, layout.New.Y, layout.New.Width, layout.New.Height, tr("action.new"), "connection_manager.new", m.newProfile))
 	root.AddSubview(button(layout.Edit.X, layout.Edit.Y, layout.Edit.Width, layout.Edit.Height, tr("action.edit"), "connection_manager.edit", m.editSelected))
 	root.AddSubview(button(layout.Duplicate.X, layout.Duplicate.Y, layout.Duplicate.Width, layout.Duplicate.Height, "Duplicate", "connection_manager.duplicate", m.duplicateSelected))
@@ -364,7 +365,12 @@ func (m *connectionManagerWindow) sortByColumn(column int) {
 }
 
 func (m *connectionManagerWindow) publishSortAutomation() {
-	if m == nil || m.table == nil || m.table.View() == nil || !m.sort.Active {
+	if m == nil || m.table == nil || m.table.View() == nil {
+		return
+	}
+	if !m.sort.Active {
+		m.table.View().SetAutomationProperty("sortColumn", "")
+		m.table.View().SetAutomationProperty("sortDirection", "")
 		return
 	}
 	m.table.View().SetAutomationProperty("sortColumn", managerSortColumnName(m.sort.Column))
@@ -656,12 +662,38 @@ func (m *connectionManagerWindow) updateStatus() {
 	if m == nil || m.status == nil {
 		return
 	}
-	profile, ok := m.selectedProfile()
-	if !ok {
-		m.status.SetText(tr("connections.none"))
-		return
+	m.status.SetText(m.resultStatus())
+}
+
+func (m *connectionManagerWindow) resultStatus() string {
+	if m == nil {
+		return ""
 	}
-	m.status.SetText(managerSelectionStatus(profile))
+	selection := tr("connections.none")
+	profile, selected := m.selectedProfile()
+	if selected {
+		selection = managerSelectionStatus(profile)
+	}
+	if !m.hasResultFilter() {
+		return selection
+	}
+	if !selected {
+		selection = "No matching connections"
+	}
+	total := 0
+	if m.owner != nil {
+		total = len(m.owner.allRows)
+	}
+	return fmt.Sprintf("Showing %d of %d connections · %s", len(m.rows), total, selection)
+}
+
+func (m *connectionManagerWindow) hasResultFilter() bool {
+	if m == nil {
+		return false
+	}
+	return normalizeConnectionGroup(m.selectedGroup) != "" ||
+		(m.search != nil && strings.TrimSpace(m.search.Text()) != "") ||
+		(m.favoritesOnly != nil && m.favoritesOnly.Value())
 }
 
 func managerSelectionStatus(profile connectionProfile) string {
@@ -808,6 +840,36 @@ func (m *connectionManagerWindow) persistViewPreferences(favoritesOnly bool, sor
 		return false
 	}
 	return true
+}
+
+// resetView clears every persisted manager projection in one transaction-like
+// step. UI state changes only after persistence succeeds, so a failed config
+// write cannot leave the controls disagreeing with the next launch.
+func (m *connectionManagerWindow) resetView() {
+	if m == nil {
+		return
+	}
+	preferredID := ""
+	if profile, ok := m.selectedProfile(); ok {
+		preferredID = profile.ID
+	}
+	if !m.persistViewPreferences(false, connectionManagerSort{}, "") {
+		return
+	}
+	m.selectedGroup = ""
+	m.sort = connectionManagerSort{}
+	if m.search != nil {
+		m.search.SetText("")
+	}
+	if m.favoritesOnly != nil {
+		m.favoritesOnly.SetValue(false)
+	}
+	m.selectGroupOption("")
+	m.publishSortAutomation()
+	m.reload(preferredID)
+	if m.owner != nil {
+		m.owner.setStatus("Connection Manager view reset")
+	}
 }
 
 func (m *connectionManagerWindow) toggleFavorite() {
