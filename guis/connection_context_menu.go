@@ -219,8 +219,12 @@ func (m *connectionManagerWindow) copySelectedAddress() {
 		return
 	}
 	fltk_bridge.CopyToClipboard(address)
+	message := "Copied address for " + profile.Name
+	if m.status != nil {
+		m.status.SetText(message)
+	}
 	if m.owner != nil {
-		m.owner.setStatus("Copied address for " + profile.Name)
+		m.owner.setStatus(message)
 	}
 }
 
@@ -234,8 +238,12 @@ func (m *connectionManagerWindow) copySelectedSSHCommand() {
 		return
 	}
 	fltk_bridge.CopyToClipboard(command)
+	message := "Copied SSH command for " + profile.Name
+	if m.status != nil {
+		m.status.SetText(message)
+	}
 	if m.owner != nil {
-		m.owner.setStatus("Copied SSH command for " + profile.Name)
+		m.owner.setStatus(message)
 	}
 }
 

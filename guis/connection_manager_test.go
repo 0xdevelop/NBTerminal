@@ -480,8 +480,13 @@ func TestConnectionManagerTableKeyboardCommandsRejectModifiedKeys(t *testing.T) 
 		{name: "favorite", event: tableview.TableKeyEvent{Key: ' '}, want: managerTableToggleFavorite},
 		{name: "edit", event: tableview.TableKeyEvent{Key: fltk_bridge.F2}, want: managerTableEdit},
 		{name: "delete", event: tableview.TableKeyEvent{Key: fltk_bridge.DELETE}, want: managerTableDelete},
+		{name: "copy address", event: tableview.TableKeyEvent{Key: 'c', State: fltk_bridge.CTRL}, want: managerTableCopyAddress},
+		{name: "copy command", event: tableview.TableKeyEvent{Key: 'c', State: fltk_bridge.CTRL | fltk_bridge.SHIFT}, want: managerTableCopyCommand},
+		{name: "duplicate", event: tableview.TableKeyEvent{Key: 'd', State: fltk_bridge.CTRL}, want: managerTableDuplicate},
 		{name: "control space", event: tableview.TableKeyEvent{Key: ' ', State: fltk_bridge.CTRL}},
 		{name: "alt f2", event: tableview.TableKeyEvent{Key: fltk_bridge.F2, State: fltk_bridge.ALT}},
+		{name: "meta copy", event: tableview.TableKeyEvent{Key: 'c', State: fltk_bridge.META}},
+		{name: "alt duplicate", event: tableview.TableKeyEvent{Key: 'd', State: fltk_bridge.ALT}},
 		{name: "unknown", event: tableview.TableKeyEvent{Key: 'x'}},
 	}
 	for _, test := range tests {

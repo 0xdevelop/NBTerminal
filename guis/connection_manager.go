@@ -73,6 +73,9 @@ const (
 	managerTableToggleFavorite
 	managerTableEdit
 	managerTableDelete
+	managerTableCopyAddress
+	managerTableCopyCommand
+	managerTableDuplicate
 )
 
 func (a *finalShellApp) openConnectionManager() {
@@ -169,7 +172,7 @@ func (m *connectionManagerWindow) build() {
 		m.table.OnActivate(m.activate)
 		m.table.OnKey(m.handleTableKey)
 		m.table.OnColumnHeaderClick(m.sortByColumn)
-		m.table.View().SetAutomationProperty("keyboardActions", "Space: favorite; F2: edit; Delete: remove")
+		m.table.View().SetAutomationProperty("keyboardActions", "Space: favorite; F2: edit; Delete: remove; Ctrl+C: copy address; Ctrl+Shift+C: copy SSH command; Ctrl+D: duplicate")
 		m.publishSortAutomation()
 		m.installContextMenu(root)
 		m.table.SetBackgroundColor(tokenColor(modernTheme.card))
@@ -255,19 +258,36 @@ func (m *connectionManagerWindow) handleSearchKey(action uikit.InputNavigationAc
 }
 
 func connectionManagerActionForTableKey(event tableview.TableKeyEvent) connectionManagerTableKeyAction {
-	if event.State&(fltk_bridge.CTRL|fltk_bridge.ALT|fltk_bridge.META) != 0 {
+	if event.State&(fltk_bridge.ALT|fltk_bridge.META) != 0 {
 		return managerTableKeyNone
 	}
+	modifiers := event.State & (fltk_bridge.CTRL | fltk_bridge.SHIFT)
 	switch event.Key {
 	case ' ':
-		return managerTableToggleFavorite
+		if modifiers == 0 {
+			return managerTableToggleFavorite
+		}
 	case fltk_bridge.F2:
-		return managerTableEdit
+		if modifiers == 0 {
+			return managerTableEdit
+		}
 	case fltk_bridge.DELETE:
-		return managerTableDelete
-	default:
-		return managerTableKeyNone
+		if modifiers == 0 {
+			return managerTableDelete
+		}
+	case 'c', 'C':
+		if modifiers == fltk_bridge.CTRL {
+			return managerTableCopyAddress
+		}
+		if modifiers == fltk_bridge.CTRL|fltk_bridge.SHIFT {
+			return managerTableCopyCommand
+		}
+	case 'd', 'D':
+		if modifiers == fltk_bridge.CTRL {
+			return managerTableDuplicate
+		}
 	}
+	return managerTableKeyNone
 }
 
 func (m *connectionManagerWindow) handleTableKey(event tableview.TableKeyEvent) bool {
@@ -284,6 +304,12 @@ func (m *connectionManagerWindow) handleTableKey(event tableview.TableKeyEvent) 
 		m.editSelected()
 	case managerTableDelete:
 		m.deleteSelected()
+	case managerTableCopyAddress:
+		m.copySelectedAddress()
+	case managerTableCopyCommand:
+		m.copySelectedSSHCommand()
+	case managerTableDuplicate:
+		m.duplicateSelected()
 	default:
 		return false
 	}
