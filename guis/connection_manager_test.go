@@ -11,7 +11,9 @@ import (
 
 	"github.com/0xdevelop/NBTerminal/config"
 	"github.com/0xdevelop/NBTerminal/locales"
+	"github.com/0xdevelop/fltk2go/fltk_bridge"
 	"github.com/0xdevelop/fltk2go/uikit"
+	"github.com/0xdevelop/fltk2go/uikit/tableview"
 	"github.com/george012/gtbox"
 )
 
@@ -466,6 +468,28 @@ func TestConnectionManagerSearchKeyboardMovesSelectionAndEscapeClearsQuery(t *te
 	}
 	if manager.handleSearchKey(uikit.InputNavigationCancel) {
 		t.Fatal("empty manager Escape must remain available to native input handling")
+	}
+}
+
+func TestConnectionManagerTableKeyboardCommandsRejectModifiedKeys(t *testing.T) {
+	tests := []struct {
+		name  string
+		event tableview.TableKeyEvent
+		want  connectionManagerTableKeyAction
+	}{
+		{name: "favorite", event: tableview.TableKeyEvent{Key: ' '}, want: managerTableToggleFavorite},
+		{name: "edit", event: tableview.TableKeyEvent{Key: fltk_bridge.F2}, want: managerTableEdit},
+		{name: "delete", event: tableview.TableKeyEvent{Key: fltk_bridge.DELETE}, want: managerTableDelete},
+		{name: "control space", event: tableview.TableKeyEvent{Key: ' ', State: fltk_bridge.CTRL}},
+		{name: "alt f2", event: tableview.TableKeyEvent{Key: fltk_bridge.F2, State: fltk_bridge.ALT}},
+		{name: "unknown", event: tableview.TableKeyEvent{Key: 'x'}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := connectionManagerActionForTableKey(test.event); got != test.want {
+				t.Fatalf("action = %v, want %v", got, test.want)
+			}
+		})
 	}
 }
 

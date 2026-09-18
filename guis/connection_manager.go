@@ -66,6 +66,15 @@ type connectionManagerSort struct {
 	Active     bool
 }
 
+type connectionManagerTableKeyAction uint8
+
+const (
+	managerTableKeyNone connectionManagerTableKeyAction = iota
+	managerTableToggleFavorite
+	managerTableEdit
+	managerTableDelete
+)
+
 func (a *finalShellApp) openConnectionManager() {
 	if a == nil {
 		return
@@ -158,7 +167,9 @@ func (m *connectionManagerWindow) build() {
 		m.table.SetDataSource(m.model)
 		m.table.SetDelegate(tableDelegate{onSelect: m.selectRow})
 		m.table.OnActivate(m.activate)
+		m.table.OnKey(m.handleTableKey)
 		m.table.OnColumnHeaderClick(m.sortByColumn)
+		m.table.View().SetAutomationProperty("keyboardActions", "Space: favorite; F2: edit; Delete: remove")
 		m.publishSortAutomation()
 		m.installContextMenu(root)
 		m.table.SetBackgroundColor(tokenColor(modernTheme.card))
@@ -241,6 +252,42 @@ func (m *connectionManagerWindow) handleSearchKey(action uikit.InputNavigationAc
 		return true
 	}
 	return false
+}
+
+func connectionManagerActionForTableKey(event tableview.TableKeyEvent) connectionManagerTableKeyAction {
+	if event.State&(fltk_bridge.CTRL|fltk_bridge.ALT|fltk_bridge.META) != 0 {
+		return managerTableKeyNone
+	}
+	switch event.Key {
+	case ' ':
+		return managerTableToggleFavorite
+	case fltk_bridge.F2:
+		return managerTableEdit
+	case fltk_bridge.DELETE:
+		return managerTableDelete
+	default:
+		return managerTableKeyNone
+	}
+}
+
+func (m *connectionManagerWindow) handleTableKey(event tableview.TableKeyEvent) bool {
+	if m == nil {
+		return false
+	}
+	if _, ok := m.selectedProfile(); !ok {
+		return false
+	}
+	switch connectionManagerActionForTableKey(event) {
+	case managerTableToggleFavorite:
+		m.toggleFavorite()
+	case managerTableEdit:
+		m.editSelected()
+	case managerTableDelete:
+		m.deleteSelected()
+	default:
+		return false
+	}
+	return true
 }
 
 func (m *connectionManagerWindow) reload(preferredID string) {
