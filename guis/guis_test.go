@@ -857,6 +857,44 @@ func TestConnectionSearchSupportsQuotedPhrasesAndLiteralUnclosedQuotes(t *testin
 	}
 }
 
+func TestConnectionSearchSupportsExplicitNonSecretFieldFilters(t *testing.T) {
+	rows := []connectionProfile{
+		{ID: "prod-db", Name: "Primary Database", Group: "Production/Database", Type: connectionTypeSSH, Host: "db.internal", Description: "PostgreSQL leader", Favorite: true, Username: "deploy", PasswordEnc: "gtenc-password-marker", PrivateKey: "/secret/key-marker"},
+		{ID: "prod-web", Name: "Primary Web", Group: "Production/Web", Type: connectionTypeSSH, Host: "web.internal", Description: "Public frontend"},
+		{ID: "local", Name: "Local Shell", Group: "Local", Type: connectionTypeLocal, Favorite: true},
+	}
+
+	tests := []struct {
+		query string
+		want  []string
+	}{
+		{query: `type:ssh group:"production/database"`, want: []string{"prod-db"}},
+		{query: `favorite:true type:local`, want: []string{"local"}},
+		{query: `host:internal description:postgres`, want: []string{"prod-db"}},
+		{query: `name:"primary web"`, want: []string{"prod-web"}},
+		{query: `endpoint:db.internal:22`, want: []string{"prod-db"}},
+		{query: `group:production primary`, want: []string{"prod-db", "prod-web"}},
+	}
+	for _, test := range tests {
+		t.Run(test.query, func(t *testing.T) {
+			gotRows := filterConnections(rows, test.query)
+			got := make([]string, 0, len(gotRows))
+			for _, row := range gotRows {
+				got = append(got, row.ID)
+			}
+			if !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("field search %q = %#v, want %#v", test.query, got, test.want)
+			}
+		})
+	}
+
+	for _, query := range []string{"username:deploy", "password:gtenc-password-marker", "key:key-marker", "favorite:maybe"} {
+		if got := filterConnections(rows, query); len(got) != 0 {
+			t.Fatalf("unsupported or invalid field query %q exposed rows: %#v", query, got)
+		}
+	}
+}
+
 func TestActiveConnectionIndexUsesGlobalConfigSelection(t *testing.T) {
 	oldGlobal := config.GlobalConfig
 	t.Cleanup(func() { config.GlobalConfig = oldGlobal })

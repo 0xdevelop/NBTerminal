@@ -134,6 +134,8 @@ func (m *connectionManagerWindow) build() {
 	root.AddSubview(m.group)
 	root.AddSubview(mutedLabel(312, 99, 76, 20, tr("connections.search")))
 	m.search = inputNoLabel(layout.Search.X, layout.Search.Y, layout.Search.Width, layout.Search.Height, "connection_manager.search", tr("connections.search_placeholder"))
+	m.search.View().SetTooltip(connectionSearchSyntaxHint)
+	m.search.View().SetAutomationProperty("searchSyntax", connectionSearchSyntaxHint)
 	m.search.OnChange(m.applySearch)
 	m.search.OnNavigation(m.handleSearchKey)
 	root.AddSubview(m.search)

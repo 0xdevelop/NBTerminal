@@ -786,6 +786,8 @@ func (a *finalShellApp) build() {
 	a.searchLabel = mutedLabel(quickLayout.SearchLabel.X, quickLayout.SearchLabel.Y, quickLayout.SearchLabel.Width, quickLayout.SearchLabel.Height, tr("connections.search"))
 	quickPanel.AddSubview(a.searchLabel)
 	a.searchInput = inputNoLabel(quickLayout.Search.X, quickLayout.Search.Y, quickLayout.Search.Width, quickLayout.Search.Height, "connections.search", tr("connections.search_placeholder")+" · Ctrl+K")
+	a.searchInput.View().SetTooltip(connectionSearchSyntaxHint)
+	a.searchInput.View().SetAutomationProperty("searchSyntax", connectionSearchSyntaxHint)
 	a.searchInput.OnChange(a.jumpToSearchMatch)
 	a.searchInput.OnNavigation(a.handleSearchKey)
 	quickPanel.AddSubview(a.searchInput)
@@ -1812,6 +1814,8 @@ func filterConnections(rows []connectionProfile, query string) []connectionProfi
 
 const quickConnectionLimit = 12
 
+const connectionSearchSyntaxHint = "Search text or filter with name:, group:, type:, host:, endpoint:, description:, favorite:true|false"
+
 // navigatorRows keeps the terminal workspace focused: an empty query shows a
 // compact favorite/recent projection, while explicit search reaches every saved
 // profile. The independent Connection Manager remains the full edit surface.
@@ -1886,22 +1890,30 @@ func connectionMatchesQuery(p connectionProfile, query string) bool {
 
 // connectionSearchRank keeps Enter-to-launch deterministic: exact and prefix
 // profile-name matches precede weaker name matches and metadata-only matches.
-// Secret fields are deliberately absent from both ranking and matching.
+// Secret fields are deliberately absent from both ranking and matching. Explicit
+// field filters support precise launch queries without widening that allowlist.
 func connectionSearchRank(p connectionProfile, query string) (int, bool) {
 	query = strings.ToLower(strings.TrimSpace(query))
 	if query == "" {
 		return 0, true
 	}
-	terms := connectionSearchTerms(query)
-	if len(terms) == 0 {
+	rawTerms := connectionSearchTerms(query)
+	if len(rawTerms) == 0 {
 		return 0, true
+	}
+	terms := make([]connectionSearchTerm, 0, len(rawTerms))
+	hasFieldFilter := false
+	for _, raw := range rawTerms {
+		term := parseConnectionSearchTerm(raw)
+		terms = append(terms, term)
+		hasFieldFilter = hasFieldFilter || term.Field != ""
 	}
 	name := strings.ToLower(strings.TrimSpace(p.Name))
 	nameQuery := query
-	if strings.Contains(query, `"`) {
+	if hasFieldFilter || strings.Contains(query, `"`) {
 		nameQuery = ""
-		if len(terms) == 1 {
-			nameQuery = terms[0]
+		if !hasFieldFilter && len(terms) == 1 {
+			nameQuery = terms[0].Value
 		}
 	}
 	switch {
@@ -1912,30 +1924,98 @@ func connectionSearchRank(p connectionProfile, query string) (int, bool) {
 	case nameQuery != "" && strings.Contains(name, nameQuery):
 		return 2, true
 	}
-	metadata := []string{
-		p.Group,
-		string(p.Type),
-		p.Host,
-		p.tableEndpoint(),
-		p.Description,
-	}
+
 	rank := 0
 	for _, term := range terms {
-		termRank := -1
-		if strings.Contains(name, term) {
-			termRank = 2
-		}
-		for _, value := range metadata {
-			if strings.Contains(strings.ToLower(value), term) && (termRank < 0 || termRank > 3) {
-				termRank = 3
-			}
-		}
-		if termRank < 0 {
+		termRank, matched := connectionSearchTermRank(p, name, term)
+		if !matched {
 			return 0, false
 		}
 		rank += termRank
 	}
 	return rank, true
+}
+
+type connectionSearchTerm struct {
+	Field string
+	Value string
+}
+
+func parseConnectionSearchTerm(raw string) connectionSearchTerm {
+	raw = strings.ToLower(strings.TrimSpace(raw))
+	field, value, found := strings.Cut(raw, ":")
+	if !found {
+		return connectionSearchTerm{Value: raw}
+	}
+	switch field {
+	case "name", "group", "type", "host", "endpoint", "description", "favorite":
+		return connectionSearchTerm{Field: field, Value: strings.TrimSpace(value)}
+	default:
+		return connectionSearchTerm{Value: raw}
+	}
+}
+
+func connectionSearchTermRank(p connectionProfile, name string, term connectionSearchTerm) (int, bool) {
+	if term.Value == "" {
+		return 0, false
+	}
+	if term.Field == "favorite" {
+		switch term.Value {
+		case "true":
+			return 3, p.Favorite
+		case "false":
+			return 3, !p.Favorite
+		default:
+			return 0, false
+		}
+	}
+	if term.Field != "" {
+		value := ""
+		switch term.Field {
+		case "name":
+			value = name
+		case "group":
+			value = p.Group
+		case "type":
+			value = string(p.Type)
+		case "host":
+			value = p.Host
+		case "endpoint":
+			value = p.tableEndpoint()
+		case "description":
+			value = p.Description
+		}
+		value = strings.ToLower(strings.TrimSpace(value))
+		if term.Field == "type" {
+			return 3, value == term.Value
+		}
+		if !strings.Contains(value, term.Value) {
+			return 0, false
+		}
+		if term.Field == "name" {
+			switch {
+			case value == term.Value:
+				return 0, true
+			case strings.HasPrefix(value, term.Value):
+				return 1, true
+			default:
+				return 2, true
+			}
+		}
+		return 3, true
+	}
+
+	termRank := -1
+	if strings.Contains(name, term.Value) {
+		termRank = 2
+	}
+	metadata := []string{p.Group, string(p.Type), p.Host, p.tableEndpoint(), p.Description}
+	for _, value := range metadata {
+		if strings.Contains(strings.ToLower(value), term.Value) && (termRank < 0 || termRank > 3) {
+			termRank = 3
+		}
+	}
+	return termRank, termRank >= 0
 }
 
 // connectionSearchTerms supports shell-like quoted phrases without turning the
