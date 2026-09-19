@@ -930,6 +930,48 @@ func TestConnectionSearchSupportsExclusionsWithoutWideningSecretFields(t *testin
 	}
 }
 
+func TestConnectionSearchSupportsRankedAlternativeClauses(t *testing.T) {
+	rows := []connectionProfile{
+		{ID: "prod-api", Name: "Production API", Group: "Production", Type: connectionTypeSSH, Host: "api.prod.internal"},
+		{ID: "stage-db", Name: "Staging Database", Group: "Staging", Type: connectionTypeSSH, Host: "db.stage.internal"},
+		{ID: "local", Name: "Local shell", Group: "Development", Type: connectionTypeLocal},
+		{ID: "archive", Name: "Archived API", Group: "Archive", Type: connectionTypeSSH, Host: "api.old.internal"},
+	}
+
+	gotRows := filterConnections(rows, `name:"staging database" | name:"production api"`)
+	got := make([]string, 0, len(gotRows))
+	for _, row := range gotRows {
+		got = append(got, row.ID)
+	}
+	if want := []string{"prod-api", "stage-db"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("alternative exact-name search = %#v, want %#v", got, want)
+	}
+
+	gotRows = filterConnections(rows, `type:ssh -group:archive | type:local`)
+	got = got[:0]
+	for _, row := range gotRows {
+		got = append(got, row.ID)
+	}
+	if want := []string{"local", "prod-api", "stage-db"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("alternative filtered search = %#v, want %#v", got, want)
+	}
+}
+
+func TestConnectionSearchAlternativeClausesKeepQuotedPipesAndFailClosed(t *testing.T) {
+	rows := []connectionProfile{
+		{ID: "pipe", Name: "Blue | Green", Username: "secret-user", PasswordEnc: "gtenc-secret"},
+		{ID: "plain", Name: "Blue"},
+	}
+	if got := filterConnections(rows, `"blue | green"`); len(got) != 1 || got[0].ID != "pipe" {
+		t.Fatalf("quoted pipe search = %#v, want pipe", got)
+	}
+	for _, query := range []string{"| blue", "blue |", "blue || green", "username:secret-user | blue", "blue | password:gtenc-secret"} {
+		if got := filterConnections(rows, query); len(got) != 0 {
+			t.Fatalf("invalid alternative query %q widened results: %#v", query, got)
+		}
+	}
+}
+
 func TestActiveConnectionIndexUsesGlobalConfigSelection(t *testing.T) {
 	oldGlobal := config.GlobalConfig
 	t.Cleanup(func() { config.GlobalConfig = oldGlobal })

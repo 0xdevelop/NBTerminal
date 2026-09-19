@@ -1814,7 +1814,7 @@ func filterConnections(rows []connectionProfile, query string) []connectionProfi
 
 const quickConnectionLimit = 12
 
-const connectionSearchSyntaxHint = "Search text or filter with name:, group:, type:, host:, endpoint:, description:, favorite:true|false; prefix any term with - to exclude it"
+const connectionSearchSyntaxHint = "Search text or filter with name:, group:, type:, host:, endpoint:, description:, favorite:true|false; use | between alternatives and prefix any term with - to exclude it"
 
 // navigatorRows keeps the terminal workspace focused: an empty query shows a
 // compact favorite/recent projection, while explicit search reaches every saved
@@ -1897,17 +1897,37 @@ func connectionSearchRank(p connectionProfile, query string) (int, bool) {
 	if query == "" {
 		return 0, true
 	}
-	rawTerms := connectionSearchTerms(query)
-	if len(rawTerms) == 0 {
-		return 0, true
+	rawClauses, valid := connectionSearchClauses(query)
+	if !valid {
+		return 0, false
 	}
-	terms := make([]connectionSearchTerm, 0, len(rawTerms))
-	for _, raw := range rawTerms {
-		term := parseConnectionSearchTerm(raw)
-		if term.Invalid {
-			return 0, false
+	clauses := make([][]connectionSearchTerm, 0, len(rawClauses))
+	for _, rawTerms := range rawClauses {
+		terms := make([]connectionSearchTerm, 0, len(rawTerms))
+		for _, raw := range rawTerms {
+			term := parseConnectionSearchTerm(raw)
+			if term.Invalid {
+				return 0, false
+			}
+			terms = append(terms, term)
 		}
-		terms = append(terms, term)
+		clauses = append(clauses, terms)
+	}
+	bestRank := 0
+	matched := false
+	for _, terms := range clauses {
+		rank, ok := connectionSearchClauseRank(p, terms)
+		if ok && (!matched || rank < bestRank) {
+			bestRank = rank
+			matched = true
+		}
+	}
+	return bestRank, matched
+}
+
+func connectionSearchClauseRank(p connectionProfile, terms []connectionSearchTerm) (int, bool) {
+	if len(terms) == 0 {
+		return 0, false
 	}
 	name := strings.ToLower(strings.TrimSpace(p.Name))
 	nameQuery := ""
@@ -1938,6 +1958,57 @@ func connectionSearchRank(p connectionProfile, query string) (int, bool) {
 		rank += termRank
 	}
 	return rank, true
+}
+
+// connectionSearchClauses splits explicit alternatives without treating a pipe
+// inside a quoted phrase as syntax. Empty alternatives fail closed so a typo or
+// an invalid secret-bearing filter cannot widen the result through another arm.
+func connectionSearchClauses(query string) ([][]string, bool) {
+	var clauses [][]string
+	var current strings.Builder
+	quoted := false
+	escaped := false
+	flush := func() bool {
+		clause := strings.TrimSpace(current.String())
+		current.Reset()
+		if clause == "" {
+			return false
+		}
+		terms := connectionSearchTerms(clause)
+		if len(terms) == 0 {
+			return false
+		}
+		clauses = append(clauses, terms)
+		return true
+	}
+	for _, r := range query {
+		if escaped {
+			current.WriteRune(r)
+			escaped = false
+			continue
+		}
+		if quoted && r == '\\' {
+			current.WriteRune(r)
+			escaped = true
+			continue
+		}
+		if r == '"' {
+			quoted = !quoted
+			current.WriteRune(r)
+			continue
+		}
+		if r == '|' && !quoted {
+			if !flush() {
+				return nil, false
+			}
+			continue
+		}
+		current.WriteRune(r)
+	}
+	if !flush() {
+		return nil, false
+	}
+	return clauses, true
 }
 
 type connectionSearchTerm struct {
