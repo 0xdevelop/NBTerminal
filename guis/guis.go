@@ -1785,13 +1785,14 @@ func filterConnections(rows []connectionProfile, query string) []connectionProfi
 	if query == "" {
 		return append([]connectionProfile(nil), rows...)
 	}
+	now := time.Now()
 	type rankedConnection struct {
 		profile connectionProfile
 		rank    int
 	}
 	ranked := make([]rankedConnection, 0, len(rows))
 	for _, row := range rows {
-		if rank, ok := connectionSearchRank(row, query); ok {
+		if rank, ok := connectionSearchRankAt(row, query, now); ok {
 			ranked = append(ranked, rankedConnection{profile: row, rank: rank})
 		}
 	}
@@ -1815,7 +1816,7 @@ func filterConnections(rows []connectionProfile, query string) []connectionProfi
 
 const quickConnectionLimit = 12
 
-const connectionSearchSyntaxHint = "Search text or filter with name:, group:, type:, host:, endpoint:, port:, description:, favorite:true|false, used:true|false; use | between alternatives and prefix any term with - to exclude it"
+const connectionSearchSyntaxHint = "Search text or filter with name:, group:, type:, host:, endpoint:, port:, description:, favorite:true|false, used:true|false|today|Nd (for example used:7d); use | between alternatives and prefix any term with - to exclude it"
 
 // navigatorRows keeps the terminal workspace focused: an empty query shows a
 // compact favorite/recent projection, while explicit search reaches every saved
@@ -1894,6 +1895,10 @@ func connectionMatchesQuery(p connectionProfile, query string) bool {
 // Secret fields are deliberately absent from both ranking and matching. Explicit
 // field filters support precise launch queries without widening that allowlist.
 func connectionSearchRank(p connectionProfile, query string) (int, bool) {
+	return connectionSearchRankAt(p, query, time.Now())
+}
+
+func connectionSearchRankAt(p connectionProfile, query string, now time.Time) (int, bool) {
 	query = strings.ToLower(strings.TrimSpace(query))
 	if query == "" {
 		return 0, true
@@ -1917,7 +1922,7 @@ func connectionSearchRank(p connectionProfile, query string) (int, bool) {
 	bestRank := 0
 	matched := false
 	for _, terms := range clauses {
-		rank, ok := connectionSearchClauseRank(p, terms)
+		rank, ok := connectionSearchClauseRank(p, terms, now)
 		if ok && (!matched || rank < bestRank) {
 			bestRank = rank
 			matched = true
@@ -1926,7 +1931,7 @@ func connectionSearchRank(p connectionProfile, query string) (int, bool) {
 	return bestRank, matched
 }
 
-func connectionSearchClauseRank(p connectionProfile, terms []connectionSearchTerm) (int, bool) {
+func connectionSearchClauseRank(p connectionProfile, terms []connectionSearchTerm, now time.Time) (int, bool) {
 	if len(terms) == 0 {
 		return 0, false
 	}
@@ -1946,7 +1951,7 @@ func connectionSearchClauseRank(p connectionProfile, terms []connectionSearchTer
 
 	rank := 0
 	for _, term := range terms {
-		termRank, matched := connectionSearchTermRank(p, name, term)
+		termRank, matched := connectionSearchTermRank(p, name, term, now)
 		if term.Exclude {
 			if matched {
 				return 0, false
@@ -2035,7 +2040,10 @@ func parseConnectionSearchTerm(raw string) connectionSearchTerm {
 	switch field {
 	case "name", "group", "type", "host", "endpoint", "port", "description", "favorite", "used":
 		value = strings.TrimSpace(value)
-		invalid := value == "" || ((field == "favorite" || field == "used") && value != "true" && value != "false")
+		invalid := value == "" || (field == "favorite" && value != "true" && value != "false")
+		if field == "used" {
+			invalid = !validConnectionUsedValue(value)
+		}
 		if field == "port" {
 			port, err := strconv.Atoi(value)
 			invalid = err != nil || port < 1 || port > 65535
@@ -2065,15 +2073,52 @@ func connectionSearchFieldIdentifier(value string) bool {
 	return true
 }
 
-func connectionSearchTermRank(p connectionProfile, name string, term connectionSearchTerm) (int, bool) {
+func validConnectionUsedValue(value string) bool {
+	if value == "true" || value == "false" || value == "today" {
+		return true
+	}
+	if !strings.HasSuffix(value, "d") {
+		return false
+	}
+	days, err := strconv.Atoi(strings.TrimSuffix(value, "d"))
+	return err == nil && days >= 1 && days <= 3650
+}
+
+// connectionUsedMatches supports compact, deterministic recency filters without
+// exposing timestamps or any credential-bearing profile field. "today" means
+// the rolling last 24 hours; Nd windows are bounded to ten years by the parser.
+func connectionUsedMatches(p connectionProfile, value string, now time.Time) bool {
+	lastUsed := strings.TrimSpace(p.LastUsed)
+	switch value {
+	case "true":
+		return lastUsed != ""
+	case "false":
+		return lastUsed == ""
+	}
+	usedAt, ok := parseLastUsed(lastUsed)
+	if !ok || usedAt.After(now) {
+		return false
+	}
+	days := 1
+	if value != "today" {
+		parsed, err := strconv.Atoi(strings.TrimSuffix(value, "d"))
+		if err != nil || parsed < 1 || parsed > 3650 {
+			return false
+		}
+		days = parsed
+	}
+	return !usedAt.Before(now.Add(-time.Duration(days) * 24 * time.Hour))
+}
+
+func connectionSearchTermRank(p connectionProfile, name string, term connectionSearchTerm, now time.Time) (int, bool) {
 	if term.Value == "" {
 		return 0, false
 	}
 	if term.Field == "favorite" || term.Field == "used" {
-		value := p.Favorite
 		if term.Field == "used" {
-			value = strings.TrimSpace(p.LastUsed) != ""
+			return 3, connectionUsedMatches(p, term.Value, now)
 		}
+		value := p.Favorite
 		switch term.Value {
 		case "true":
 			return 3, value

@@ -898,6 +898,63 @@ func TestConnectionSearchSupportsExplicitNonSecretFieldFilters(t *testing.T) {
 	}
 }
 
+func TestConnectionSearchSupportsRelativeLastUsedWindows(t *testing.T) {
+	now := time.Date(2026, time.September, 19, 12, 0, 0, 0, time.UTC)
+	rows := []connectionProfile{
+		{ID: "today", Name: "Today", LastUsed: now.Add(-6 * time.Hour).Format(time.RFC3339Nano)},
+		{ID: "week", Name: "Week", LastUsed: now.Add(-6 * 24 * time.Hour).Format(time.RFC3339Nano)},
+		{ID: "old", Name: "Old", LastUsed: now.Add(-31 * 24 * time.Hour).Format(time.RFC3339Nano)},
+		{ID: "never", Name: "Never"},
+	}
+
+	tests := []struct {
+		value string
+		want  []string
+	}{
+		{value: "today", want: []string{"today"}},
+		{value: "7d", want: []string{"today", "week"}},
+		{value: "30d", want: []string{"today", "week"}},
+		{value: "false", want: []string{"never"}},
+	}
+	for _, test := range tests {
+		t.Run(test.value, func(t *testing.T) {
+			var got []string
+			for _, row := range rows {
+				if connectionUsedMatches(row, test.value, now) {
+					got = append(got, row.ID)
+				}
+			}
+			if !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("used:%s matched %#v, want %#v", test.value, got, test.want)
+			}
+		})
+	}
+
+	for _, value := range []string{"0d", "3651d", "week", "-7d", "7h"} {
+		if term := parseConnectionSearchTerm("used:" + value); !term.Invalid {
+			t.Fatalf("used:%s unexpectedly parsed as valid: %#v", value, term)
+		}
+	}
+	for _, value := range []string{"today", "1d", "7d", "3650d", "true", "false"} {
+		if term := parseConnectionSearchTerm("used:" + value); term.Invalid {
+			t.Fatalf("used:%s unexpectedly parsed as invalid: %#v", value, term)
+		}
+	}
+
+	liveNow := time.Now().UTC()
+	liveRows := []connectionProfile{
+		{ID: "recent", Name: "Recent", LastUsed: liveNow.Add(-48 * time.Hour).Format(time.RFC3339Nano)},
+		{ID: "stale", Name: "Stale", LastUsed: liveNow.Add(-10 * 24 * time.Hour).Format(time.RFC3339Nano)},
+		{ID: "unused", Name: "Unused"},
+	}
+	if got := filterConnections(liveRows, "used:7d"); len(got) != 1 || got[0].ID != "recent" {
+		t.Fatalf("live used:7d search = %#v, want recent", got)
+	}
+	if got := filterConnections(liveRows, "-used:7d"); len(got) != 2 || got[0].ID != "stale" || got[1].ID != "unused" {
+		t.Fatalf("live -used:7d search = %#v, want stale and unused", got)
+	}
+}
+
 func TestConnectionSearchSupportsExclusionsWithoutWideningSecretFields(t *testing.T) {
 	rows := []connectionProfile{
 		{ID: "prod-db", Name: "Primary Database", Group: "Production/Database", Type: connectionTypeSSH, Host: "db.internal", Username: "deploy", PasswordEnc: "gtenc-password-marker", Description: "Postgres primary"},
