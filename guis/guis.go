@@ -1814,7 +1814,7 @@ func filterConnections(rows []connectionProfile, query string) []connectionProfi
 
 const quickConnectionLimit = 12
 
-const connectionSearchSyntaxHint = "Search text or filter with name:, group:, type:, host:, endpoint:, description:, favorite:true|false"
+const connectionSearchSyntaxHint = "Search text or filter with name:, group:, type:, host:, endpoint:, description:, favorite:true|false; prefix any term with - to exclude it"
 
 // navigatorRows keeps the terminal workspace focused: an empty query shows a
 // compact favorite/recent projection, while explicit search reaches every saved
@@ -1902,19 +1902,17 @@ func connectionSearchRank(p connectionProfile, query string) (int, bool) {
 		return 0, true
 	}
 	terms := make([]connectionSearchTerm, 0, len(rawTerms))
-	hasFieldFilter := false
 	for _, raw := range rawTerms {
 		term := parseConnectionSearchTerm(raw)
+		if term.Invalid {
+			return 0, false
+		}
 		terms = append(terms, term)
-		hasFieldFilter = hasFieldFilter || term.Field != ""
 	}
 	name := strings.ToLower(strings.TrimSpace(p.Name))
-	nameQuery := query
-	if hasFieldFilter || strings.Contains(query, `"`) {
-		nameQuery = ""
-		if !hasFieldFilter && len(terms) == 1 {
-			nameQuery = terms[0].Value
-		}
+	nameQuery := ""
+	if len(terms) == 1 && terms[0].Field == "" && !terms[0].Exclude {
+		nameQuery = terms[0].Value
 	}
 	switch {
 	case nameQuery != "" && name == nameQuery:
@@ -1928,6 +1926,12 @@ func connectionSearchRank(p connectionProfile, query string) (int, bool) {
 	rank := 0
 	for _, term := range terms {
 		termRank, matched := connectionSearchTermRank(p, name, term)
+		if term.Exclude {
+			if matched {
+				return 0, false
+			}
+			continue
+		}
 		if !matched {
 			return 0, false
 		}
@@ -1937,22 +1941,52 @@ func connectionSearchRank(p connectionProfile, query string) (int, bool) {
 }
 
 type connectionSearchTerm struct {
-	Field string
-	Value string
+	Field   string
+	Value   string
+	Exclude bool
+	Invalid bool
 }
 
 func parseConnectionSearchTerm(raw string) connectionSearchTerm {
 	raw = strings.ToLower(strings.TrimSpace(raw))
+	exclude := strings.HasPrefix(raw, "-")
+	if exclude {
+		raw = strings.TrimSpace(strings.TrimPrefix(raw, "-"))
+		if raw == "" {
+			return connectionSearchTerm{Exclude: true, Invalid: true}
+		}
+	}
 	field, value, found := strings.Cut(raw, ":")
 	if !found {
-		return connectionSearchTerm{Value: raw}
+		return connectionSearchTerm{Value: raw, Exclude: exclude}
 	}
 	switch field {
 	case "name", "group", "type", "host", "endpoint", "description", "favorite":
-		return connectionSearchTerm{Field: field, Value: strings.TrimSpace(value)}
+		value = strings.TrimSpace(value)
+		invalid := value == "" || (field == "favorite" && value != "true" && value != "false")
+		return connectionSearchTerm{Field: field, Value: value, Exclude: exclude, Invalid: invalid}
 	default:
-		return connectionSearchTerm{Value: raw}
+		// Identifier-like prefixes are filter attempts. Reject unknown fields
+		// explicitly so a negated secret field cannot turn a non-match into an
+		// accidental match-all query. Values such as db.internal:22 remain free
+		// text because their prefix is not an identifier.
+		if connectionSearchFieldIdentifier(field) {
+			return connectionSearchTerm{Value: raw, Exclude: exclude, Invalid: true}
+		}
+		return connectionSearchTerm{Value: raw, Exclude: exclude}
 	}
+}
+
+func connectionSearchFieldIdentifier(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if (r < 'a' || r > 'z') && r != '_' {
+			return false
+		}
+	}
+	return true
 }
 
 func connectionSearchTermRank(p connectionProfile, name string, term connectionSearchTerm) (int, bool) {

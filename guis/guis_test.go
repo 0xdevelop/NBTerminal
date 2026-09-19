@@ -895,6 +895,41 @@ func TestConnectionSearchSupportsExplicitNonSecretFieldFilters(t *testing.T) {
 	}
 }
 
+func TestConnectionSearchSupportsExclusionsWithoutWideningSecretFields(t *testing.T) {
+	rows := []connectionProfile{
+		{ID: "prod-db", Name: "Primary Database", Group: "Production/Database", Type: connectionTypeSSH, Host: "db.internal", Username: "deploy", PasswordEnc: "gtenc-password-marker", Description: "Postgres primary"},
+		{ID: "prod-web", Name: "Primary Web", Group: "Production/Web", Type: connectionTypeSSH, Host: "web.internal", Username: "deploy", Description: "Public API", Favorite: true},
+		{ID: "archive", Name: "Archive Database", Group: "Archive", Type: connectionTypeLocal, Description: "retired postgres"},
+	}
+	tests := []struct {
+		query string
+		want  []string
+	}{
+		{query: `primary -host:db.internal`, want: []string{"prod-web"}},
+		{query: `description:postgres -group:archive`, want: []string{"prod-db"}},
+		{query: `type:ssh -favorite:true`, want: []string{"prod-db"}},
+		{query: `-type:local -archive`, want: []string{"prod-db", "prod-web"}},
+	}
+	for _, test := range tests {
+		t.Run(test.query, func(t *testing.T) {
+			gotRows := filterConnections(rows, test.query)
+			got := make([]string, 0, len(gotRows))
+			for _, row := range gotRows {
+				got = append(got, row.ID)
+			}
+			if !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("excluded search rows = %#v, want %#v", got, test.want)
+			}
+		})
+	}
+
+	for _, query := range []string{"-username:deploy", "-password:gtenc-password-marker", "-key:key-marker", "-favorite:maybe", "-"} {
+		if got := filterConnections(rows, query); len(got) != 0 {
+			t.Fatalf("invalid exclusion %q widened results: %#v", query, got)
+		}
+	}
+}
+
 func TestActiveConnectionIndexUsesGlobalConfigSelection(t *testing.T) {
 	oldGlobal := config.GlobalConfig
 	t.Cleanup(func() { config.GlobalConfig = oldGlobal })
