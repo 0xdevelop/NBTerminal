@@ -859,8 +859,8 @@ func TestConnectionSearchSupportsQuotedPhrasesAndLiteralUnclosedQuotes(t *testin
 
 func TestConnectionSearchSupportsExplicitNonSecretFieldFilters(t *testing.T) {
 	rows := []connectionProfile{
-		{ID: "prod-db", Name: "Primary Database", Group: "Production/Database", Type: connectionTypeSSH, Host: "db.internal", Description: "PostgreSQL leader", Favorite: true, Username: "deploy", PasswordEnc: "gtenc-password-marker", PrivateKey: "/secret/key-marker"},
-		{ID: "prod-web", Name: "Primary Web", Group: "Production/Web", Type: connectionTypeSSH, Host: "web.internal", Description: "Public frontend"},
+		{ID: "prod-db", Name: "Primary Database", Group: "Production/Database", Type: connectionTypeSSH, Host: "db.internal", Port: 2222, Description: "PostgreSQL leader", Favorite: true, LastUsed: "2026-09-18T08:00:00Z", Username: "deploy", PasswordEnc: "gtenc-password-marker", PrivateKey: "/secret/key-marker"},
+		{ID: "prod-web", Name: "Primary Web", Group: "Production/Web", Type: connectionTypeSSH, Host: "web.internal", Port: 22, Description: "Public frontend"},
 		{ID: "local", Name: "Local Shell", Group: "Local", Type: connectionTypeLocal, Favorite: true},
 	}
 
@@ -872,7 +872,10 @@ func TestConnectionSearchSupportsExplicitNonSecretFieldFilters(t *testing.T) {
 		{query: `favorite:true type:local`, want: []string{"local"}},
 		{query: `host:internal description:postgres`, want: []string{"prod-db"}},
 		{query: `name:"primary web"`, want: []string{"prod-web"}},
-		{query: `endpoint:db.internal:22`, want: []string{"prod-db"}},
+		{query: `endpoint:db.internal:2222`, want: []string{"prod-db"}},
+		{query: `port:2222 used:true`, want: []string{"prod-db"}},
+		{query: `port:22 used:false`, want: []string{"prod-web"}},
+		{query: `used:false type:local`, want: []string{"local"}},
 		{query: `group:production primary`, want: []string{"prod-db", "prod-web"}},
 	}
 	for _, test := range tests {
@@ -888,7 +891,7 @@ func TestConnectionSearchSupportsExplicitNonSecretFieldFilters(t *testing.T) {
 		})
 	}
 
-	for _, query := range []string{"username:deploy", "password:gtenc-password-marker", "key:key-marker", "favorite:maybe"} {
+	for _, query := range []string{"username:deploy", "password:gtenc-password-marker", "key:key-marker", "favorite:maybe", "used:maybe", "port:0", "port:65536", "port:ssh"} {
 		if got := filterConnections(rows, query); len(got) != 0 {
 			t.Fatalf("unsupported or invalid field query %q exposed rows: %#v", query, got)
 		}

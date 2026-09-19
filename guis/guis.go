@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1814,7 +1815,7 @@ func filterConnections(rows []connectionProfile, query string) []connectionProfi
 
 const quickConnectionLimit = 12
 
-const connectionSearchSyntaxHint = "Search text or filter with name:, group:, type:, host:, endpoint:, description:, favorite:true|false; use | between alternatives and prefix any term with - to exclude it"
+const connectionSearchSyntaxHint = "Search text or filter with name:, group:, type:, host:, endpoint:, port:, description:, favorite:true|false, used:true|false; use | between alternatives and prefix any term with - to exclude it"
 
 // navigatorRows keeps the terminal workspace focused: an empty query shows a
 // compact favorite/recent projection, while explicit search reaches every saved
@@ -2032,9 +2033,13 @@ func parseConnectionSearchTerm(raw string) connectionSearchTerm {
 		return connectionSearchTerm{Value: raw, Exclude: exclude}
 	}
 	switch field {
-	case "name", "group", "type", "host", "endpoint", "description", "favorite":
+	case "name", "group", "type", "host", "endpoint", "port", "description", "favorite", "used":
 		value = strings.TrimSpace(value)
-		invalid := value == "" || (field == "favorite" && value != "true" && value != "false")
+		invalid := value == "" || ((field == "favorite" || field == "used") && value != "true" && value != "false")
+		if field == "port" {
+			port, err := strconv.Atoi(value)
+			invalid = err != nil || port < 1 || port > 65535
+		}
 		return connectionSearchTerm{Field: field, Value: value, Exclude: exclude, Invalid: invalid}
 	default:
 		// Identifier-like prefixes are filter attempts. Reject unknown fields
@@ -2064,15 +2069,29 @@ func connectionSearchTermRank(p connectionProfile, name string, term connectionS
 	if term.Value == "" {
 		return 0, false
 	}
-	if term.Field == "favorite" {
+	if term.Field == "favorite" || term.Field == "used" {
+		value := p.Favorite
+		if term.Field == "used" {
+			value = strings.TrimSpace(p.LastUsed) != ""
+		}
 		switch term.Value {
 		case "true":
-			return 3, p.Favorite
+			return 3, value
 		case "false":
-			return 3, !p.Favorite
+			return 3, !value
 		default:
 			return 0, false
 		}
+	}
+	if term.Field == "port" {
+		if p.Type != connectionTypeSSH {
+			return 0, false
+		}
+		port := p.Port
+		if port == 0 {
+			port = 22
+		}
+		return 3, strconv.Itoa(port) == term.Value
 	}
 	if term.Field != "" {
 		value := ""
