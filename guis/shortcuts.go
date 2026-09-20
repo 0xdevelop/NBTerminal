@@ -20,7 +20,7 @@ type shortcutGuideItem struct {
 
 func shortcutGuideItems() []shortcutGuideItem {
 	return []shortcutGuideItem{
-		{Group: "Windows", Action: "Open Keyboard Shortcuts", Shortcut: "F1"},
+		{Group: "Windows", Action: "Open Shortcuts / Contextual Search Help", Shortcut: "F1"},
 		{Group: "Windows", Action: "Open Connection Manager", Shortcut: "Ctrl+O"},
 		{Group: "Windows", Action: "Open Settings", Shortcut: "Ctrl+,"},
 		{Group: "Connections", Action: "Focus Quick Launcher", Shortcut: "Ctrl+K"},

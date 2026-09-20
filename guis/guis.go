@@ -1009,6 +1009,9 @@ func (a *finalShellApp) handleSearchKey(action uikit.InputNavigationAction) bool
 		return a.moveSearchSelection(1)
 	case uikit.InputNavigationPrevious:
 		return a.moveSearchSelection(-1)
+	case uikit.InputNavigationHelp:
+		a.openConnectionSearchHelp(a.applyQuickSearchExample)
+		return true
 	case uikit.InputNavigationCancel:
 		if strings.TrimSpace(a.searchInput.Text()) == "" {
 			if a.quickLaunchOverride {
@@ -1841,7 +1844,7 @@ func filterConnections(rows []connectionProfile, query string) []connectionProfi
 
 const quickConnectionLimit = 12
 
-const connectionSearchSyntaxHint = "Search text or filter with name:, group:, type:, host:, endpoint:, port:, description:, favorite:true|false, used:true|false|today|Nd (for example used:7d); use | between alternatives and prefix any term with - to exclude it"
+const connectionSearchSyntaxHint = "Search text or filter with name:, group:, type:, host:, endpoint:, port:, description:, favorite:true|false, used:true|false|today|Nd (for example used:7d); use | between alternatives and prefix any term with - to exclude it. Press F1 for examples."
 
 // navigatorRows keeps the terminal workspace focused: an empty query shows a
 // compact favorite/recent projection, while explicit search reaches every saved

@@ -254,6 +254,12 @@ func (m *connectionManagerWindow) handleSearchKey(action uikit.InputNavigationAc
 		return m.moveSearchSelection(1)
 	case uikit.InputNavigationPrevious:
 		return m.moveSearchSelection(-1)
+	case uikit.InputNavigationHelp:
+		if m.owner == nil {
+			return false
+		}
+		m.owner.openConnectionSearchHelp(m.applySearchExample)
+		return true
 	case uikit.InputNavigationCancel:
 		if strings.TrimSpace(m.search.Text()) == "" {
 			return false

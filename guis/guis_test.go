@@ -1258,6 +1258,10 @@ func TestMainSearchKeyboardMovesSelectionAndEscapeClearsQuery(t *testing.T) {
 	if !app.handleSearchKey(uikit.InputNavigationPrevious) || app.idx != 0 {
 		t.Fatalf("Up did not move to first match: idx=%d", app.idx)
 	}
+	if !app.handleSearchKey(uikit.InputNavigationHelp) || app.searchHelp == nil || app.searchHelp.window == nil {
+		t.Fatal("F1 did not open contextual search help from the quick launcher")
+	}
+	app.searchHelp.window.Close()
 	if !app.handleSearchKey(uikit.InputNavigationCancel) || app.searchInput.Text() != "" || len(app.rows) != len(rows) {
 		t.Fatalf("Escape did not clear and restore quick rows: query=%q rows=%d", app.searchInput.Text(), len(app.rows))
 	}

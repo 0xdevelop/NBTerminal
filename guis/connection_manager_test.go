@@ -553,6 +553,10 @@ func TestConnectionManagerSearchKeyboardMovesSelectionAndEscapeClearsQuery(t *te
 	if !manager.handleSearchKey(uikit.InputNavigationPrevious) || manager.idx != 0 {
 		t.Fatalf("Up did not move to first manager match: idx=%d", manager.idx)
 	}
+	if !manager.handleSearchKey(uikit.InputNavigationHelp) || manager.owner.searchHelp == nil || manager.owner.searchHelp.window == nil {
+		t.Fatal("F1 did not open contextual search help from Connection Manager")
+	}
+	manager.owner.searchHelp.window.Close()
 	if !manager.handleSearchKey(uikit.InputNavigationCancel) || manager.search.Text() != "" || len(manager.rows) != len(rows) {
 		t.Fatalf("Escape did not clear manager query: query=%q rows=%d", manager.search.Text(), len(manager.rows))
 	}
