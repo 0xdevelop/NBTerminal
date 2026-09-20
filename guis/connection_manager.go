@@ -326,6 +326,7 @@ func (m *connectionManagerWindow) reload(preferredID string) {
 	query := ""
 	if m.search != nil {
 		query = m.search.Text()
+		m.search.View().SetAutomationProperty("validationError", connectionSearchValidationError(query))
 	}
 	m.syncGroupOptions()
 	favoritesOnly := m.favoritesOnly != nil && m.favoritesOnly.Value()
@@ -668,6 +669,11 @@ func (m *connectionManagerWindow) updateStatus() {
 func (m *connectionManagerWindow) resultStatus() string {
 	if m == nil {
 		return ""
+	}
+	if m.search != nil {
+		if validationError := connectionSearchValidationError(m.search.Text()); validationError != "" {
+			return "Invalid search · " + validationError
+		}
 	}
 	selection := tr("connections.none")
 	profile, selected := m.selectedProfile()

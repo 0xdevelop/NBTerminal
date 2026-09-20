@@ -1704,8 +1704,14 @@ func (a *finalShellApp) jumpToSearchMatch() {
 		return
 	}
 	query := strings.TrimSpace(a.searchInput.Text())
+	validationError := connectionSearchValidationError(query)
+	a.searchInput.View().SetAutomationProperty("validationError", validationError)
 	a.refreshNavigator("")
 	a.refreshTable()
+	if validationError != "" {
+		a.setStatus("Invalid search · " + validationError)
+		return
+	}
 	if len(a.rows) == 0 {
 		if query == "" {
 			a.setStatus(tr("connections.none"))
@@ -1903,6 +1909,9 @@ func connectionSearchRankAt(p connectionProfile, query string, now time.Time) (i
 	if query == "" {
 		return 0, true
 	}
+	if connectionSearchValidationError(query) != "" {
+		return 0, false
+	}
 	rawClauses, valid := connectionSearchClauses(query)
 	if !valid {
 		return 0, false
@@ -2022,6 +2031,69 @@ type connectionSearchTerm struct {
 	Value   string
 	Exclude bool
 	Invalid bool
+}
+
+// connectionSearchValidationError turns the launcher's fail-closed search
+// parser into useful, non-secret UI feedback. The same validator is used by the
+// compact launcher and Connection Manager so an invalid filter can never look
+// like an ordinary zero-result search on one surface and valid syntax on another.
+func connectionSearchValidationError(query string) string {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return ""
+	}
+	clauses, valid := connectionSearchClauses(query)
+	if !valid {
+		switch {
+		case strings.HasPrefix(query, "|"):
+			return "Complete the search alternative before |"
+		case strings.HasSuffix(query, "|"):
+			return "Complete the search alternative after |"
+		default:
+			return "Complete every search alternative around |"
+		}
+	}
+	for _, clause := range clauses {
+		for _, raw := range clause {
+			term := strings.TrimSpace(raw)
+			if strings.HasPrefix(term, "-") {
+				term = strings.TrimSpace(strings.TrimPrefix(term, "-"))
+				if term == "" {
+					return "Enter a term after -"
+				}
+			}
+			field, value, found := strings.Cut(term, ":")
+			if !found {
+				continue
+			}
+			field = strings.TrimSpace(field)
+			value = strings.TrimSpace(value)
+			switch field {
+			case "favorite":
+				if value != "true" && value != "false" {
+					return "favorite: accepts true or false"
+				}
+			case "used":
+				if !validConnectionUsedValue(value) {
+					return "used: accepts true, false, today, or 1d–3650d"
+				}
+			case "port":
+				port, err := strconv.Atoi(value)
+				if err != nil || port < 1 || port > 65535 {
+					return "port: must be a number from 1 to 65535"
+				}
+			case "name", "group", "type", "host", "endpoint", "description":
+				if value == "" {
+					return field + ": requires a value"
+				}
+			default:
+				if connectionSearchFieldIdentifier(field) {
+					return fmt.Sprintf("Unsupported search field %q", field)
+				}
+			}
+		}
+	}
+	return ""
 }
 
 func parseConnectionSearchTerm(raw string) connectionSearchTerm {

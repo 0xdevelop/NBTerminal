@@ -471,6 +471,17 @@ func TestConnectionManagerResultStatusMakesActiveFiltersVisible(t *testing.T) {
 	}
 }
 
+func TestConnectionManagerResultStatusExplainsInvalidSearch(t *testing.T) {
+	manager := &connectionManagerWindow{
+		search: uikit.NewInput(0, 0, 240, nativeControls.InputHeight, ""),
+		owner:  &finalShellApp{allRows: []connectionProfile{{Name: "Production"}}},
+	}
+	manager.search.SetText("port:0")
+	if got := manager.resultStatus(); got != "Invalid search · port: must be a number from 1 to 65535" {
+		t.Fatalf("invalid search status = %q", got)
+	}
+}
+
 func TestConnectionManagerResetViewClearsAndPersistsEveryViewFilter(t *testing.T) {
 	oldGlobal := config.GlobalConfig
 	oldApp := config.CurrentApp

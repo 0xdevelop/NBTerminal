@@ -898,6 +898,31 @@ func TestConnectionSearchSupportsExplicitNonSecretFieldFilters(t *testing.T) {
 	}
 }
 
+func TestConnectionSearchValidationExplainsInvalidQueries(t *testing.T) {
+	tests := []struct {
+		query string
+		want  string
+	}{
+		{query: "", want: ""},
+		{query: `type:ssh used:7d -group:archive`, want: ""},
+		{query: `name:"production | database"`, want: ""},
+		{query: `prod |`, want: "Complete the search alternative after |"},
+		{query: `| prod`, want: "Complete the search alternative before |"},
+		{query: `username:deploy`, want: `Unsupported search field "username"`},
+		{query: `favorite:maybe`, want: "favorite: accepts true or false"},
+		{query: `used:week`, want: "used: accepts true, false, today, or 1d–3650d"},
+		{query: `port:0`, want: "port: must be a number from 1 to 65535"},
+		{query: `-`, want: "Enter a term after -"},
+	}
+	for _, test := range tests {
+		t.Run(test.query, func(t *testing.T) {
+			if got := connectionSearchValidationError(test.query); got != test.want {
+				t.Fatalf("validation error = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
 func TestConnectionSearchSupportsRelativeLastUsedWindows(t *testing.T) {
 	now := time.Date(2026, time.September, 19, 12, 0, 0, 0, time.UTC)
 	rows := []connectionProfile{
