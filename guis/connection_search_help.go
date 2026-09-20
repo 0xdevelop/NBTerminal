@@ -59,24 +59,27 @@ func (m *connectionSearchHelpModel) CellForColumn(_ *tableview.TableView, row, c
 }
 
 type connectionSearchHelpWindow struct {
-	owner  *finalShellApp
-	window *uikit.UIWindow
-	table  *uikit.UITableView
-	model  *connectionSearchHelpModel
+	owner    *finalShellApp
+	window   *uikit.UIWindow
+	table    *uikit.UITableView
+	model    *connectionSearchHelpModel
+	selected int
+	apply    func(string)
 }
 
-func (a *finalShellApp) openConnectionSearchHelp() {
+func (a *finalShellApp) openConnectionSearchHelp(apply func(string)) {
 	if a == nil {
 		return
 	}
 	if a.searchHelp != nil && a.searchHelp.window != nil && !a.searchHelp.window.IsClosed() {
+		a.searchHelp.apply = apply
 		a.searchHelp.window.Show()
 		if raw := a.searchHelp.window.Raw(); raw != nil {
 			raw.TakeFocus()
 		}
 		return
 	}
-	help := &connectionSearchHelpWindow{owner: a}
+	help := &connectionSearchHelpWindow{owner: a, selected: 0, apply: apply}
 	a.searchHelp = help
 	help.build()
 }
@@ -104,7 +107,7 @@ func (h *connectionSearchHelpWindow) build() {
 	})
 
 	root.AddSubview(titleLabel(28, 20, 500, 30, "Connection Search Help"))
-	root.AddSubview(mutedLabel(30, 52, 700, 22, "Combine terms to narrow saved connections. Search never inspects passwords, private keys, or working directories."))
+	root.AddSubview(mutedLabel(30, 52, 700, 22, "Select an example to apply it. Search never inspects passwords, private keys, or working directories."))
 	table, err := uikit.NewUITableView(28, 88, 704, 388)
 	if err == nil {
 		h.table = table
@@ -116,10 +119,39 @@ func (h *connectionSearchHelpWindow) build() {
 		h.table.AddColumn(tableview.TableColumn{Identifier: "example", Title: "Example", Width: 224})
 		h.model = &connectionSearchHelpModel{items: connectionSearchHelpItems()}
 		h.table.SetDataSource(h.model)
+		h.table.SetDelegate(tableDelegate{onSelect: h.selectRow})
+		h.table.OnActivate(func(row int) {
+			h.selectRow(row)
+			h.applySelected()
+		})
 		h.table.SetBackgroundColor(tokenColor(modernTheme.card))
 		h.table.ReloadData()
+		h.table.SelectRow(h.selected)
 		root.AddSubview(h.table)
 	}
+	root.AddSubview(primaryButton(480, 490, 130, nativeControls.PrimaryButtonHeight, "Apply Example", "connection_search_help.apply", func() { h.applySelected() }))
 	root.AddSubview(button(620, 490, 112, nativeControls.PrimaryButtonHeight, "Close", "connection_search_help.close", h.window.Close))
 	h.window.Show()
+}
+
+func (h *connectionSearchHelpWindow) selectRow(row int) {
+	if h == nil || h.model == nil || row < 0 || row >= len(h.model.items) {
+		return
+	}
+	h.selected = row
+	if h.table != nil && h.table.View() != nil {
+		h.table.View().SetAutomationProperty("selectedExample", h.model.items[row].Example)
+	}
+}
+
+func (h *connectionSearchHelpWindow) applySelected() bool {
+	if h == nil || h.model == nil || h.apply == nil || h.selected < 0 || h.selected >= len(h.model.items) {
+		return false
+	}
+	example := h.model.items[h.selected].Example
+	if h.window != nil {
+		h.window.Close()
+	}
+	h.apply(example)
+	return true
 }

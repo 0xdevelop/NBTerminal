@@ -794,7 +794,9 @@ func (a *finalShellApp) build() {
 	a.searchInput.OnChange(a.jumpToSearchMatch)
 	a.searchInput.OnNavigation(a.handleSearchKey)
 	quickPanel.AddSubview(a.searchInput)
-	a.searchHelpButton = button(quickLayout.SearchHelp.X, quickLayout.SearchHelp.Y, quickLayout.SearchHelp.Width, quickLayout.SearchHelp.Height, "?", "connections.search_help", a.openConnectionSearchHelp)
+	a.searchHelpButton = button(quickLayout.SearchHelp.X, quickLayout.SearchHelp.Y, quickLayout.SearchHelp.Width, quickLayout.SearchHelp.Height, "?", "connections.search_help", func() {
+		a.openConnectionSearchHelp(a.applyQuickSearchExample)
+	})
 	a.searchHelpButton.View().SetTooltip("Search syntax and examples")
 	quickPanel.AddSubview(a.searchHelpButton)
 	a.findButton = button(quickLayout.Find.X, quickLayout.Find.Y, quickLayout.Find.Width, quickLayout.Find.Height, tr("connections.find"), "connections.find", a.jumpToSearchMatch)
@@ -1038,6 +1040,15 @@ func (a *finalShellApp) focusQuickLauncher() {
 			focusable.TakeFocus()
 		}
 	}
+}
+
+func (a *finalShellApp) applyQuickSearchExample(query string) {
+	if a == nil || a.searchInput == nil {
+		return
+	}
+	a.searchInput.SetText(query)
+	a.jumpToSearchMatch()
+	a.focusQuickLauncher()
 }
 
 func (a *finalShellApp) dismissQuickLauncher() {

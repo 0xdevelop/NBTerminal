@@ -139,7 +139,9 @@ func (m *connectionManagerWindow) build() {
 	m.search.OnChange(m.applySearch)
 	m.search.OnNavigation(m.handleSearchKey)
 	root.AddSubview(m.search)
-	searchHelp := button(layout.SearchHelp.X, layout.SearchHelp.Y, layout.SearchHelp.Width, layout.SearchHelp.Height, "?", "connection_manager.search_help", m.owner.openConnectionSearchHelp)
+	searchHelp := button(layout.SearchHelp.X, layout.SearchHelp.Y, layout.SearchHelp.Width, layout.SearchHelp.Height, "?", "connection_manager.search_help", func() {
+		m.owner.openConnectionSearchHelp(m.applySearchExample)
+	})
 	searchHelp.View().SetTooltip("Search syntax and examples")
 	root.AddSubview(searchHelp)
 	root.AddSubview(button(layout.Find.X, layout.Find.Y, layout.Find.Width, layout.Find.Height, tr("connections.find"), "connection_manager.find", m.applySearch))
@@ -628,6 +630,19 @@ func (m *connectionManagerWindow) applySearch() {
 		preferredID = profile.ID
 	}
 	m.reload(preferredID)
+}
+
+func (m *connectionManagerWindow) applySearchExample(query string) {
+	if m == nil || m.search == nil {
+		return
+	}
+	m.search.SetText(query)
+	m.applySearch()
+	if raw := m.search.View().Raw(); raw != nil {
+		if focusable, ok := raw.(interface{ TakeFocus() int }); ok {
+			focusable.TakeFocus()
+		}
+	}
 }
 
 func (m *connectionManagerWindow) moveSearchSelection(delta int) bool {
