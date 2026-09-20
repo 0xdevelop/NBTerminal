@@ -449,6 +449,7 @@ type finalShellApp struct {
 	quickSubtitle       *uikit.UILabel
 	searchLabel         *uikit.UILabel
 	searchInput         *uikit.Input
+	searchHelpButton    *uikit.UIButton
 	findButton          *uikit.UIButton
 	summaryTitle        *uikit.UILabel
 	selectedName        *uikit.UILabel
@@ -478,6 +479,7 @@ type finalShellApp struct {
 	stopButton          *uikit.UIButton
 	settings            *settingsWindow
 	shortcuts           *shortcutGuideWindow
+	searchHelp          *connectionSearchHelpWindow
 	terminalFind        *terminalFindWindow
 	sessionRename       *sessionRenameWindow
 	editor              *connectionEditor
@@ -792,6 +794,9 @@ func (a *finalShellApp) build() {
 	a.searchInput.OnChange(a.jumpToSearchMatch)
 	a.searchInput.OnNavigation(a.handleSearchKey)
 	quickPanel.AddSubview(a.searchInput)
+	a.searchHelpButton = button(quickLayout.SearchHelp.X, quickLayout.SearchHelp.Y, quickLayout.SearchHelp.Width, quickLayout.SearchHelp.Height, "?", "connections.search_help", a.openConnectionSearchHelp)
+	a.searchHelpButton.View().SetTooltip("Search syntax and examples")
+	quickPanel.AddSubview(a.searchHelpButton)
 	a.findButton = button(quickLayout.Find.X, quickLayout.Find.Y, quickLayout.Find.Width, quickLayout.Find.Height, tr("connections.find"), "connections.find", a.jumpToSearchMatch)
 	quickPanel.AddSubview(a.findButton)
 
@@ -1276,6 +1281,9 @@ func (a *finalShellApp) layoutQuickPanel() {
 	}
 	if a.searchInput != nil && a.searchInput.Raw() != nil {
 		resizeNativeWidget(a.searchInput.Raw(), layout.Search)
+	}
+	if a.searchHelpButton != nil && a.searchHelpButton.Raw() != nil {
+		a.searchHelpButton.Raw().Resize(layout.SearchHelp.X, layout.SearchHelp.Y, layout.SearchHelp.Width, layout.SearchHelp.Height)
 	}
 	if a.findButton != nil && a.findButton.Raw() != nil {
 		a.findButton.Raw().Resize(layout.Find.X, layout.Find.Y, layout.Find.Width, layout.Find.Height)

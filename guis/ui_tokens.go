@@ -161,9 +161,9 @@ func terminalPanelLayoutFor(panel layoutRect, tokens controlMetricSet) terminalP
 }
 
 type quickPanelLayout struct {
-	Title, Subtitle, SearchLabel, Search, Find, Table          layoutRect
-	SummaryTitle, SelectedName, SelectedDetail, SelectedRecent layoutRect
-	Connect                                                    layoutRect
+	Title, Subtitle, SearchLabel, Search, SearchHelp, Find, Table layoutRect
+	SummaryTitle, SelectedName, SelectedDetail, SelectedRecent    layoutRect
+	Connect                                                       layoutRect
 }
 
 // quickPanelLayoutFor keeps the main window a fast-launch surface rather than a
@@ -175,7 +175,8 @@ func quickPanelLayoutFor(panel layoutRect, tokens controlMetricSet) quickPanelLa
 		titleInset   = 18
 		gap          = 8
 		searchLabelW = 64
-		findWidth    = 104
+		findWidth    = 88
+		helpWidth    = 34
 		connectWidth = 180
 		summaryArea  = 126
 	)
@@ -185,9 +186,13 @@ func quickPanelLayoutFor(panel layoutRect, tokens controlMetricSet) quickPanelLa
 		X: panel.X + panel.Width - inset - findWidth, Y: searchY,
 		Width: findWidth, Height: tokens.ButtonHeight,
 	}
+	searchHelp := layoutRect{
+		X: find.X - gap - helpWidth, Y: searchY,
+		Width: helpWidth, Height: tokens.ButtonHeight,
+	}
 	search := layoutRect{
 		X: panel.X + titleInset + searchLabelW, Y: searchY,
-		Width: find.X - gap - (panel.X + titleInset + searchLabelW), Height: tokens.InputHeight,
+		Width: searchHelp.X - gap - (panel.X + titleInset + searchLabelW), Height: tokens.InputHeight,
 	}
 	connectY := panel.Bottom() - tokens.PrimaryButtonHeight - 8
 	summaryY := connectY - summaryArea
@@ -199,6 +204,7 @@ func quickPanelLayoutFor(panel layoutRect, tokens controlMetricSet) quickPanelLa
 		Subtitle:       layoutRect{X: panel.X + titleInset, Y: panel.Y + 38, Width: panel.Width - titleInset*2, Height: 18},
 		SearchLabel:    layoutRect{X: panel.X + titleInset, Y: searchY, Width: searchLabelW, Height: tokens.InputHeight},
 		Search:         search,
+		SearchHelp:     searchHelp,
 		Find:           find,
 		Table:          layoutRect{X: panel.X + inset, Y: tableY, Width: innerWidth, Height: tableBottom - tableY},
 		SummaryTitle:   layoutRect{X: panel.X + titleInset, Y: summaryY, Width: panel.Width - titleInset*2, Height: 22},
@@ -210,14 +216,15 @@ func quickPanelLayoutFor(panel layoutRect, tokens controlMetricSet) quickPanelLa
 }
 
 type connectionManagerLayout struct {
-	Group, Search, Find, Table, Status, CloseAfterConnect, FavoritesOnly, ResetView layoutRect
-	New, Edit, Duplicate, RenameGroup, RemoveGroup, Delete, Test, Favorite, Connect layoutRect
+	Group, Search, SearchHelp, Find, Table, Status, CloseAfterConnect, FavoritesOnly, ResetView layoutRect
+	New, Edit, Duplicate, RenameGroup, RemoveGroup, Delete, Test, Favorite, Connect             layoutRect
 }
 
 func connectionManagerLayoutFor(tokens controlMetricSet) connectionManagerLayout {
 	return connectionManagerLayout{
 		Group:             layoutRect{X: 102, Y: 91, Width: 190, Height: tokens.InputHeight},
-		Search:            layoutRect{X: 390, Y: 91, Width: 362, Height: tokens.InputHeight},
+		Search:            layoutRect{X: 390, Y: 91, Width: 318, Height: tokens.InputHeight},
+		SearchHelp:        layoutRect{X: 720, Y: 91, Width: 34, Height: tokens.ButtonHeight},
 		Find:              layoutRect{X: 764, Y: 91, Width: 128, Height: tokens.ButtonHeight},
 		Table:             layoutRect{X: 28, Y: 143, Width: 864, Height: 382},
 		Status:            layoutRect{X: 30, Y: 530, Width: 862, Height: 18},

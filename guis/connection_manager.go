@@ -139,6 +139,9 @@ func (m *connectionManagerWindow) build() {
 	m.search.OnChange(m.applySearch)
 	m.search.OnNavigation(m.handleSearchKey)
 	root.AddSubview(m.search)
+	searchHelp := button(layout.SearchHelp.X, layout.SearchHelp.Y, layout.SearchHelp.Width, layout.SearchHelp.Height, "?", "connection_manager.search_help", m.owner.openConnectionSearchHelp)
+	searchHelp.View().SetTooltip("Search syntax and examples")
+	root.AddSubview(searchHelp)
 	root.AddSubview(button(layout.Find.X, layout.Find.Y, layout.Find.Width, layout.Find.Height, tr("connections.find"), "connection_manager.find", m.applySearch))
 	m.syncGroupOptions()
 	m.group.OnSelectionChanged(func(index int, _ string) {
