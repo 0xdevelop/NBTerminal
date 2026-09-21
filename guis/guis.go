@@ -412,6 +412,8 @@ type quickLauncherTableKeyAction uint8
 const (
 	quickLauncherTableKeyNone quickLauncherTableKeyAction = iota
 	quickLauncherTableToggleFavorite
+	quickLauncherTableEdit
+	quickLauncherTableDelete
 	quickLauncherTableCopyAddress
 	quickLauncherTableCopyCommand
 )
@@ -425,6 +427,14 @@ func quickLauncherActionForTableKey(event tableview.TableKeyEvent) quickLauncher
 	case ' ':
 		if modifiers == 0 {
 			return quickLauncherTableToggleFavorite
+		}
+	case fltk_bridge.F2:
+		if modifiers == 0 {
+			return quickLauncherTableEdit
+		}
+	case fltk_bridge.DELETE:
+		if modifiers == 0 {
+			return quickLauncherTableDelete
 		}
 	case 'c', 'C':
 		if modifiers == fltk_bridge.CTRL {
@@ -856,7 +866,7 @@ func (a *finalShellApp) build() {
 		}})
 		a.table.OnActivate(a.activateConnectionRow)
 		a.table.OnKey(a.handleQuickTableKey)
-		a.table.View().SetAutomationProperty("keyboardActions", "Space: favorite; Ctrl+C: copy address; Ctrl+Shift+C: copy SSH command")
+		a.table.View().SetAutomationProperty("keyboardActions", "Space: favorite; F2: edit; Delete: remove; Ctrl+C: copy address; Ctrl+Shift+C: copy SSH command")
 		a.installQuickConnectionContextMenu(quickPanel)
 		a.table.SetBackgroundColor(tokenColor(modernTheme.card))
 		a.table.SetCustomDraw(a.drawConnectionCell)
@@ -1070,6 +1080,10 @@ func (a *finalShellApp) handleQuickTableKey(event tableview.TableKeyEvent) bool 
 	switch quickLauncherActionForTableKey(event) {
 	case quickLauncherTableToggleFavorite:
 		a.toggleSelectedProfileFavorite()
+	case quickLauncherTableEdit:
+		a.editSelectedProfile()
+	case quickLauncherTableDelete:
+		a.deleteProfile()
 	case quickLauncherTableCopyAddress:
 		a.copySelectedProfileAddress()
 	case quickLauncherTableCopyCommand:
