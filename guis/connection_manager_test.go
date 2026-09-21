@@ -630,6 +630,7 @@ func TestQuickLauncherTableKeyboardCommandsRejectModifiedKeys(t *testing.T) {
 		{name: "delete", event: tableview.TableKeyEvent{Key: fltk_bridge.DELETE}, want: quickLauncherTableDelete},
 		{name: "copy address", event: tableview.TableKeyEvent{Key: 'c', State: fltk_bridge.CTRL}, want: quickLauncherTableCopyAddress},
 		{name: "copy command", event: tableview.TableKeyEvent{Key: 'c', State: fltk_bridge.CTRL | fltk_bridge.SHIFT}, want: quickLauncherTableCopyCommand},
+		{name: "duplicate", event: tableview.TableKeyEvent{Key: 'd', State: fltk_bridge.CTRL}, want: quickLauncherTableDuplicate},
 		{name: "control space", event: tableview.TableKeyEvent{Key: ' ', State: fltk_bridge.CTRL}},
 		{name: "control f2", event: tableview.TableKeyEvent{Key: fltk_bridge.F2, State: fltk_bridge.CTRL}},
 		{name: "shift delete", event: tableview.TableKeyEvent{Key: fltk_bridge.DELETE, State: fltk_bridge.SHIFT}},
