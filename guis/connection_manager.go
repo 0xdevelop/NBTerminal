@@ -350,12 +350,30 @@ func (m *connectionManagerWindow) reload(preferredID string) {
 		m.model.rows = m.rows
 	}
 	if m.table != nil {
+		total := 0
+		if m.owner != nil {
+			total = len(m.owner.allRows)
+		}
+		m.table.SetEmptyMessage(connectionManagerEmptyMessage(total, len(m.rows), m.hasResultFilter()))
 		m.table.ReloadData()
 		if m.idx >= 0 {
 			m.table.SelectRow(m.idx)
 		}
 	}
 	m.updateStatus()
+}
+
+func connectionManagerEmptyMessage(total, results int, filtered bool) string {
+	if results > 0 {
+		return ""
+	}
+	if total == 0 {
+		return "No saved connections yet. Create one to get started."
+	}
+	if filtered {
+		return "No matching connections. Adjust or reset filters."
+	}
+	return "No saved connections yet. Create one to get started."
 }
 
 func (m *connectionManagerWindow) sortByColumn(column int) {

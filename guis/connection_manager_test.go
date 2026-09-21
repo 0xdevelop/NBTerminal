@@ -18,6 +18,33 @@ import (
 	"github.com/george012/gtbox"
 )
 
+func TestConnectionManagerEmptyMessageDistinguishesOnboardingAndFilters(t *testing.T) {
+	if got := connectionManagerEmptyMessage(0, 0, false); got != "No saved connections yet. Create one to get started." {
+		t.Fatalf("empty store message = %q", got)
+	}
+	if got := connectionManagerEmptyMessage(3, 0, true); got != "No matching connections. Adjust or reset filters." {
+		t.Fatalf("filtered empty message = %q", got)
+	}
+	if got := connectionManagerEmptyMessage(3, 2, true); got != "" {
+		t.Fatalf("non-empty result message = %q", got)
+	}
+}
+
+func TestQuickLauncherEmptyMessageExplainsProjection(t *testing.T) {
+	if got := quickLauncherEmptyMessage(0, 0, false); got != "No saved connections yet. Create one in Connection Manager." {
+		t.Fatalf("empty store message = %q", got)
+	}
+	if got := quickLauncherEmptyMessage(4, 0, false); got != "No favorite or recent connections. Open Connection Manager to connect." {
+		t.Fatalf("empty projection message = %q", got)
+	}
+	if got := quickLauncherEmptyMessage(4, 0, true); got != "No matching connections. Try another search." {
+		t.Fatalf("empty search message = %q", got)
+	}
+	if got := quickLauncherEmptyMessage(4, 1, true); got != "" {
+		t.Fatalf("non-empty quick result message = %q", got)
+	}
+}
+
 func TestConnectionManagerRowContextMenuReflectsFavoriteAndRoutesCommands(t *testing.T) {
 	invocations := map[string]int{}
 	movedTo := ""

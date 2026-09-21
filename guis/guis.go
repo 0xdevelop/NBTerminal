@@ -828,6 +828,7 @@ func (a *finalShellApp) build() {
 		a.installQuickConnectionContextMenu(quickPanel)
 		a.table.SetBackgroundColor(tokenColor(modernTheme.card))
 		a.table.SetCustomDraw(a.drawConnectionCell)
+		a.table.SetEmptyMessage(quickLauncherEmptyMessage(len(a.allRows), len(a.rows), false))
 		a.table.ReloadData()
 		quickPanel.AddSubview(a.table)
 	}
@@ -2519,8 +2520,23 @@ func (a *finalShellApp) refreshTable() {
 		a.model.rows = a.rows
 	}
 	if a.table != nil {
+		searching := a.searchInput != nil && strings.TrimSpace(a.searchInput.Text()) != ""
+		a.table.SetEmptyMessage(quickLauncherEmptyMessage(len(a.allRows), len(a.rows), searching))
 		a.table.ReloadData()
 	}
+}
+
+func quickLauncherEmptyMessage(total, results int, searching bool) string {
+	if results > 0 {
+		return ""
+	}
+	if total == 0 {
+		return "No saved connections yet. Create one in Connection Manager."
+	}
+	if searching {
+		return "No matching connections. Try another search."
+	}
+	return "No favorite or recent connections. Open Connection Manager to connect."
 }
 
 func (a *finalShellApp) selectedProfile() (connectionProfile, bool) {
