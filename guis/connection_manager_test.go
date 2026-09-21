@@ -619,6 +619,62 @@ func TestConnectionManagerTableKeyboardCommandsRejectModifiedKeys(t *testing.T) 
 	}
 }
 
+func TestQuickLauncherTableKeyboardCommandsRejectModifiedKeys(t *testing.T) {
+	tests := []struct {
+		name  string
+		event tableview.TableKeyEvent
+		want  quickLauncherTableKeyAction
+	}{
+		{name: "favorite", event: tableview.TableKeyEvent{Key: ' '}, want: quickLauncherTableToggleFavorite},
+		{name: "copy address", event: tableview.TableKeyEvent{Key: 'c', State: fltk_bridge.CTRL}, want: quickLauncherTableCopyAddress},
+		{name: "copy command", event: tableview.TableKeyEvent{Key: 'c', State: fltk_bridge.CTRL | fltk_bridge.SHIFT}, want: quickLauncherTableCopyCommand},
+		{name: "control space", event: tableview.TableKeyEvent{Key: ' ', State: fltk_bridge.CTRL}},
+		{name: "plain copy", event: tableview.TableKeyEvent{Key: 'c'}},
+		{name: "alt copy", event: tableview.TableKeyEvent{Key: 'c', State: fltk_bridge.ALT}},
+		{name: "meta copy", event: tableview.TableKeyEvent{Key: 'c', State: fltk_bridge.META}},
+		{name: "unknown", event: tableview.TableKeyEvent{Key: 'x'}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := quickLauncherActionForTableKey(test.event); got != test.want {
+				t.Fatalf("action = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestQuickLauncherTableKeyboardFavoritePersistsSelectedProfile(t *testing.T) {
+	store := newConnectionStore(t.TempDir())
+	rows := []connectionProfile{
+		{ID: "alpha", Name: "Alpha", Group: "Local", Type: connectionTypeLocal},
+		{ID: "beta", Name: "Beta", Group: "Local", Type: connectionTypeLocal},
+	}
+	if err := store.SaveActive(rows, "beta"); err != nil {
+		t.Fatalf("seed store: %v", err)
+	}
+	app := &finalShellApp{store: store, allRows: append([]connectionProfile(nil), rows...), rows: append([]connectionProfile(nil), rows...), idx: 1}
+	if !app.handleQuickTableKey(tableview.TableKeyEvent{Key: ' '}) {
+		t.Fatal("Space was not consumed by the quick launcher")
+	}
+	allBeta := indexProfileByID(app.allRows, "beta")
+	quickBeta := indexProfileByID(app.rows, "beta")
+	if allBeta < 0 || quickBeta < 0 || !app.allRows[allBeta].Favorite || !app.rows[quickBeta].Favorite {
+		t.Fatalf("favorite state was not refreshed: all=%#v quick=%#v", app.allRows, app.rows)
+	}
+	reloaded := newConnectionStore(filepath.Dir(store.path))
+	if err := reloaded.Load(); err != nil {
+		t.Fatalf("reload store: %v", err)
+	}
+	persisted := reloaded.List()
+	beta := indexProfileByID(persisted, "beta")
+	if beta < 0 || !persisted[beta].Favorite {
+		t.Fatalf("favorite keyboard action was not persisted: %#v", persisted)
+	}
+	if app.handleQuickTableKey(tableview.TableKeyEvent{Key: 'x'}) {
+		t.Fatal("unmapped quick-launch key was consumed")
+	}
+}
+
 func TestConnectionManagerParentGroupIncludesDescendantsOnly(t *testing.T) {
 	rows := []connectionProfile{
 		{ID: "prod", Group: "Infrastructure/Production"},

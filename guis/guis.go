@@ -407,6 +407,36 @@ type tableModel struct {
 	cellText func(connectionProfile, int) string
 }
 
+type quickLauncherTableKeyAction uint8
+
+const (
+	quickLauncherTableKeyNone quickLauncherTableKeyAction = iota
+	quickLauncherTableToggleFavorite
+	quickLauncherTableCopyAddress
+	quickLauncherTableCopyCommand
+)
+
+func quickLauncherActionForTableKey(event tableview.TableKeyEvent) quickLauncherTableKeyAction {
+	if event.State&(fltk_bridge.ALT|fltk_bridge.META) != 0 {
+		return quickLauncherTableKeyNone
+	}
+	modifiers := event.State & (fltk_bridge.CTRL | fltk_bridge.SHIFT)
+	switch event.Key {
+	case ' ':
+		if modifiers == 0 {
+			return quickLauncherTableToggleFavorite
+		}
+	case 'c', 'C':
+		if modifiers == fltk_bridge.CTRL {
+			return quickLauncherTableCopyAddress
+		}
+		if modifiers == fltk_bridge.CTRL|fltk_bridge.SHIFT {
+			return quickLauncherTableCopyCommand
+		}
+	}
+	return quickLauncherTableKeyNone
+}
+
 func (m *tableModel) NumberOfRows(_ *tableview.TableView) int { return len(m.rows) }
 func (m *tableModel) CellForColumn(_ *tableview.TableView, row, col int) *tableview.TableViewCell {
 	cell := tableview.NewCell("connection-cell")
@@ -825,6 +855,8 @@ func (a *finalShellApp) build() {
 			}
 		}})
 		a.table.OnActivate(a.activateConnectionRow)
+		a.table.OnKey(a.handleQuickTableKey)
+		a.table.View().SetAutomationProperty("keyboardActions", "Space: favorite; Ctrl+C: copy address; Ctrl+Shift+C: copy SSH command")
 		a.installQuickConnectionContextMenu(quickPanel)
 		a.table.SetBackgroundColor(tokenColor(modernTheme.card))
 		a.table.SetCustomDraw(a.drawConnectionCell)
@@ -1026,6 +1058,26 @@ func (a *finalShellApp) handleSearchKey(action uikit.InputNavigationAction) bool
 		return true
 	}
 	return false
+}
+
+func (a *finalShellApp) handleQuickTableKey(event tableview.TableKeyEvent) bool {
+	if a == nil {
+		return false
+	}
+	if _, ok := a.selectedProfile(); !ok {
+		return false
+	}
+	switch quickLauncherActionForTableKey(event) {
+	case quickLauncherTableToggleFavorite:
+		a.toggleSelectedProfileFavorite()
+	case quickLauncherTableCopyAddress:
+		a.copySelectedProfileAddress()
+	case quickLauncherTableCopyCommand:
+		a.copySelectedProfileSSHCommand()
+	default:
+		return false
+	}
+	return true
 }
 
 func (a *finalShellApp) focusQuickLauncher() {
