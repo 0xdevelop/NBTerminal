@@ -138,6 +138,7 @@ func (m *connectionManagerWindow) build() {
 	m.search = inputNoLabel(layout.Search.X, layout.Search.Y, layout.Search.Width, layout.Search.Height, "connection_manager.search", tr("connections.search_placeholder"))
 	m.search.View().SetTooltip(connectionSearchSyntaxHint)
 	m.search.View().SetAutomationProperty("searchSyntax", connectionSearchSyntaxHint)
+	m.search.View().SetAutomationProperty("keyboardActions", connectionSearchKeyboardActions)
 	m.search.OnChange(m.applySearch)
 	m.search.OnNavigation(m.handleSearchKey)
 	root.AddSubview(m.search)
@@ -255,6 +256,16 @@ func (m *connectionManagerWindow) handleSearchKey(action uikit.InputNavigationAc
 	case uikit.InputNavigationNext:
 		return m.moveSearchSelection(1)
 	case uikit.InputNavigationPrevious:
+		return m.moveSearchSelection(-1)
+	case uikit.InputNavigationPageNext:
+		if m.table != nil {
+			return m.table.MoveSelectionByPage(1)
+		}
+		return m.moveSearchSelection(1)
+	case uikit.InputNavigationPagePrevious:
+		if m.table != nil {
+			return m.table.MoveSelectionByPage(-1)
+		}
 		return m.moveSearchSelection(-1)
 	case uikit.InputNavigationHelp:
 		if m.owner == nil {

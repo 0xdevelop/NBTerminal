@@ -841,6 +841,7 @@ func (a *finalShellApp) build() {
 	a.searchInput = inputNoLabel(quickLayout.Search.X, quickLayout.Search.Y, quickLayout.Search.Width, quickLayout.Search.Height, "connections.search", tr("connections.search_placeholder")+" · Ctrl+K")
 	a.searchInput.View().SetTooltip(connectionSearchSyntaxHint)
 	a.searchInput.View().SetAutomationProperty("searchSyntax", connectionSearchSyntaxHint)
+	a.searchInput.View().SetAutomationProperty("keyboardActions", connectionSearchKeyboardActions)
 	a.searchInput.OnChange(a.jumpToSearchMatch)
 	a.searchInput.OnNavigation(a.handleSearchKey)
 	quickPanel.AddSubview(a.searchInput)
@@ -1061,6 +1062,16 @@ func (a *finalShellApp) handleSearchKey(action uikit.InputNavigationAction) bool
 	case uikit.InputNavigationNext:
 		return a.moveSearchSelection(1)
 	case uikit.InputNavigationPrevious:
+		return a.moveSearchSelection(-1)
+	case uikit.InputNavigationPageNext:
+		if a.table != nil {
+			return a.table.MoveSelectionByPage(1)
+		}
+		return a.moveSearchSelection(1)
+	case uikit.InputNavigationPagePrevious:
+		if a.table != nil {
+			return a.table.MoveSelectionByPage(-1)
+		}
 		return a.moveSearchSelection(-1)
 	case uikit.InputNavigationHelp:
 		a.openConnectionSearchHelp(a.applyQuickSearchExample)
@@ -1926,6 +1937,8 @@ func filterConnections(rows []connectionProfile, query string) []connectionProfi
 const quickConnectionLimit = 12
 
 const connectionSearchSyntaxHint = "Search text or filter with name:, group:, type:, host:, endpoint:, port:, description:, favorite:true|false, used:true|false|today|Nd (for example used:7d); use | between alternatives and prefix any term with - to exclude it. Press F1 for examples."
+
+const connectionSearchKeyboardActions = "Down/Up: move one result; PageDown/PageUp: move one visible page; Enter: connect; Escape: clear search; F1: search help"
 
 // navigatorRows keeps the terminal workspace focused: an empty query shows a
 // compact favorite/recent projection, while explicit search reaches every saved
