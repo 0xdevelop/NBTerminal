@@ -876,7 +876,7 @@ func (a *finalShellApp) build() {
 		}})
 		a.table.OnActivate(a.activateConnectionRow)
 		a.table.OnKey(a.handleQuickTableKey)
-		a.table.View().SetAutomationProperty("keyboardActions", "Enter: connect; Shift+Enter: test connection; Space: favorite; F2: edit; Delete: remove; Ctrl+C: copy address; Ctrl+Shift+C: copy SSH command; Ctrl+D: duplicate")
+		a.table.View().SetAutomationProperty("keyboardActions", "Enter: connect; Shift+Enter: test connection; Shift+F10/Menu: context menu; Space: favorite; F2: edit; Delete: remove; Ctrl+C: copy address; Ctrl+Shift+C: copy SSH command; Ctrl+D: duplicate")
 		a.installQuickConnectionContextMenu(quickPanel)
 		a.table.SetBackgroundColor(tokenColor(modernTheme.card))
 		a.table.SetCustomDraw(a.drawConnectionCell)
