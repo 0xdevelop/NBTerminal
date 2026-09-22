@@ -417,6 +417,7 @@ const (
 	quickLauncherTableCopyAddress
 	quickLauncherTableCopyCommand
 	quickLauncherTableDuplicate
+	quickLauncherTableTestConnection
 )
 
 func quickLauncherActionForTableKey(event tableview.TableKeyEvent) quickLauncherTableKeyAction {
@@ -447,6 +448,10 @@ func quickLauncherActionForTableKey(event tableview.TableKeyEvent) quickLauncher
 	case 'd', 'D':
 		if modifiers == fltk_bridge.CTRL {
 			return quickLauncherTableDuplicate
+		}
+	case fltk_bridge.ENTER_KEY:
+		if modifiers == fltk_bridge.SHIFT {
+			return quickLauncherTableTestConnection
 		}
 	}
 	return quickLauncherTableKeyNone
@@ -871,7 +876,7 @@ func (a *finalShellApp) build() {
 		}})
 		a.table.OnActivate(a.activateConnectionRow)
 		a.table.OnKey(a.handleQuickTableKey)
-		a.table.View().SetAutomationProperty("keyboardActions", "Space: favorite; F2: edit; Delete: remove; Ctrl+C: copy address; Ctrl+Shift+C: copy SSH command; Ctrl+D: duplicate")
+		a.table.View().SetAutomationProperty("keyboardActions", "Enter: connect; Shift+Enter: test connection; Space: favorite; F2: edit; Delete: remove; Ctrl+C: copy address; Ctrl+Shift+C: copy SSH command; Ctrl+D: duplicate")
 		a.installQuickConnectionContextMenu(quickPanel)
 		a.table.SetBackgroundColor(tokenColor(modernTheme.card))
 		a.table.SetCustomDraw(a.drawConnectionCell)
@@ -1095,6 +1100,8 @@ func (a *finalShellApp) handleQuickTableKey(event tableview.TableKeyEvent) bool 
 		a.copySelectedProfileSSHCommand()
 	case quickLauncherTableDuplicate:
 		a.duplicateSelectedProfile()
+	case quickLauncherTableTestConnection:
+		a.testSelectedProfile()
 	default:
 		return false
 	}

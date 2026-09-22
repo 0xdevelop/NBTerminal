@@ -76,6 +76,7 @@ const (
 	managerTableCopyAddress
 	managerTableCopyCommand
 	managerTableDuplicate
+	managerTableTestConnection
 )
 
 func (a *finalShellApp) openConnectionManager() {
@@ -179,7 +180,7 @@ func (m *connectionManagerWindow) build() {
 		m.table.OnActivate(m.activate)
 		m.table.OnKey(m.handleTableKey)
 		m.table.OnColumnHeaderClick(m.sortByColumn)
-		m.table.View().SetAutomationProperty("keyboardActions", "Space: favorite; F2: edit; Delete: remove; Ctrl+C: copy address; Ctrl+Shift+C: copy SSH command; Ctrl+D: duplicate")
+		m.table.View().SetAutomationProperty("keyboardActions", "Enter: connect; Shift+Enter: test connection; Space: favorite; F2: edit; Delete: remove; Ctrl+C: copy address; Ctrl+Shift+C: copy SSH command; Ctrl+D: duplicate")
 		m.publishSortAutomation()
 		m.installContextMenu(root)
 		m.table.SetBackgroundColor(tokenColor(modernTheme.card))
@@ -300,6 +301,10 @@ func connectionManagerActionForTableKey(event tableview.TableKeyEvent) connectio
 		if modifiers == fltk_bridge.CTRL {
 			return managerTableDuplicate
 		}
+	case fltk_bridge.ENTER_KEY:
+		if modifiers == fltk_bridge.SHIFT {
+			return managerTableTestConnection
+		}
 	}
 	return managerTableKeyNone
 }
@@ -324,6 +329,8 @@ func (m *connectionManagerWindow) handleTableKey(event tableview.TableKeyEvent) 
 		m.copySelectedSSHCommand()
 	case managerTableDuplicate:
 		m.duplicateSelected()
+	case managerTableTestConnection:
+		m.testSelected()
 	default:
 		return false
 	}

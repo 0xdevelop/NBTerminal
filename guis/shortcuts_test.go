@@ -17,7 +17,7 @@ func TestShortcutGuideListsEveryProductCommandWithoutDuplicateKeys(t *testing.T)
 		}
 		seen[item.Shortcut] = item.Action
 	}
-	for _, required := range []string{"F1", "F2", "Ctrl+K", "Ctrl+Shift+N", "Ctrl+W", "Ctrl+Shift+T", "Ctrl+Shift+R", "Ctrl+Shift+D", "Ctrl+Shift+P", "Ctrl+Shift+B", "Ctrl+Shift+I", "Ctrl+Shift+C", "Ctrl+Shift+A", "Ctrl+Shift+S", "Ctrl+Shift+F", "F3", "Shift+F3", "Ctrl+Shift+V", "Alt+1…Alt+9"} {
+	for _, required := range []string{"F1", "F2", "Ctrl+K", "Shift+Enter", "Ctrl+Shift+N", "Ctrl+W", "Ctrl+Shift+T", "Ctrl+Shift+R", "Ctrl+Shift+D", "Ctrl+Shift+P", "Ctrl+Shift+B", "Ctrl+Shift+I", "Ctrl+Shift+C", "Ctrl+Shift+A", "Ctrl+Shift+S", "Ctrl+Shift+F", "F3", "Shift+F3", "Ctrl+Shift+V", "Alt+1…Alt+9"} {
 		if seen[required] == "" {
 			t.Fatalf("shortcut guide is missing %q", required)
 		}
