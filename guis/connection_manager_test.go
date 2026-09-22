@@ -19,6 +19,9 @@ import (
 )
 
 func TestConnectionManagerEmptyMessageDistinguishesOnboardingAndFilters(t *testing.T) {
+	if !strings.Contains(connectionTableKeyboardActions, "PageUp/PageDown: move by page") {
+		t.Fatalf("connection table keyboard actions omit page navigation: %q", connectionTableKeyboardActions)
+	}
 	if got := connectionManagerEmptyMessage(0, 0, false); got != "No saved connections yet. Create one to get started." {
 		t.Fatalf("empty store message = %q", got)
 	}

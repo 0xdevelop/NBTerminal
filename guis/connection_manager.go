@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	connectionManagerWidth  = 920
-	connectionManagerHeight = 650
+	connectionManagerWidth         = 920
+	connectionManagerHeight        = 650
+	connectionTableKeyboardActions = "Enter: connect; PageUp/PageDown: move by page; Shift+Enter: test connection; Shift+F10/Menu: context menu; Space: favorite; F2: edit; Delete: remove; Ctrl+C: copy address; Ctrl+Shift+C: copy SSH command; Ctrl+D: duplicate"
 )
 
 // connectionManagerWindow owns the complete saved-profile surface. The main
@@ -180,7 +181,7 @@ func (m *connectionManagerWindow) build() {
 		m.table.OnActivate(m.activate)
 		m.table.OnKey(m.handleTableKey)
 		m.table.OnColumnHeaderClick(m.sortByColumn)
-		m.table.View().SetAutomationProperty("keyboardActions", "Enter: connect; Shift+Enter: test connection; Shift+F10/Menu: context menu; Space: favorite; F2: edit; Delete: remove; Ctrl+C: copy address; Ctrl+Shift+C: copy SSH command; Ctrl+D: duplicate")
+		m.table.View().SetAutomationProperty("keyboardActions", connectionTableKeyboardActions)
 		m.publishSortAutomation()
 		m.installContextMenu(root)
 		m.table.SetBackgroundColor(tokenColor(modernTheme.card))
