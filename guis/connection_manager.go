@@ -257,6 +257,10 @@ func (m *connectionManagerWindow) handleSearchKey(action uikit.InputNavigationAc
 		return m.moveSearchSelection(1)
 	case uikit.InputNavigationPrevious:
 		return m.moveSearchSelection(-1)
+	case uikit.InputNavigationFindNext:
+		return m.cycleSearchSelection(1)
+	case uikit.InputNavigationFindPrevious:
+		return m.cycleSearchSelection(-1)
 	case uikit.InputNavigationPageNext:
 		if m.table != nil {
 			return m.table.MoveSelectionByPage(1)
@@ -697,6 +701,17 @@ func (m *connectionManagerWindow) moveSearchSelection(delta int) bool {
 		return false
 	}
 	next := moveNavigatorSelection(m.idx, len(m.rows), delta)
+	if next < 0 {
+		return false
+	}
+	return m.selectSearchResult(next)
+}
+
+func (m *connectionManagerWindow) cycleSearchSelection(delta int) bool {
+	if m == nil {
+		return false
+	}
+	next := cycleNavigatorSelection(m.idx, len(m.rows), delta)
 	if next < 0 {
 		return false
 	}

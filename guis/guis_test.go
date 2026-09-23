@@ -1235,6 +1235,29 @@ func TestMoveNavigatorSelectionSupportsSearchKeyboardNavigation(t *testing.T) {
 	}
 }
 
+func TestCycleNavigatorSelectionWrapsFindAgainNavigation(t *testing.T) {
+	tests := []struct {
+		name                  string
+		current, count, delta int
+		want                  int
+	}{
+		{name: "next", current: 0, count: 3, delta: 1, want: 1},
+		{name: "next wraps", current: 2, count: 3, delta: 1, want: 0},
+		{name: "previous", current: 2, count: 3, delta: -1, want: 1},
+		{name: "previous wraps", current: 0, count: 3, delta: -1, want: 2},
+		{name: "missing next starts first", current: -1, count: 3, delta: 1, want: 0},
+		{name: "missing previous starts last", current: -1, count: 3, delta: -1, want: 2},
+		{name: "empty", current: 0, count: 0, delta: 1, want: -1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := cycleNavigatorSelection(tt.current, tt.count, tt.delta); got != tt.want {
+				t.Fatalf("cycleNavigatorSelection(%d, %d, %d) = %d, want %d", tt.current, tt.count, tt.delta, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestMainSearchKeyboardMovesSelectionAndEscapeClearsQuery(t *testing.T) {
 	if !strings.Contains(connectionSearchKeyboardActions, "Ctrl+Home/Ctrl+End: first/last result") {
 		t.Fatalf("search keyboard actions omit boundary navigation: %q", connectionSearchKeyboardActions)
@@ -1260,6 +1283,12 @@ func TestMainSearchKeyboardMovesSelectionAndEscapeClearsQuery(t *testing.T) {
 	}
 	if !app.handleSearchKey(uikit.InputNavigationPrevious) || app.idx != 0 {
 		t.Fatalf("Up did not move to first match: idx=%d", app.idx)
+	}
+	if !app.handleSearchKey(uikit.InputNavigationFindPrevious) || app.idx != len(app.rows)-1 {
+		t.Fatalf("Shift+F3 did not wrap to the last match: idx=%d", app.idx)
+	}
+	if !app.handleSearchKey(uikit.InputNavigationFindNext) || app.idx != 0 {
+		t.Fatalf("F3 did not wrap to the first match: idx=%d", app.idx)
 	}
 	if !app.handleSearchKey(uikit.InputNavigationPageNext) || app.idx != 1 {
 		t.Fatalf("PageDown did not move through quick matches: idx=%d", app.idx)

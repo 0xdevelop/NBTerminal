@@ -1063,6 +1063,10 @@ func (a *finalShellApp) handleSearchKey(action uikit.InputNavigationAction) bool
 		return a.moveSearchSelection(1)
 	case uikit.InputNavigationPrevious:
 		return a.moveSearchSelection(-1)
+	case uikit.InputNavigationFindNext:
+		return a.cycleSearchSelection(1)
+	case uikit.InputNavigationFindPrevious:
+		return a.cycleSearchSelection(-1)
 	case uikit.InputNavigationPageNext:
 		if a.table != nil {
 			return a.table.MoveSelectionByPage(1)
@@ -1867,11 +1871,35 @@ func moveNavigatorSelection(current, count, delta int) int {
 	return next
 }
 
+func cycleNavigatorSelection(current, count, delta int) int {
+	if count <= 0 || delta == 0 {
+		return -1
+	}
+	if current < 0 || current >= count {
+		if delta < 0 {
+			return count - 1
+		}
+		return 0
+	}
+	return (current + delta + count) % count
+}
+
 func (a *finalShellApp) moveSearchSelection(delta int) bool {
 	if a == nil {
 		return false
 	}
 	next := moveNavigatorSelection(a.idx, len(a.rows), delta)
+	if next < 0 {
+		return false
+	}
+	return a.selectSearchResult(next)
+}
+
+func (a *finalShellApp) cycleSearchSelection(delta int) bool {
+	if a == nil {
+		return false
+	}
+	next := cycleNavigatorSelection(a.idx, len(a.rows), delta)
 	if next < 0 {
 		return false
 	}
@@ -1949,7 +1977,7 @@ const quickConnectionLimit = 12
 
 const connectionSearchSyntaxHint = "Search text or filter with name:, group:, type:, host:, endpoint:, port:, description:, favorite:true|false, used:true|false|today|Nd (for example used:7d); use | between alternatives and prefix any term with - to exclude it. Press F1 for examples."
 
-const connectionSearchKeyboardActions = "Down/Up: move one result; PageDown/PageUp: move one visible page; Ctrl+Home/Ctrl+End: first/last result; Enter: connect; Escape: clear search; F1: search help"
+const connectionSearchKeyboardActions = "Down/Up: move one result; F3/Shift+F3: next/previous result with wrap; PageDown/PageUp: move one visible page; Ctrl+Home/Ctrl+End: first/last result; Enter: connect; Escape: clear search; F1: search help"
 
 // navigatorRows keeps the terminal workspace focused: an empty query shows a
 // compact favorite/recent projection, while explicit search reaches every saved

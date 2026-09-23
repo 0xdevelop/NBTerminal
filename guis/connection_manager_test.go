@@ -583,6 +583,12 @@ func TestConnectionManagerSearchKeyboardMovesSelectionAndEscapeClearsQuery(t *te
 	if !manager.handleSearchKey(uikit.InputNavigationPrevious) || manager.idx != 0 {
 		t.Fatalf("Up did not move to first manager match: idx=%d", manager.idx)
 	}
+	if !manager.handleSearchKey(uikit.InputNavigationFindPrevious) || manager.idx != len(manager.rows)-1 {
+		t.Fatalf("Shift+F3 did not wrap to the last manager match: idx=%d", manager.idx)
+	}
+	if !manager.handleSearchKey(uikit.InputNavigationFindNext) || manager.idx != 0 {
+		t.Fatalf("F3 did not wrap to the first manager match: idx=%d", manager.idx)
+	}
 	if !manager.handleSearchKey(uikit.InputNavigationPageNext) || manager.idx != 1 {
 		t.Fatalf("PageDown did not move through manager matches: idx=%d", manager.idx)
 	}

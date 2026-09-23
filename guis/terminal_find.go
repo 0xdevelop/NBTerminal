@@ -335,10 +335,10 @@ func (f *terminalFindWindow) revealCurrent() {
 
 func (f *terminalFindWindow) handleNavigation(action uikit.InputNavigationAction) bool {
 	switch action {
-	case uikit.InputNavigationSubmit, uikit.InputNavigationNext:
+	case uikit.InputNavigationSubmit, uikit.InputNavigationNext, uikit.InputNavigationFindNext:
 		f.navigate(1)
 		return true
-	case uikit.InputNavigationPrevious:
+	case uikit.InputNavigationPrevious, uikit.InputNavigationFindPrevious:
 		f.navigate(-1)
 		return true
 	case uikit.InputNavigationCancel:
