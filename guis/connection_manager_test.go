@@ -483,7 +483,7 @@ func TestConnectionManagerResultStatusMakesActiveFiltersVisible(t *testing.T) {
 			{Name: "Development"},
 		}},
 	}
-	if got := manager.resultStatus(); got != "Showing 1 of 2 connections · "+managerSelectionStatus(profile) {
+	if got := manager.resultStatus(); got != "Showing 1 of 2 connections · Result 1 of 1 · "+managerSelectionStatus(profile) {
 		t.Fatalf("filtered result status = %q", got)
 	}
 
@@ -570,6 +570,7 @@ func TestConnectionManagerSearchKeyboardMovesSelectionAndEscapeClearsQuery(t *te
 	manager := &connectionManagerWindow{
 		owner:  &finalShellApp{allRows: rows},
 		search: uikit.NewInput(0, 0, 240, nativeControls.InputHeight, ""),
+		status: mutedLabel(0, 0, 480, nativeControls.SupportingLineHeight, ""),
 		idx:    0,
 	}
 	manager.search.SetText("beta")
@@ -585,6 +586,9 @@ func TestConnectionManagerSearchKeyboardMovesSelectionAndEscapeClearsQuery(t *te
 	}
 	if !manager.handleSearchKey(uikit.InputNavigationFindPrevious) || manager.idx != len(manager.rows)-1 {
 		t.Fatalf("Shift+F3 did not wrap to the last manager match: idx=%d", manager.idx)
+	}
+	if got := manager.status.View().AutomationSnapshot().Name; !strings.Contains(got, "Result 2 of 2") {
+		t.Fatalf("manager search status does not expose selection position: %q", got)
 	}
 	if !manager.handleSearchKey(uikit.InputNavigationFindNext) || manager.idx != 0 {
 		t.Fatalf("F3 did not wrap to the first manager match: idx=%d", manager.idx)

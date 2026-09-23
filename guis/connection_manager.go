@@ -777,7 +777,11 @@ func (m *connectionManagerWindow) resultStatus() string {
 	if m.owner != nil {
 		total = len(m.owner.allRows)
 	}
-	return fmt.Sprintf("Showing %d of %d connections · %s", len(m.rows), total, selection)
+	position := connectionSearchSelectionPosition(m.idx, len(m.rows))
+	if position == "" {
+		return fmt.Sprintf("Showing %d of %d connections · %s", len(m.rows), total, selection)
+	}
+	return fmt.Sprintf("Showing %d of %d connections · %s · %s", len(m.rows), total, position, selection)
 }
 
 func (m *connectionManagerWindow) hasResultFilter() bool {

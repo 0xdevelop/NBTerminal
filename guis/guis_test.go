@@ -1258,6 +1258,17 @@ func TestCycleNavigatorSelectionWrapsFindAgainNavigation(t *testing.T) {
 	}
 }
 
+func TestConnectionSearchSelectionPositionReportsCurrentResult(t *testing.T) {
+	if got := connectionSearchSelectionPosition(1, 3); got != "Result 2 of 3" {
+		t.Fatalf("search selection position = %q, want %q", got, "Result 2 of 3")
+	}
+	for _, invalid := range [][2]int{{-1, 3}, {3, 3}, {0, 0}} {
+		if got := connectionSearchSelectionPosition(invalid[0], invalid[1]); got != "" {
+			t.Fatalf("invalid search selection position (%d, %d) = %q", invalid[0], invalid[1], got)
+		}
+	}
+}
+
 func TestMainSearchKeyboardMovesSelectionAndEscapeClearsQuery(t *testing.T) {
 	if !strings.Contains(connectionSearchKeyboardActions, "Ctrl+Home/Ctrl+End: first/last result") {
 		t.Fatalf("search keyboard actions omit boundary navigation: %q", connectionSearchKeyboardActions)
@@ -1272,6 +1283,7 @@ func TestMainSearchKeyboardMovesSelectionAndEscapeClearsQuery(t *testing.T) {
 		rows:        rows,
 		idx:         0,
 		searchInput: uikit.NewInput(0, 0, 240, nativeControls.InputHeight, ""),
+		status:      pillLabel(0, 0, 320, 24, ""),
 	}
 	app.searchInput.SetText("beta")
 	app.jumpToSearchMatch()
@@ -1286,6 +1298,9 @@ func TestMainSearchKeyboardMovesSelectionAndEscapeClearsQuery(t *testing.T) {
 	}
 	if !app.handleSearchKey(uikit.InputNavigationFindPrevious) || app.idx != len(app.rows)-1 {
 		t.Fatalf("Shift+F3 did not wrap to the last match: idx=%d", app.idx)
+	}
+	if got := app.status.View().AutomationSnapshot().Name; !strings.Contains(got, "Result 2 of 2") {
+		t.Fatalf("quick search status does not expose selection position: %q", got)
 	}
 	if !app.handleSearchKey(uikit.InputNavigationFindNext) || app.idx != 0 {
 		t.Fatalf("F3 did not wrap to the first match: idx=%d", app.idx)

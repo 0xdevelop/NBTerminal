@@ -1884,6 +1884,13 @@ func cycleNavigatorSelection(current, count, delta int) int {
 	return (current + delta + count) % count
 }
 
+func connectionSearchSelectionPosition(current, count int) string {
+	if current < 0 || current >= count || count <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("Result %d of %d", current+1, count)
+}
+
 func (a *finalShellApp) moveSearchSelection(delta int) bool {
 	if a == nil {
 		return false
@@ -2493,7 +2500,13 @@ func (a *finalShellApp) selectRow(row int) {
 		a.sessions.SetProfileSelection(p.ID)
 	}
 	a.updateSelectedSummary()
-	a.setStatus(trf("status.selected", p.Name))
+	status := trf("status.selected", p.Name)
+	if a.searchInput != nil && strings.TrimSpace(a.searchInput.Text()) != "" {
+		if position := connectionSearchSelectionPosition(a.idx, len(a.rows)); position != "" {
+			status = position + " · " + status
+		}
+	}
+	a.setStatus(status)
 	if a.table != nil {
 		a.table.ReloadData()
 	}
