@@ -1073,6 +1073,10 @@ func (a *finalShellApp) handleSearchKey(action uikit.InputNavigationAction) bool
 			return a.table.MoveSelectionByPage(-1)
 		}
 		return a.moveSearchSelection(-1)
+	case uikit.InputNavigationFirst:
+		return a.selectSearchResult(0)
+	case uikit.InputNavigationLast:
+		return a.selectSearchResult(len(a.rows) - 1)
 	case uikit.InputNavigationHelp:
 		a.openConnectionSearchHelp(a.applyQuickSearchExample)
 		return true
@@ -1871,10 +1875,17 @@ func (a *finalShellApp) moveSearchSelection(delta int) bool {
 	if next < 0 {
 		return false
 	}
-	if a.table != nil {
-		return a.table.SelectRow(next)
+	return a.selectSearchResult(next)
+}
+
+func (a *finalShellApp) selectSearchResult(row int) bool {
+	if a == nil || row < 0 || row >= len(a.rows) {
+		return false
 	}
-	a.selectRow(next)
+	if a.table != nil {
+		return a.table.SelectRow(row)
+	}
+	a.selectRow(row)
 	return true
 }
 
@@ -1938,7 +1949,7 @@ const quickConnectionLimit = 12
 
 const connectionSearchSyntaxHint = "Search text or filter with name:, group:, type:, host:, endpoint:, port:, description:, favorite:true|false, used:true|false|today|Nd (for example used:7d); use | between alternatives and prefix any term with - to exclude it. Press F1 for examples."
 
-const connectionSearchKeyboardActions = "Down/Up: move one result; PageDown/PageUp: move one visible page; Enter: connect; Escape: clear search; F1: search help"
+const connectionSearchKeyboardActions = "Down/Up: move one result; PageDown/PageUp: move one visible page; Ctrl+Home/Ctrl+End: first/last result; Enter: connect; Escape: clear search; F1: search help"
 
 // navigatorRows keeps the terminal workspace focused: an empty query shows a
 // compact favorite/recent projection, while explicit search reaches every saved

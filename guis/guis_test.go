@@ -1236,6 +1236,9 @@ func TestMoveNavigatorSelectionSupportsSearchKeyboardNavigation(t *testing.T) {
 }
 
 func TestMainSearchKeyboardMovesSelectionAndEscapeClearsQuery(t *testing.T) {
+	if !strings.Contains(connectionSearchKeyboardActions, "Ctrl+Home/Ctrl+End: first/last result") {
+		t.Fatalf("search keyboard actions omit boundary navigation: %q", connectionSearchKeyboardActions)
+	}
 	rows := []connectionProfile{
 		{ID: "alpha", Name: "Alpha", Type: connectionTypeLocal},
 		{ID: "beta-one", Name: "Beta One", Type: connectionTypeLocal},
@@ -1263,6 +1266,14 @@ func TestMainSearchKeyboardMovesSelectionAndEscapeClearsQuery(t *testing.T) {
 	}
 	if !app.handleSearchKey(uikit.InputNavigationPagePrevious) || app.idx != 0 {
 		t.Fatalf("PageUp did not move through quick matches: idx=%d", app.idx)
+	}
+	app.idx = 1
+	if !app.handleSearchKey(uikit.InputNavigationFirst) || app.idx != 0 {
+		t.Fatalf("Ctrl+Home did not select the first quick match: idx=%d", app.idx)
+	}
+	app.idx = -1
+	if !app.handleSearchKey(uikit.InputNavigationLast) || app.idx != len(app.rows)-1 {
+		t.Fatalf("Ctrl+End did not select the last quick match: idx=%d", app.idx)
 	}
 	if !app.handleSearchKey(uikit.InputNavigationHelp) || app.searchHelp == nil || app.searchHelp.window == nil {
 		t.Fatal("F1 did not open contextual search help from the quick launcher")

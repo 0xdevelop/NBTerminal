@@ -267,6 +267,10 @@ func (m *connectionManagerWindow) handleSearchKey(action uikit.InputNavigationAc
 			return m.table.MoveSelectionByPage(-1)
 		}
 		return m.moveSearchSelection(-1)
+	case uikit.InputNavigationFirst:
+		return m.selectSearchResult(0)
+	case uikit.InputNavigationLast:
+		return m.selectSearchResult(len(m.rows) - 1)
 	case uikit.InputNavigationHelp:
 		if m.owner == nil {
 			return false
@@ -696,10 +700,17 @@ func (m *connectionManagerWindow) moveSearchSelection(delta int) bool {
 	if next < 0 {
 		return false
 	}
-	if m.table != nil {
-		return m.table.SelectRow(next)
+	return m.selectSearchResult(next)
+}
+
+func (m *connectionManagerWindow) selectSearchResult(row int) bool {
+	if m == nil || row < 0 || row >= len(m.rows) {
+		return false
 	}
-	m.selectRow(next)
+	if m.table != nil {
+		return m.table.SelectRow(row)
+	}
+	m.selectRow(row)
 	return true
 }
 
