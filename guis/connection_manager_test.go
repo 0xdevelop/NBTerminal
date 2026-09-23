@@ -632,6 +632,8 @@ func TestConnectionManagerTableKeyboardCommandsRejectModifiedKeys(t *testing.T) 
 		{name: "copy command", event: tableview.TableKeyEvent{Key: 'c', State: fltk_bridge.CTRL | fltk_bridge.SHIFT}, want: managerTableCopyCommand},
 		{name: "duplicate", event: tableview.TableKeyEvent{Key: 'd', State: fltk_bridge.CTRL}, want: managerTableDuplicate},
 		{name: "test connection", event: tableview.TableKeyEvent{Key: fltk_bridge.ENTER_KEY, State: fltk_bridge.SHIFT}, want: managerTableTestConnection},
+		{name: "next search result", event: tableview.TableKeyEvent{Key: fltk_bridge.F3}, want: managerTableFindNext},
+		{name: "previous search result", event: tableview.TableKeyEvent{Key: fltk_bridge.F3, State: fltk_bridge.SHIFT}, want: managerTableFindPrevious},
 		{name: "control space", event: tableview.TableKeyEvent{Key: ' ', State: fltk_bridge.CTRL}},
 		{name: "alt f2", event: tableview.TableKeyEvent{Key: fltk_bridge.F2, State: fltk_bridge.ALT}},
 		{name: "meta copy", event: tableview.TableKeyEvent{Key: 'c', State: fltk_bridge.META}},
@@ -660,6 +662,8 @@ func TestQuickLauncherTableKeyboardCommandsRejectModifiedKeys(t *testing.T) {
 		{name: "copy command", event: tableview.TableKeyEvent{Key: 'c', State: fltk_bridge.CTRL | fltk_bridge.SHIFT}, want: quickLauncherTableCopyCommand},
 		{name: "duplicate", event: tableview.TableKeyEvent{Key: 'd', State: fltk_bridge.CTRL}, want: quickLauncherTableDuplicate},
 		{name: "test connection", event: tableview.TableKeyEvent{Key: fltk_bridge.ENTER_KEY, State: fltk_bridge.SHIFT}, want: quickLauncherTableTestConnection},
+		{name: "next search result", event: tableview.TableKeyEvent{Key: fltk_bridge.F3}, want: quickLauncherTableFindNext},
+		{name: "previous search result", event: tableview.TableKeyEvent{Key: fltk_bridge.F3, State: fltk_bridge.SHIFT}, want: quickLauncherTableFindPrevious},
 		{name: "control space", event: tableview.TableKeyEvent{Key: ' ', State: fltk_bridge.CTRL}},
 		{name: "control f2", event: tableview.TableKeyEvent{Key: fltk_bridge.F2, State: fltk_bridge.CTRL}},
 		{name: "shift delete", event: tableview.TableKeyEvent{Key: fltk_bridge.DELETE, State: fltk_bridge.SHIFT}},
@@ -674,6 +678,35 @@ func TestQuickLauncherTableKeyboardCommandsRejectModifiedKeys(t *testing.T) {
 				t.Fatalf("action = %v, want %v", got, test.want)
 			}
 		})
+	}
+}
+
+func TestConnectionTablesCycleSearchResultsWithF3(t *testing.T) {
+	rows := []connectionProfile{
+		{ID: "alpha", Name: "Alpha", Type: connectionTypeLocal},
+		{ID: "beta", Name: "Beta", Type: connectionTypeLocal},
+	}
+	manager := &connectionManagerWindow{
+		owner: &finalShellApp{allRows: rows},
+		rows:  rows,
+		idx:   0,
+	}
+	if !manager.handleTableKey(tableview.TableKeyEvent{Key: fltk_bridge.F3}) || manager.idx != 1 {
+		t.Fatalf("manager F3 selection = %d, want 1", manager.idx)
+	}
+	if !manager.handleTableKey(tableview.TableKeyEvent{Key: fltk_bridge.F3}) || manager.idx != 0 {
+		t.Fatalf("manager wrapped F3 selection = %d, want 0", manager.idx)
+	}
+	if !manager.handleTableKey(tableview.TableKeyEvent{Key: fltk_bridge.F3, State: fltk_bridge.SHIFT}) || manager.idx != 1 {
+		t.Fatalf("manager Shift+F3 selection = %d, want 1", manager.idx)
+	}
+
+	launcher := &finalShellApp{allRows: rows, rows: rows, idx: 0}
+	if !launcher.handleQuickTableKey(tableview.TableKeyEvent{Key: fltk_bridge.F3}) || launcher.idx != 1 {
+		t.Fatalf("launcher F3 selection = %d, want 1", launcher.idx)
+	}
+	if !launcher.handleQuickTableKey(tableview.TableKeyEvent{Key: fltk_bridge.F3, State: fltk_bridge.SHIFT}) || launcher.idx != 0 {
+		t.Fatalf("launcher Shift+F3 selection = %d, want 0", launcher.idx)
 	}
 }
 

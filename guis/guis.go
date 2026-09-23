@@ -418,6 +418,8 @@ const (
 	quickLauncherTableCopyCommand
 	quickLauncherTableDuplicate
 	quickLauncherTableTestConnection
+	quickLauncherTableFindNext
+	quickLauncherTableFindPrevious
 )
 
 func quickLauncherActionForTableKey(event tableview.TableKeyEvent) quickLauncherTableKeyAction {
@@ -452,6 +454,13 @@ func quickLauncherActionForTableKey(event tableview.TableKeyEvent) quickLauncher
 	case fltk_bridge.ENTER_KEY:
 		if modifiers == fltk_bridge.SHIFT {
 			return quickLauncherTableTestConnection
+		}
+	case fltk_bridge.F3:
+		if modifiers == 0 {
+			return quickLauncherTableFindNext
+		}
+		if modifiers == fltk_bridge.SHIFT {
+			return quickLauncherTableFindPrevious
 		}
 	}
 	return quickLauncherTableKeyNone
@@ -1121,6 +1130,10 @@ func (a *finalShellApp) handleQuickTableKey(event tableview.TableKeyEvent) bool 
 		a.duplicateSelectedProfile()
 	case quickLauncherTableTestConnection:
 		a.testSelectedProfile()
+	case quickLauncherTableFindNext:
+		return a.cycleSearchSelection(1)
+	case quickLauncherTableFindPrevious:
+		return a.cycleSearchSelection(-1)
 	default:
 		return false
 	}

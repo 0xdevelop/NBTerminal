@@ -20,7 +20,7 @@ import (
 const (
 	connectionManagerWidth         = 920
 	connectionManagerHeight        = 650
-	connectionTableKeyboardActions = "Enter: connect; PageUp/PageDown: move by page; Shift+Enter: test connection; Shift+F10/Menu: context menu; Space: favorite; F2: edit; Delete: remove; Ctrl+C: copy address; Ctrl+Shift+C: copy SSH command; Ctrl+D: duplicate"
+	connectionTableKeyboardActions = "Enter: connect; F3/Shift+F3: next/previous search result; PageUp/PageDown: move by page; Shift+Enter: test connection; Shift+F10/Menu: context menu; Space: favorite; F2: edit; Delete: remove; Ctrl+C: copy address; Ctrl+Shift+C: copy SSH command; Ctrl+D: duplicate"
 )
 
 // connectionManagerWindow owns the complete saved-profile surface. The main
@@ -78,6 +78,8 @@ const (
 	managerTableCopyCommand
 	managerTableDuplicate
 	managerTableTestConnection
+	managerTableFindNext
+	managerTableFindPrevious
 )
 
 func (a *finalShellApp) openConnectionManager() {
@@ -325,6 +327,13 @@ func connectionManagerActionForTableKey(event tableview.TableKeyEvent) connectio
 		if modifiers == fltk_bridge.SHIFT {
 			return managerTableTestConnection
 		}
+	case fltk_bridge.F3:
+		if modifiers == 0 {
+			return managerTableFindNext
+		}
+		if modifiers == fltk_bridge.SHIFT {
+			return managerTableFindPrevious
+		}
 	}
 	return managerTableKeyNone
 }
@@ -351,6 +360,10 @@ func (m *connectionManagerWindow) handleTableKey(event tableview.TableKeyEvent) 
 		m.duplicateSelected()
 	case managerTableTestConnection:
 		m.testSelected()
+	case managerTableFindNext:
+		return m.cycleSearchSelection(1)
+	case managerTableFindPrevious:
+		return m.cycleSearchSelection(-1)
 	default:
 		return false
 	}
