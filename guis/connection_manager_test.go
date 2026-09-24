@@ -634,6 +634,7 @@ func TestConnectionManagerTableKeyboardCommandsRejectModifiedKeys(t *testing.T) 
 		{name: "test connection", event: tableview.TableKeyEvent{Key: fltk_bridge.ENTER_KEY, State: fltk_bridge.SHIFT}, want: managerTableTestConnection},
 		{name: "next search result", event: tableview.TableKeyEvent{Key: fltk_bridge.F3}, want: managerTableFindNext},
 		{name: "previous search result", event: tableview.TableKeyEvent{Key: fltk_bridge.F3, State: fltk_bridge.SHIFT}, want: managerTableFindPrevious},
+		{name: "focus search", event: tableview.TableKeyEvent{Key: 'f', State: fltk_bridge.CTRL}, want: managerTableFocusSearch},
 		{name: "control space", event: tableview.TableKeyEvent{Key: ' ', State: fltk_bridge.CTRL}},
 		{name: "alt f2", event: tableview.TableKeyEvent{Key: fltk_bridge.F2, State: fltk_bridge.ALT}},
 		{name: "meta copy", event: tableview.TableKeyEvent{Key: 'c', State: fltk_bridge.META}},
@@ -664,6 +665,7 @@ func TestQuickLauncherTableKeyboardCommandsRejectModifiedKeys(t *testing.T) {
 		{name: "test connection", event: tableview.TableKeyEvent{Key: fltk_bridge.ENTER_KEY, State: fltk_bridge.SHIFT}, want: quickLauncherTableTestConnection},
 		{name: "next search result", event: tableview.TableKeyEvent{Key: fltk_bridge.F3}, want: quickLauncherTableFindNext},
 		{name: "previous search result", event: tableview.TableKeyEvent{Key: fltk_bridge.F3, State: fltk_bridge.SHIFT}, want: quickLauncherTableFindPrevious},
+		{name: "focus search", event: tableview.TableKeyEvent{Key: 'f', State: fltk_bridge.CTRL}, want: quickLauncherTableFocusSearch},
 		{name: "control space", event: tableview.TableKeyEvent{Key: ' ', State: fltk_bridge.CTRL}},
 		{name: "control f2", event: tableview.TableKeyEvent{Key: fltk_bridge.F2, State: fltk_bridge.CTRL}},
 		{name: "shift delete", event: tableview.TableKeyEvent{Key: fltk_bridge.DELETE, State: fltk_bridge.SHIFT}},
@@ -707,6 +709,30 @@ func TestConnectionTablesCycleSearchResultsWithF3(t *testing.T) {
 	}
 	if !launcher.handleQuickTableKey(tableview.TableKeyEvent{Key: fltk_bridge.F3, State: fltk_bridge.SHIFT}) || launcher.idx != 0 {
 		t.Fatalf("launcher Shift+F3 selection = %d, want 0", launcher.idx)
+	}
+}
+
+func TestConnectionTablesFocusSearchWithControlFWithoutASelectedRow(t *testing.T) {
+	manager := &connectionManagerWindow{
+		search: inputNoLabel(0, 0, 240, nativeControls.InputHeight, "manager-search-focus-test", ""),
+		idx:    -1,
+	}
+	if !manager.handleTableKey(tableview.TableKeyEvent{Key: 'f', State: fltk_bridge.CTRL}) {
+		t.Fatal("manager Ctrl+F was not consumed without a selected row")
+	}
+	if focused, ok := manager.search.View().Raw().(interface{ HasFocus() bool }); !ok || !focused.HasFocus() {
+		t.Fatal("manager Ctrl+F did not transfer native focus to search")
+	}
+
+	launcher := &finalShellApp{
+		searchInput: inputNoLabel(0, 0, 240, nativeControls.InputHeight, "quick-search-focus-test", ""),
+		idx:         -1,
+	}
+	if !launcher.handleQuickTableKey(tableview.TableKeyEvent{Key: 'F', State: fltk_bridge.CTRL}) {
+		t.Fatal("quick-launch Ctrl+F was not consumed without a selected row")
+	}
+	if focused, ok := launcher.searchInput.View().Raw().(interface{ HasFocus() bool }); !ok || !focused.HasFocus() {
+		t.Fatal("quick-launch Ctrl+F did not transfer native focus to search")
 	}
 }
 

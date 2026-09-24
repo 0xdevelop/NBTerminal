@@ -20,7 +20,7 @@ import (
 const (
 	connectionManagerWidth         = 920
 	connectionManagerHeight        = 650
-	connectionTableKeyboardActions = "Enter: connect; F3/Shift+F3: next/previous search result; PageUp/PageDown: move by page; Shift+Enter: test connection; Shift+F10/Menu: context menu; Space: favorite; F2: edit; Delete: remove; Ctrl+C: copy address; Ctrl+Shift+C: copy SSH command; Ctrl+D: duplicate"
+	connectionTableKeyboardActions = "Enter: connect; Ctrl+F: focus search; F3/Shift+F3: next/previous search result; PageUp/PageDown: move by page; Shift+Enter: test connection; Shift+F10/Menu: context menu; Space: favorite; F2: edit; Delete: remove; Ctrl+C: copy address; Ctrl+Shift+C: copy SSH command; Ctrl+D: duplicate"
 )
 
 // connectionManagerWindow owns the complete saved-profile surface. The main
@@ -80,6 +80,7 @@ const (
 	managerTableTestConnection
 	managerTableFindNext
 	managerTableFindPrevious
+	managerTableFocusSearch
 )
 
 func (a *finalShellApp) openConnectionManager() {
@@ -323,6 +324,10 @@ func connectionManagerActionForTableKey(event tableview.TableKeyEvent) connectio
 		if modifiers == fltk_bridge.CTRL {
 			return managerTableDuplicate
 		}
+	case 'f', 'F':
+		if modifiers == fltk_bridge.CTRL {
+			return managerTableFocusSearch
+		}
 	case fltk_bridge.ENTER_KEY:
 		if modifiers == fltk_bridge.SHIFT {
 			return managerTableTestConnection
@@ -341,6 +346,9 @@ func connectionManagerActionForTableKey(event tableview.TableKeyEvent) connectio
 func (m *connectionManagerWindow) handleTableKey(event tableview.TableKeyEvent) bool {
 	if m == nil {
 		return false
+	}
+	if connectionManagerActionForTableKey(event) == managerTableFocusSearch {
+		return m.focusSearch()
 	}
 	if _, ok := m.selectedProfile(); !ok {
 		return false
@@ -368,6 +376,14 @@ func (m *connectionManagerWindow) handleTableKey(event tableview.TableKeyEvent) 
 		return false
 	}
 	return true
+}
+
+func (m *connectionManagerWindow) focusSearch() bool {
+	if m == nil || m.search == nil || m.search.View() == nil || m.search.View().Raw() == nil {
+		return false
+	}
+	focusable, ok := m.search.View().Raw().(interface{ TakeFocus() int })
+	return ok && focusable.TakeFocus() != 0
 }
 
 func (m *connectionManagerWindow) reload(preferredID string) {

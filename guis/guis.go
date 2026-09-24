@@ -420,6 +420,7 @@ const (
 	quickLauncherTableTestConnection
 	quickLauncherTableFindNext
 	quickLauncherTableFindPrevious
+	quickLauncherTableFocusSearch
 )
 
 func quickLauncherActionForTableKey(event tableview.TableKeyEvent) quickLauncherTableKeyAction {
@@ -450,6 +451,10 @@ func quickLauncherActionForTableKey(event tableview.TableKeyEvent) quickLauncher
 	case 'd', 'D':
 		if modifiers == fltk_bridge.CTRL {
 			return quickLauncherTableDuplicate
+		}
+	case 'f', 'F':
+		if modifiers == fltk_bridge.CTRL {
+			return quickLauncherTableFocusSearch
 		}
 	case fltk_bridge.ENTER_KEY:
 		if modifiers == fltk_bridge.SHIFT {
@@ -1111,6 +1116,10 @@ func (a *finalShellApp) handleSearchKey(action uikit.InputNavigationAction) bool
 func (a *finalShellApp) handleQuickTableKey(event tableview.TableKeyEvent) bool {
 	if a == nil {
 		return false
+	}
+	if quickLauncherActionForTableKey(event) == quickLauncherTableFocusSearch {
+		a.focusQuickLauncher()
+		return a.searchInput != nil
 	}
 	if _, ok := a.selectedProfile(); !ok {
 		return false

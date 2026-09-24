@@ -7,8 +7,8 @@ import (
 
 const (
 	shortcutGuideWidth          = 760
-	shortcutGuideHeight         = 970
-	shortcutGuideTableHeight    = 830
+	shortcutGuideHeight         = 995
+	shortcutGuideTableHeight    = 855
 	shortcutGuideNativeRowPitch = 25
 )
 
@@ -24,6 +24,7 @@ func shortcutGuideItems() []shortcutGuideItem {
 		{Group: "Windows", Action: "Open Connection Manager", Shortcut: "Ctrl+O"},
 		{Group: "Windows", Action: "Open Settings", Shortcut: "Ctrl+,"},
 		{Group: "Connections", Action: "Focus Quick Launcher", Shortcut: "Ctrl+K"},
+		{Group: "Connections", Action: "Focus Connection Search", Shortcut: "Ctrl+F"},
 		{Group: "Connections", Action: "Create Connection", Shortcut: "Ctrl+N"},
 		{Group: "Connections", Action: "Test Selected Connection", Shortcut: "Shift+Enter"},
 		{Group: "Connections", Action: "Open Selected Connection Menu", Shortcut: "Shift+F10 / Menu"},
@@ -142,6 +143,6 @@ func (g *shortcutGuideWindow) build() {
 		g.table.ReloadData()
 		root.AddSubview(g.table)
 	}
-	root.AddSubview(button(620, 912, 112, nativeControls.PrimaryButtonHeight, "Close", "shortcuts.close", g.window.Close))
+	root.AddSubview(button(620, 937, 112, nativeControls.PrimaryButtonHeight, "Close", "shortcuts.close", g.window.Close))
 	g.window.Show()
 }
